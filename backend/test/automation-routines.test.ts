@@ -58,7 +58,7 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
   const authHelpers = await import('../src/services/auth/sessionAccess')
 
-  // Account 1 is an active administrator, 2 an active guest without generation.execute, 9 is switched off.
+  // Account 1 is an active administrator, 2 an active guest with no rights, 9 is switched off.
   updateChatSettings({ enabled: true })
   t.mock.method(AuthAccount, 'findById', (id: number) => (
     id === 1 ? { id: 1, status: 'active', account_type: 'admin' }
@@ -67,7 +67,7 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
   ))
   t.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number) => ({
     groupKeys: [],
-    permissionKeys: id === 1 ? ['chat.use', 'chat.agent.use', 'generation.execute'] : ['chat.use', 'chat.agent.use'],
+    permissionKeys: id === 1 ? ['content.read', 'content.edit', 'content.delete'] : [],
   }))
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: JSON.stringify({ max_concurrent_requests: 3 }) }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
@@ -143,12 +143,13 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     const ranAs = (id: number) => GraphExecutionModel.findById(GraphWorkflowScheduleModel.findById(id)!.last_execution_id!)?.requested_by_account_id
     assert.equal(ranAs(schedule.id), 1)
     assert.equal(ranAs(legacy), null)
-    for (const [id, code] of [[disabled, 'run_as_unavailable'], [guest, 'run_as_forbidden']] as const) {
-      const stopped = GraphWorkflowScheduleModel.findById(id)!
-      assert.equal(stopped.status, 'paused')
-      assert.equal(stopped.stop_reason_code, code)
-      assert.equal(stopped.last_execution_id ?? null, null)
-    }
+    // Generating needs no right, so an active account without any keeps running; only an unusable account pauses.
+    assert.equal(GraphWorkflowScheduleModel.findById(guest)!.status, 'active')
+    assert.equal(ranAs(guest), 2)
+    const stopped = GraphWorkflowScheduleModel.findById(disabled)!
+    assert.equal(stopped.status, 'paused')
+    assert.equal(stopped.stop_reason_code, 'run_as_unavailable')
+    assert.equal(stopped.last_execution_id ?? null, null)
   })
 
   await t.test('a run cut off by a restart does not stop the schedule; a real failure does', async () => {

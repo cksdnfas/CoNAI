@@ -211,7 +211,6 @@ export function NaiActionSection({
   onGenerate,
   onSaveChatPreset,
 }: NaiActionSectionProps) {
-  const { canExecuteGeneration } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const { t } = useI18n()
   const upscaleLabel = isUpscaling
@@ -238,7 +237,7 @@ export function NaiActionSection({
             </GenerateActionBarIconButton>
           ) : null}
           {canUpscale ? (
-            <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={!canExecuteGeneration || !canViewImages || isUpscaling || isGenerating}>
+            <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={!canViewImages || isUpscaling || isGenerating}>
               <ArrowUp />
             </GenerateActionBarIconButton>
           ) : null}

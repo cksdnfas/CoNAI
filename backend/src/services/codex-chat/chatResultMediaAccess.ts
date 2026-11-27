@@ -1,18 +1,21 @@
 import type { McpRequester } from '../../mcp/context'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { canRequesterViewImages } from '../../middleware/imageAccess'
+import { requesterHasRight } from '../../middleware/featureAccess'
 import { ImageSafetyService } from '../imageSafetyService'
 import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks'
 import { profileContentLimit, ratingRestrictedHashesUnder } from './chatContentRating'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatProfileStore } from './chatProfiles'
+import { ChatGroupStore } from './chatGroupStore'
 import { collectCodexChatMedia, type CodexChatMediaItem } from './codexChatMedia'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { readChatResultMediaEvidence } from './chatResultMediaGrants'
 
-/** Existing global viewers retain their library scope; delegation uses only positive invocation/queue evidence. */
+/**
+ * Readers see every library media a chat shows. Others see only what their own chat delivered to them: the results of
+ * the generations it ran for them (like their own generation history) and what its tools returned while they could read.
+ */
 export function collectChatResultMedia(requester: McpRequester, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[]): CodexChatMediaItem[] {
-  if (canRequesterViewImages(requester)) return collectCodexChatMedia(messages)
+  if (requesterHasRight(requester, 'read')) return collectCodexChatMedia(messages)
   return collectScopedChatResultMedia(requester, thread, messages)
 }
 
@@ -30,11 +33,9 @@ function collectScopedChatResultMedia(requester: McpRequester, thread: CodexChat
   const db = getUserSettingsDb()
   const result = new Map<string, CodexChatMediaItem>()
   for (const [profileId, group] of byProfile) {
-    try {
-      if (!canRequesterViewImages(chatProfileRequester(requester, { threadId: thread.id, profileId, kind: thread.kind }))) continue
-    } catch { continue }
     const profile = ChatProfileStore.find(profileId, thread.id)
-    if (!profile?.isEnabled) continue
+    // The speaker must still be in the room it delivered to.
+    if (!profile?.isEnabled || (thread.kind === 'group' && !ChatGroupStore.member(thread.id, profileId))) continue
     const evidence = readChatResultMediaEvidence(requester, thread.id, profileId, group.map((message) => message.routing!.replyId!))
     const media = collectCodexChatMedia(group.map((message) => ({
       ...message,
@@ -62,7 +63,7 @@ function collectScopedChatResultMedia(requester: McpRequester, thread: CodexChat
   return [...result.values()].sort((a, b) => b.messageId - a.messageId)
 }
 
-/** What `thread` itself delivered to this account: the only library media it may attach back without images.view. */
+/** What `thread` itself delivered to this account: the only library media it may attach back without content.read. */
 export function deliveredChatMediaHashes(requester: McpRequester, thread: CodexChatThreadRecord): Set<string> {
   return new Set(collectScopedChatResultMedia(requester, thread, CodexChatStore.listMessages(thread.id)).map((item) => item.compositeHash))
 }

@@ -9,7 +9,7 @@ import { textResult as result } from '../toolResults';
 import fs from 'fs';
 import path from 'path';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../middleware/upload';
-import { requireContextPermission } from '../../middleware/featureAccess';
+import { requireContextRight } from '../../middleware/featureAccess';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../../services/fileStorePaths';
 import { decodeFileStoreDataUrl } from '../requestSecurity';
 import { findLibraryMedia } from '../../services/sprite/spriteLibrary';
@@ -71,25 +71,25 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
     sort: z.string().optional().describe('"name" (default), "modified" (updatedAt) or "size". Folders still come first; ties go by name.'),
     direction: z.string().optional().describe('"asc" (default) or "desc".'),
   }) }, ({ parent_id, offset, limit, sort, direction }) => wrap((owner) => FileStoreService.list(owner, parent_id ?? null, offset ?? 0, limit ?? 50, { sort, direction })));
-  server.registerTool('get_file_info', { description: 'Read shared file/folder metadata without importing it into the library; preview images with view_images(file_ids). Embedded image metadata requires images.view and rating access. If the ID is missing, find it with list_files/search_files.', inputSchema: z.object({
+  server.registerTool('get_file_info', { description: 'Read shared file/folder metadata without importing it into the library; preview images with view_images(file_ids). Embedded image metadata requires content.read and rating access. If the ID is missing, find it with list_files/search_files.', inputSchema: z.object({
     file_id: z.string().regex(/^[a-f0-9]{32}$/),
     include_image_metadata: z.boolean().optional().describe('Images only: add dimensions and embedded AI tool/model/LoRAs/prompts/settings, including raw NovelAI parameters. Null means absent.'),
   }) }, ({ file_id, include_image_metadata }) => wrap(async (owner) => {
     if (!include_image_metadata) return FileStoreService.get(owner, file_id);
     const { entry, filePath } = FileStoreService.resolveFile(owner, file_id);
     if (!(await filePreviewMime(entry, filePath))?.startsWith('image/')) throw new FileStoreError('Not an image file; include_image_metadata reads only images.', 400);
-    requireContextPermission(context, 'images.view');
+    requireContextRight(context, 'read');
     if (!await storedFileAllowed(file_id, contextContentLimit(context))) throw new FileStoreError(CONTENT_RATING_BLOCKED, 403);
     const [metadata, info] = await Promise.all([ImageProcessor.extractMetadata(filePath), ImageProcessor.getImageInfo(filePath)]);
     return { ...entry, width: info.width || null, height: info.height || null, ai_metadata: extractedAiMetadata(metadata) };
   }));
-  server.registerTool('get_file_download', { description: 'Get a shared file\'s name, size and authenticated download path/URL, never a server path/public token. Requires login and files.view; image/video originals also need images.view and rating access. If denied, check permissions or select another file with list_files.', inputSchema: z.object({
+  server.registerTool('get_file_download', { description: 'Get a shared file\'s name, size and authenticated download path/URL, never a server path/public token. Requires login and content.read; image/video originals also need rating access. If denied, check permissions or select another file with list_files.', inputSchema: z.object({
     file_id: fileId,
   }) }, ({ file_id }) => wrap(async (owner) => {
     const { entry, filePath } = FileStoreService.resolveFile(owner, file_id);
     const mime = await filePreviewMime(entry, filePath);
     if (mime && /^(image|video)\//.test(mime)) {
-      requireContextPermission(context, 'images.view');
+      requireContextRight(context, 'read');
       if (!await storedFileAllowed(file_id, contextContentLimit(context))) throw new FileStoreError(CONTENT_RATING_BLOCKED, 403);
     }
     const download_path = `/api/files/${file_id}/download`;
@@ -127,13 +127,13 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
     const { bytes } = decodeFileStoreDataUrl(data_url);
     return uploadBinary(context, owner, parent_id ?? null, name, FileDiscoveryService.getMimeType(name), bytes, overwrite);
   }));
-  server.registerTool('copy_library_media_to_files', { description: 'Copy library originals to shared files; sources stay. The account itself needs images.view; profile delegation is insufficient. Returns file_id or skip/error reasons for hidden/unavailable/restricted media. Never overwrites; on collision choose another folder. Deliver with get_file_download.', inputSchema: z.object({
+  server.registerTool('copy_library_media_to_files', { description: 'Copy library originals to shared files; sources stay. Needs content.read. Returns file_id or skip/error reasons for hidden/unavailable/restricted media. Never overwrites; on collision choose another folder. Deliver with get_file_download.', inputSchema: z.object({
     composite_hashes: z.array(mediaHash).min(1).max(50).describe('Image, animation or video originals; saved names use hash plus original extension.'),
     parent_id: fileId.nullable().optional().describe('Destination folder; null or omitted means top level.'),
   }) }, ({ composite_hashes, parent_id }) => manage('upload', async (owner) => {
     const accountId = context.requester?.accountId ?? null;
-    if (accountId !== null && !AuthAccessControlService.hasPermission(accountId, 'images.view')) {
-      throw new FileStoreError('The account must hold its own images.view permission to copy library originals.', 403);
+    if (accountId !== null && !AuthAccessControlService.hasPermission(accountId, 'content.read')) {
+      throw new FileStoreError('Copying library originals needs the read right (content.read).', 403);
     }
     FileStoreService.list(owner, parent_id ?? null, 0, 1);
     const metadata = new Map(MediaMetadataModel.findByHashes([...new Set(composite_hashes)]).map((entry) => [entry.composite_hash, entry]));

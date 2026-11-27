@@ -1,46 +1,36 @@
 /**
- * The one permission catalog. Each area has view / edit; only areas that destroy real files keep a separate delete.
- * Server administration stays admin-only. Explicit settings grants cover only the safe page-settings fields.
+ * The one permission catalog. Administrators grant pages and three basic rights; every other app feature is open to
+ * signed-in accounts, and chat bots are bounded by their profile's tool settings. Server administration stays admin-only.
  */
+const page = <Id extends string>(id: Id, ko: string, en: string, anonymous = false) => ({
+  key: `page.${id}.view` as const, section: 'pages' as const, label: { ko, en }, description: `Open the ${en} page.`,
+  ...(anonymous ? { anonymous: true as const } : {}),
+})
+
 export const PERMISSION_CATALOG = [
-  ...(['appearance', 'library', 'media', 'generation', 'analysis', 'posts', 'chat'] as const).map((area) => ({
-    key: `settings.${area}.manage` as const, section: 'settings' as const,
-    label: { ko: `${({ appearance: '공용 화면', library: '라이브러리', media: '미디어 저장', generation: '생성 실행', analysis: '자동 분석·의미 검색', posts: '게시판·지식', chat: '채팅 공통' })[area]} 설정 관리 (전체 사용자 적용)`, en: `Manage ${area} settings (all users)` },
-    description: `Manage allowlisted shared ${area} settings from page dialogs. Does not grant server administration or credentials.`,
-  })),
-  { key: 'images.view', section: 'images', anonymous: true, label: { ko: '이미지 보기', en: 'View images' }, description: 'List and view images, videos and animated images everywhere, including chat. Chat profile thumbnails require only chat access.' },
-  { key: 'images.edit', section: 'images', label: { ko: '이미지 편집·그룹 정리', en: 'Edit images and groups' }, description: 'Edit tags and metadata, process images, create groups and assign images.' },
-  { key: 'images.delete', section: 'images', label: { ko: '이미지·그룹 삭제', en: 'Delete images and groups' }, description: 'Delete library images and groups.' },
-  { key: 'images.upload', section: 'images', label: { ko: '이미지 업로드', en: 'Upload images' }, description: 'Upload images and videos into the library.' },
-  { key: 'prompts.view', section: 'prompts', label: { ko: '프롬프트·프리셋 보기', en: 'View prompts and presets' }, description: 'Read prompt collections, groups and presets.' },
-  { key: 'prompts.edit', section: 'prompts', label: { ko: '프롬프트·프리셋 편집', en: 'Edit prompts and presets' }, description: 'Add, edit, delete and import prompts, groups and presets.' },
-  { key: 'wildcards.view', section: 'prompts', label: { ko: '와일드카드 보기', en: 'View wildcards' }, description: 'Read and expand wildcards.' },
-  { key: 'wildcards.edit', section: 'prompts', label: { ko: '와일드카드 편집', en: 'Edit wildcards' }, description: 'Add, edit and delete wildcards and scan the LoRA folder.' },
-  { key: 'characters.view', section: 'characters', label: { ko: '캐릭터 라이브러리 보기', en: 'View character library' }, description: 'Browse character folders and appearance settings and load them into chat profiles and generation.' },
-  { key: 'characters.edit', section: 'characters', label: { ko: '캐릭터 라이브러리 편집', en: 'Edit character library' }, description: 'Create, edit, move and delete character folders and appearance settings.' },
-  { key: 'generation.execute', section: 'generation', label: { ko: '이미지 생성', en: 'Generate images' }, description: 'Queue NovelAI, ComfyUI and workflow generations.' },
-  { key: 'workflows.view', section: 'generation', label: { ko: '워크플로 보기', en: 'View workflows' }, description: 'Read workflows, graphs, modules and dropdown lists.' },
-  { key: 'workflows.edit', section: 'generation', label: { ko: '워크플로 편집', en: 'Edit workflows' }, description: 'Create and edit workflows, graphs and schedules.' },
-  { key: 'files.view', section: 'files', label: { ko: '공용 파일 보기', en: 'View shared files' }, description: 'Browse and download files in the shared instance file store.' },
-  { key: 'files.edit', section: 'files', label: { ko: '공용 파일 올리기·정리', en: 'Upload and organize shared files' }, description: 'Upload files, create folders, rename and move in the shared instance file store.' },
-  { key: 'files.delete', section: 'files', label: { ko: '공용 파일 삭제', en: 'Delete shared files' }, description: 'Delete files and folders in the shared instance file store.' },
-  { key: 'audio.view', section: 'audio', label: { ko: '오디오 보기', en: 'View audio' }, description: 'Browse sound projects, groups and candidates, play and download them, read group comments.' },
-  { key: 'audio.edit', section: 'audio', label: { ko: '오디오 편집·검수', en: 'Edit and review audio' }, description: 'Create and organize sound projects and groups, upload and import sounds, review candidates and manage comments.' },
-  { key: 'posts.view', section: 'posts', label: { ko: '게시판 보기', en: 'View posts' }, description: 'Read published posts, their media and comments.' },
-  { key: 'posts.comment', section: 'posts', label: { ko: '게시판 댓글', en: 'Comment on posts' }, description: 'Write, edit and delete your own comments.' },
-  { key: 'posts.write', section: 'posts', label: { ko: '게시물 쓰기', en: 'Write posts' }, description: 'Write posts and edit or delete your own.' },
-  { key: 'posts.evaluate', section: 'posts', label: { ko: '지식 문서 평가', en: 'Evaluate knowledge' }, description: 'Submit assessments for knowledge documents you can read.' },
-  { key: 'posts.knowledge.review', section: 'posts', label: { ko: '지식 문서 검토', en: 'Review knowledge' }, description: 'Verify knowledge versions and resolve reported issues.' },
-  { key: 'posts.summon', section: 'posts', label: { ko: '댓글로 봇 부르기 (부른 계정 사용량)', en: 'Call bots from comments (uses your account)' }, description: 'Call chat profiles with @ in a comment; the bot runs as your account.' },
-  { key: 'chat.use', section: 'chat', label: { ko: '채팅', en: 'Chat' }, description: 'Chat with API model profiles.' },
-  { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },
-  { key: 'chat.web.use', section: 'chat', label: { ko: '채팅 웹 검색 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Chat web search (Codex, Claude Code; shares server account usage)' }, description: 'Let chat profiles search and read the web for you, when an administrator turned web search on.' },
-  { key: 'chat.diagnostics.view', section: 'chat', label: { ko: '채팅 진단 보기', en: 'View chat diagnostics' }, description: 'Inspect how your own replies were composed.' },
-  { key: 'plugins.view', section: 'plugins', label: { ko: '플러그인 페이지 열기', en: 'Open plugin pages' }, description: 'Open the plugin list and installed plugin pages. What a plugin page does still follows the feature permissions the account holds.' },
+  // The menu pages. Signed-out visitors can only read images, so only the image pages can be opened for them.
+  page('home', '갤러리', 'Gallery', true),
+  page('groups', '그룹', 'Groups', true),
+  page('upload', '업로드', 'Upload'),
+  page('files', '파일 보관함', 'Files'),
+  page('prompts', '프롬프트', 'Prompts'),
+  page('wildcards', '와일드카드', 'Wildcards'),
+  page('characters', '캐릭터', 'Characters'),
+  page('generation', '생성', 'Generate'),
+  page('audio', '오디오', 'Audio'),
+  page('sprite', '스프라이트', 'Sprites'),
+  page('chat', '채팅', 'Chat'),
+  page('posts', '게시판', 'Posts'),
+  page('wallpaper', '월페이퍼', 'Wallpaper', true),
+  page('wallpaper.runtime', '월페이퍼 런타임', 'Wallpaper runtime', true),
+  page('extensions', '플러그인', 'Plugins'),
+  { key: 'content.read', section: 'content', anonymous: true, label: { ko: '읽기', en: 'Read' }, description: 'View all data (images, prompts, workflows, files, audio, posts) in pages, chat and plugins. Signed-out visitors can only read images.' },
+  { key: 'content.edit', section: 'content', label: { ko: '수정', en: 'Edit' }, description: 'Create, upload, change and organize shared data. Includes reading.' },
+  { key: 'content.delete', section: 'content', label: { ko: '삭제', en: 'Delete' }, description: 'Delete shared data. Includes reading.' },
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'characters' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'plugins' | 'account' | 'settings'
+  section: 'pages' | 'content' | 'account'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */
@@ -54,43 +44,41 @@ export type PermissionSection = (typeof PERMISSION_CATALOG)[number]['section']
 
 export const PERMISSION_KEYS: readonly PermissionKey[] = PERMISSION_CATALOG.map((permission) => permission.key)
 
-/** Profile tools may receive domain capabilities, never account, chat admission or server administration. */
-export const CHAT_DELEGATABLE_PERMISSION_KEYS: readonly PermissionKey[] = PERMISSION_CATALOG
-  .filter((permission) => permission.section !== 'settings' && permission.section !== 'account' && permission.section !== 'chat')
-  .map((permission) => permission.key)
+/** The settings page is never granted: it follows the administrator role. */
+export const ADMIN_PAGE_PERMISSION = 'page.settings.view'
+/** Pages reached from the menu pages, never granted on their own (see resolvePermissionKeys). */
+export const IMAGE_DETAIL_PAGE_PERMISSION = 'page.image-detail.view'
+export const METADATA_EDITOR_PAGE_PERMISSION = 'page.metadata-editor.view'
+
+export type ContentRight = 'read' | 'edit' | 'delete'
+export const CONTENT_PERMISSIONS = { read: 'content.read', edit: 'content.edit', delete: 'content.delete' } as const satisfies Record<ContentRight, PermissionKey>
 
 /**
- * Pages are not granted: each page opens for whoever holds the features it shows. These keys are derived when access
- * is resolved, so menus, route guards and chat page links keep reading one `page.*` key per page.
+ * Stored grants → the keys an account holds. Edit and delete include reading; image detail opens from the gallery or
+ * groups, the metadata editor from image detail with editing; administrators hold everything and the settings page.
  */
-export const PAGE_PERMISSION_RULES = {
-  'page.home.view': { all: ['images.view'] },
-  'page.groups.view': { all: ['images.view'] },
-  'page.image-detail.view': { all: ['images.view'] },
-  'page.metadata-editor.view': { all: ['images.view', 'images.edit'] },
-  'page.wallpaper.view': { all: ['images.view'] },
-  'page.wallpaper.runtime.view': { all: ['images.view'] },
-  'page.upload.view': { all: ['images.upload'] },
-  'page.audio.view': { all: ['audio.view'] },
-  'page.prompts.view': { all: ['prompts.view'] },
-  'page.wildcards.view': { all: ['wildcards.view'] },
-  'page.characters.view': { all: ['characters.view'] },
-  'page.generation.view': { any: ['generation.execute', 'workflows.view'] },
-  'page.sprite.view': { all: ['images.view', 'images.edit'] },
-  'page.files.view': { all: ['files.view'] },
-  'page.posts.view': { all: ['posts.view'] },
-  'page.chat.view': { any: ['chat.use', 'chat.agent.use'] },
-  'page.extensions.view': { all: ['plugins.view'] },
-  'page.settings.view': { admin: true },
-} as const satisfies Record<string, { all?: readonly PermissionKey[]; any?: readonly PermissionKey[]; admin?: true }>
+export function resolvePermissionKeys(storedKeys: readonly string[], isAdmin: boolean): string[] {
+  const held = new Set<string>(isAdmin ? [...PERMISSION_KEYS, ADMIN_PAGE_PERMISSION] : storedKeys)
+  if (held.has(CONTENT_PERMISSIONS.edit) || held.has(CONTENT_PERMISSIONS.delete)) held.add(CONTENT_PERMISSIONS.read)
+  if (held.has('page.home.view') || held.has('page.groups.view')) held.add(IMAGE_DETAIL_PAGE_PERMISSION)
+  if (held.has(IMAGE_DETAIL_PAGE_PERMISSION) && held.has(CONTENT_PERMISSIONS.edit)) held.add(METADATA_EDITOR_PAGE_PERMISSION)
+  return [...held]
+}
 
-export type PagePermissionKey = keyof typeof PAGE_PERMISSION_RULES
+export function hasContentRight(permissionKeys: readonly string[], right: ContentRight): boolean {
+  return permissionKeys.includes(CONTENT_PERMISSIONS[right])
+}
 
-/** Add the page keys that the held feature keys open. */
-export function withPagePermissions(permissionKeys: readonly string[], isAdmin: boolean): string[] {
-  const held = new Set(permissionKeys)
-  const pages = (Object.entries(PAGE_PERMISSION_RULES) as Array<[string, { all?: readonly string[]; any?: readonly string[]; admin?: true }]>)
-    .filter(([, rule]) => rule.admin ? isAdmin : (rule.all ?? []).every((key) => held.has(key)) && (!rule.any || rule.any.some((key) => held.has(key))))
-    .map(([page]) => page)
-  return [...permissionKeys.filter((key) => !key.startsWith('page.')), ...pages]
+/**
+ * What the account needs for a tool or page action of one scope: a basic right, sign-in only (generation makes new
+ * things), or the administrator role. Unknown scopes need the administrator.
+ */
+export function scopeRequirement(scope: string): ContentRight | 'signedIn' | 'admin' {
+  switch (scope) {
+    case 'read': case 'backup': return 'read'
+    case 'generate': return 'signedIn'
+    case 'organize': case 'restore': return 'edit'
+    case 'delete': return 'delete'
+    default: return 'admin'
+  }
 }

@@ -146,8 +146,10 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     // A guest with the runtime page sees only its own generations and never admin data.
     const guestGroup = auth.prepare("SELECT id FROM auth_permission_groups WHERE group_key = 'guest'").get() as { id: number }
     auth.prepare('INSERT OR IGNORE INTO auth_account_group_memberships (account_id, group_id) VALUES (?, ?)').run(guestId, guestGroup.id)
-    const permission = auth.prepare("SELECT id FROM auth_permissions WHERE permission_key = 'images.view'").get() as { id: number }
-    auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(guestGroup.id, permission.id)
+    for (const key of ['page.wallpaper.runtime.view', 'content.read']) {
+      const permission = auth.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get(key) as { id: number }
+      auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(guestGroup.id, permission.id)
+    }
     ;(await import('../src/services/authAccessControlService')).invalidateResolvedAuthAccessCache()
     const guestHistory = await call('GET', '/api/wallpaper-runtime/generation/history', 'guest')
     assert.equal(guestHistory.status, 200)
@@ -203,9 +205,11 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
   await t.test('a logged-out viewer is refused account feeds instead of getting empty ones', async () => {
     sessions.kiosk = {}
     const anonymousGroup = auth.prepare("SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous'").get() as { id: number }
-    // The runtime page permission follows images.view.
-    const permission = auth.prepare("SELECT id FROM auth_permissions WHERE permission_key = 'images.view'").get() as { id: number }
-    auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(anonymousGroup.id, permission.id)
+    // The runtime page key opens it; its feeds read with the read right.
+    for (const key of ['page.wallpaper.runtime.view', 'content.read']) {
+      const permission = auth.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get(key) as { id: number }
+      auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(anonymousGroup.id, permission.id)
+    }
     ;(await import('../src/services/authAccessControlService')).invalidateResolvedAuthAccessCache()
     assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 200)
     for (const url of ['/generation/history', '/generation/stats', '/generation/queue', '/workflow-activity', '/llm-usage', '/comfyui/stats']) {

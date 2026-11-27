@@ -106,12 +106,12 @@ let localSettingsUploaded = false
  */
 export function usePromptInlineSyntaxSettings() {
   const [settings, setSettings] = useState<PromptInlineSyntaxSettings>(() => readPromptInlineSyntaxSettings())
-  const { canViewPrompts } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const queryClient = useQueryClient()
   const serverQuery = useQuery({
     queryKey: SERVER_SETTINGS_QUERY_KEY,
     queryFn: getPromptEditorSettings,
-    enabled: canViewPrompts,
+    enabled: canRead,
     staleTime: 5 * 60_000,
     retry: false,
   })
@@ -165,7 +165,7 @@ export function usePromptInlineSyntaxSettings() {
     const normalized = normalizePromptInlineSyntaxSettings(nextSettings)
     setSettings(normalized)
     writePromptInlineSyntaxSettings(normalized)
-    if (canViewPrompts) {
+    if (canRead) {
       saveToServer(normalized)
     }
   }

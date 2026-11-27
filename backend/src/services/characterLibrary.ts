@@ -221,7 +221,7 @@ export function characterLibraryFacets(input: unknown = {}): CharacterLibraryFac
 export function requireCharacterImageAccess(input: unknown, canViewImages: boolean) {
   const value = input as { referenceHash?: unknown; avatarHash?: unknown; references?: unknown } | null
   if (!canViewImages && value && ['referenceHash', 'avatarHash', 'avatarCrop', 'references'].some((key) => Object.prototype.hasOwnProperty.call(value, key))) {
-    throw new CharacterLibraryError('Permission required: images.view', 403)
+    throw new CharacterLibraryError('Permission required: content.read', 403)
   }
 }
 type LookInput = { appearance?: string; sections?: Partial<CharacterAppearanceSections>; outfits?: CharacterOutfit[] }
@@ -391,8 +391,8 @@ export function patchCharacterSetting(settingId: number, input: unknown, canView
 }
 /** Ingest local dictionary samples before one revision-checked gallery write; never fetch client-provided URLs. */
 export async function importCharacterCatalogReferences(settingId: number, input: unknown, canViewImages: boolean, canUpload: boolean): Promise<CharacterCatalogReferenceImportResult> {
-  if (!canViewImages) throw new CharacterLibraryError('Permission required: images.view', 403)
-  if (!canUpload) throw new CharacterLibraryError('Permission required: images.upload', 403)
+  if (!canViewImages) throw new CharacterLibraryError('Permission required: content.read', 403)
+  if (!canUpload) throw new CharacterLibraryError('Permission required: content.edit', 403)
   const value = parse(z.object({ character: z.string().trim().min(1), revision: id }).strict(), input)
   validateCharacterSetting({ revision: value.revision }, settingId)
   const before = characterSettingRow(settingId)
@@ -502,7 +502,7 @@ const BUNDLE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024
 type BundleZipEntry = ReturnType<AdmZip['getEntries']>[number]
 /**
  * The library files of the images a bundle names, as `images/<hash>.<ext>` entries (shared by the character and
- * art-style bundles). `bundled` answers the hash when its file is included, null when disabled (no `images.view`) or gone.
+ * art-style bundles). `bundled` answers the hash when its file is included, null when disabled (no read right) or gone.
  */
 export function bundleImageCollector(enabled: boolean) {
   const files = new Map<string, { name: string; path: string }>()
@@ -551,7 +551,7 @@ export async function ingestBundleImage(entry: BundleZipEntry | undefined, hash:
 /**
  * Settings as a portable bundle: the document (folder paths from the export's top, the folder exported or the top
  * level) and the library file of every image it names (reference, avatar, gallery, expressions, candidates). Images whose file
- * is gone are left out of the document. Without `images` (no `images.view`) the document names no image.
+ * is gone are left out of the document. Without `images` (no read right) the document names no image.
  */
 export function exportCharacterLibrary(input: unknown, images: boolean): { document: CharacterLibraryExport; files: Array<{ name: string; path: string }> } {
   const value = parse(exportSchema, input)

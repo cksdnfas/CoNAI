@@ -33,12 +33,12 @@ import { ArtStyleImageAdd } from './art-style-image-add'
 /**
  * One art style over the list (`style=<id>`): the title edited in the header, favorite and ⋯ beside it, stepping
  * through the listed styles, saving with Ctrl+S. Left the reference images (first = cover), right the description,
- * badges, search keywords and the prompt (긍정 / 부정 in one frame). Without characters.edit it only shows; without
- * images.view the image column is left out.
+ * badges, search keywords and the prompt (긍정 / 부정 in one frame). Without the edit right it only shows; without
+ * the read right the image column is left out.
  */
 export function ArtStyleDialog({ library }: { library: ArtStyleLibrary }) {
   const { t } = useI18n()
-  const { editor, canEdit, loaded, total, loadMore, openStyle, closeStyle, toggleFavorite, duplicate, exportStyles, copyPositive } = library
+  const { editor, canEdit, canDelete, loaded, total, loadMore, openStyle, closeStyle, toggleFavorite, duplicate, exportStyles, copyPositive } = library
   const { base, draft, busy } = editor
   return (
     <LibraryItemDialog
@@ -52,9 +52,9 @@ export function ArtStyleDialog({ library }: { library: ArtStyleLibrary }) {
           { key: 'copy', label: t({ ko: '긍정 프롬프트 복사', en: 'Copy positive prompt' }), icon: Copy, onSelect: () => void copyPositive(base) },
           canEdit ? { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: CopyPlus, disabled: busy, onSelect: () => void duplicate(base) } : null,
           { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => void exportStyles({ ids: [base.id] }, base.title) },
-          canEdit ? '-' : null,
+          canDelete ? '-' : null,
           // Failures are already reported by the editor.
-          canEdit ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting, onSelect: () => void editor.remove(true).catch(() => undefined) } : null,
+          canDelete ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting, onSelect: () => void editor.remove(true).catch(() => undefined) } : null,
         ]} />
       </> : undefined}
       ready={editor.ready}

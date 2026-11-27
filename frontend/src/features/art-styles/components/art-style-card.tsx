@@ -11,7 +11,7 @@ import { artStyleThumbnailUrl, type ArtStyleSummary } from '@/lib/api-art-styles
 const CARD_BADGES = 3
 
 /**
- * One art style in the grid, on the appearance library's card: its cover thumbnail (none without images.view), the title
+ * One art style in the grid, on the appearance library's card: its cover thumbnail (none without the read right), the title
  * and description over it, its first badges and the image count. Favorite and select float in the top corners; the
  * rest is in the context menu.
  */

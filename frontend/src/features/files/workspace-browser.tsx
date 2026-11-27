@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, ClipboardPaste, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, RefreshCw, Scissors, Search, Trash2, Upload } from 'lucide-react'
@@ -55,7 +56,7 @@ type WorkspaceDocument = { id: string; name: string; size: number }
 
 /**
  * A project workspace in the files page: the same toolbar, list, selection bar, dialogs and document editor as the
- * file store, on the project's own folders. Guidelines open from the toolbar; deletes need files.delete.
+ * file store, on the project's own folders. Guidelines open from the toolbar; deletes need the delete right.
  */
 export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCreateProject, onStore, onSystem }: {
   projectId: string
@@ -72,8 +73,8 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const queryClient = useQueryClient()
   const auth = useAuthStatusQuery()
   const permissions = auth.data?.permissionKeys ?? []
-  const canWrite = permissions.includes('files.edit')
-  const canDelete = canWrite && permissions.includes('files.delete')
+  const canWrite = permissions.includes(CONTENT_PERMISSIONS.edit)
+  const canDelete = permissions.includes(CONTENT_PERMISSIONS.delete)
   const chatPage = useChatPageDataPermissions().canReadFiles
   const [viewMode, changeViewMode] = useFileViewMode('workspace')
   const [offset, setOffset] = useState(0)

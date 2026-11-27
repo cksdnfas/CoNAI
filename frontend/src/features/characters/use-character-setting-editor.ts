@@ -63,7 +63,7 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  // Without images.view the stored hashes read as null and the server refuses image keys, so they are never sent.
+  // Without the read right the stored hashes read as null and the server refuses image keys, so they are never sent.
   const { canViewImages } = useImagePermissions()
   const settingId = target && 'settingId' in target ? target.settingId : null
   const query = useQuery({ queryKey: characterSettingQueryKey(settingId ?? 0), queryFn: ({ signal }) => getCharacterSetting(settingId!, signal), enabled: settingId !== null })

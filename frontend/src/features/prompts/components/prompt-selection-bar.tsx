@@ -13,7 +13,7 @@ interface PromptSelectionBarProps {
 }
 
 export function PromptSelectionBar({ selectedCount, isSubmitting = false, isDeleting = false, onAssignGroup, onDeleteSelected, onClear }: PromptSelectionBarProps) {
-  const { canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { t } = useI18n()
 
   return (
@@ -26,7 +26,7 @@ export function PromptSelectionBar({ selectedCount, isSubmitting = false, isDele
             icon={Trash2}
             label={isDeleting ? t('prompts.components.prompt.selection.bar.deleting') : t('prompts.components.prompt.selection.bar.delete')}
             onClick={onDeleteSelected}
-            disabled={!canDeletePrompts || !onDeleteSelected || isDeleting}
+            disabled={!canDelete || !onDeleteSelected || isDeleting}
           />
 
           <SelectionBarAction
@@ -34,7 +34,7 @@ export function PromptSelectionBar({ selectedCount, isSubmitting = false, isDele
             label={isSubmitting ? t('prompts.components.prompt.selection.bar.applying') : t('prompts.components.prompt.selection.bar.assign.group')}
             variant="default"
             onClick={onAssignGroup}
-            disabled={!canUpdatePrompts || isSubmitting}
+            disabled={!canEdit || isSubmitting}
           />
         </>
       )}

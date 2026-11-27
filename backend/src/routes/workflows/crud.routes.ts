@@ -4,7 +4,7 @@ import { WorkflowModel, normalizePublicQueueMaxCount, normalizePublicQueueRoleLi
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, normalizeWorkflowKind, type WorkflowKind } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireRead, requireEdit, requireDelete } from '../../middleware/authMiddleware';
 import { nativeEditRevision, requireNativeEditRevision } from '../../services/nativeEditRevision';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import {
@@ -99,7 +99,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
-router.get('/deleted', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/deleted', requireRead, asyncHandler(async (_req: Request, res: Response) => {
   const workflows = WorkflowModel.findDeleted().map((workflow) => ({
     id: workflow.id,
     name: workflow.name,
@@ -110,7 +110,7 @@ router.get('/deleted', requirePermission('workflows.view'), asyncHandler(async (
   res.json({ success: true, data: workflows });
 }));
 
-router.get('/:id/export', requirePermission('workflows.view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/export', requireRead, asyncHandler(async (req: Request, res: Response) => {
   const id = Number(routeParam(req.params.id));
   const workflow = Number.isInteger(id) ? WorkflowModel.findByIdIncludingDeleted(id) : null;
   if (!workflow) {
@@ -178,7 +178,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 워크플로우 생성
  * POST /api/workflows
  */
-router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/import', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const definition = req.body?.workflow ?? req.body;
   if (!definition || typeof definition !== 'object' || typeof definition.name !== 'string' || typeof definition.workflow_json !== 'string') {
     res.status(400).json({ success: false, error: 'Invalid workflow definition' });
@@ -220,7 +220,7 @@ router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (
  * ComfyUI 일반(Save) 워크플로를 API 형식으로 변환
  * POST /api/workflows/convert-ui
  */
-router.post('/convert-ui', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/convert-ui', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const raw = req.body?.workflow_json;
   let parsed: unknown;
   try {
@@ -247,7 +247,7 @@ router.post('/convert-ui', requirePermission('workflows.edit'), asyncHandler(asy
  * API 워크플로를 실행 가능한 ComfyUI 서버들과 대조 (없는 노드·모델, 범위 밖 숫자, 출력에 닿지 않는 노드)
  * POST /api/workflows/check
  */
-router.post('/check', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/check', requireRead, asyncHandler(async (req: Request, res: Response) => {
   const workflowJson = req.body?.workflow_json;
   const workflowId = Number(req.body?.workflow_id);
   if (typeof workflowJson !== 'string') {
@@ -262,7 +262,7 @@ router.post('/check', requirePermission('workflows.edit'), asyncHandler(async (r
   }
 }));
 
-router.post('/:id/restore', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/restore', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = Number(routeParam(req.params.id));
   if (!Number.isInteger(id) || !WorkflowModel.restore(id)) {
     res.status(404).json({ success: false, error: 'Deleted workflow not found' });
@@ -271,7 +271,7 @@ router.post('/:id/restore', requirePermission('workflows.edit'), asyncHandler(as
   res.json({ success: true, data: { id, message: 'Workflow restored successfully' } });
 }));
 
-router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
   const kind = readWorkflowKindInput(req.body?.kind);
   if (kind === 'invalid') {
@@ -372,7 +372,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
  * 워크플로우 업데이트
  * PUT /api/workflows/:id
  */
-router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
   const kind = readWorkflowKindInput(req.body?.kind);
@@ -497,7 +497,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
  * 워크플로우 삭제
  * DELETE /api/workflows/:id
  */
-router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {

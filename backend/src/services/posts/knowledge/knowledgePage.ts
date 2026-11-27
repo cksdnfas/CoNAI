@@ -66,7 +66,7 @@ export function knowledgePageForExecution(context: McpRequestContext, page: Chat
     const candidate: ChatPageSnapshot = { ...page, data: { ...page.data, open: serverOpen, comments } }
     const budget = Math.min(12_000, context.chatContext.knowledgeOutputLimit ?? 12_000)
     // Reserve for the receipt and operation wrapper, which the LLM output limiter counts too.
-    if (!body || JSON.stringify(chatPageView(context.requester, candidate, contextContentLimit(context))).length + 1000 > budget) return candidate
+    if (!body || JSON.stringify(chatPageView(context.requester, candidate, contextContentLimit(context), context.scopes)).length + 1000 > budget) return candidate
     const reference = recordKnowledgeUse(actor, { postId: post.id, body, intervals: [{ start, end }], execution: knowledgeExecutionFromMcp(context) })
     return reference ? { ...candidate, data: { ...candidate.data, open: { ...serverOpen, reference: { ...reference, intervals: reference.intervals.map(span => ({ start: span.start, end: span.end })) } } } } : candidate
   } catch (error) {

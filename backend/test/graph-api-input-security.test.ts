@@ -26,7 +26,7 @@ test('graph API inputs never read request paths and resolve only authorized refe
   const auth = getAuthDb()
   auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin', 'unused', 'admin')").run()
   invalidateConfiguredAuthCache()
-  const allowed = AuthPermissionGroup.createCustomGroup({ name: 'api images', permissionKeys: ['images.view'] })
+  const allowed = AuthPermissionGroup.createCustomGroup({ name: 'api images', permissionKeys: ['content.read'] })
   const denied = AuthPermissionGroup.createCustomGroup({ name: 'api no images', permissionKeys: [] })
   const insert = auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES (?, 'unused', 'guest')")
   const allowedId = Number(insert.run('api-allowed').lastInsertRowid)
@@ -112,14 +112,14 @@ test('graph API inputs never read request paths and resolve only authorized refe
   await assert.rejects(runApi({ imagePath: expected }), /fetch reached/)
   assert.deepEqual(body, { imagePath: expected })
   const before = fetches
-  await assert.rejects(runApi({ image: { composite_hash: hash } }, deniedContext), /images\.view/)
+  await assert.rejects(runApi({ image: { composite_hash: hash } }, deniedContext), /content.read/)
   assert.equal(fetches, before)
   const key = mcpHttpSettingsService.createApiKey('api key', allowed.group_key).keys.find((item) => item.name === 'api key')!
   const keyContext = { ...mcpHttpSettingsService.authenticate(key.apiKey)!, source: 'http' as const }
   const accountless = { ...context, requestedByAccountId: null }
   await assert.rejects(withMcpGraphImageAuthority(keyContext, () => runApi({ image: { composite_hash: hash } }, accountless)), /fetch reached/)
   mcpHttpSettingsService.updateApiKey(key.id, key.name, denied.group_key)
-  await assert.rejects(withMcpGraphImageAuthority(keyContext, () => runApi({ image: { composite_hash: hash } }, accountless)), /images\.view/)
+  await assert.rejects(withMcpGraphImageAuthority(keyContext, () => runApi({ image: { composite_hash: hash } }, accountless)), /content.read/)
   mcpHttpSettingsService.revokeApiKey(key.id)
   await assert.rejects(withMcpGraphImageAuthority(keyContext, () => runApi({ image: { composite_hash: hash } }, accountless)), /authorization/)
 })

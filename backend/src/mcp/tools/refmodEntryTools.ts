@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { REFMOD_ENTRY_LIMITS, type RefModEntryDetail, type RefModEntrySummary } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { errorResult, textResult } from '../toolResults'
-import { requireContextPermission } from '../../middleware/featureAccess'
+import { requireContextRight } from '../../middleware/featureAccess'
 import { fileOwnerKey } from '../../services/fileStoreService'
 import type { MarkedField } from '../../types/workflow'
 import { visibleWorkflowFields } from '../../services/workflowHiddenFieldPolicy'
@@ -202,7 +202,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
       limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().nonnegative().optional(),
     }).strict(),
   }, async ({ query, concept, include_server, limit, offset }) => run(async () => {
-    requireContextPermission(context, 'characters.view')
+    requireContextRight(context, 'read')
     const page = listRefModEntries({ query, concept, limit, offset })
     const presence = include_server ? await getRefModPresence() : null
     const onServer = presence?.status === 'ok' ? nameLookup(presence.entries.map((entry) => entry.name)) : null
@@ -230,7 +230,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
     description: 'Read one RefMod entry: members, roles, issues, revision and its creation workflow fields (as get_workflow_details describes them) with current values. The Director value lists the sources as media items with ids. Read it before save_refmod_entry.',
     inputSchema: z.object({ entry_id: id }).strict(),
   }, async ({ entry_id }) => run(() => {
-    requireContextPermission(context, 'characters.view')
+    requireContextRight(context, 'read')
     const entry = getRefModEntry(entry_id)
     const form = entry.form
     const fields = form ? visibleWorkflowFields(form.fields as unknown as MarkedField[]).map((field) => ({
@@ -253,7 +253,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
   }))
 
   server.registerTool('save_refmod_entry', {
-    description: 'Create (omit entry_id) or update (entry_id with revision from get_refmod_entry) a RefMod entry; saves directly and returns it with buildable and issues. inputs take the same values submit_generation_job accepts for its workflow; Director media by composite_hash (library image, needs images.view) or data_url. Director media replaces the whole source list, so read the entry first and resend every source to keep as { id }. On revision_conflict read the entry again. Deleting is only on the screen.',
+    description: 'Create (omit entry_id) or update (entry_id with revision from get_refmod_entry) a RefMod entry; saves directly and returns it with buildable and issues. inputs take the same values submit_generation_job accepts for its workflow; Director media by composite_hash (library image, needs content.read) or data_url. Director media replaces the whole source list, so read the entry first and resend every source to keep as { id }. On revision_conflict read the entry again. Deleting is only on the screen.',
     inputSchema: z.object({
       entry_id: id.optional(),
       revision: z.number().int().positive().optional(),
@@ -265,7 +265,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
       inputs: z.record(z.string(), z.unknown()).optional().describe('Field values keyed by field id, as in submit_generation_job'),
     }).strict(),
   }, async (args) => run(async () => {
-    requireContextPermission(context, 'characters.edit')
+    requireContextRight(context, 'edit')
     const who = actor()
     const metadata = {
       ...(args.concept_type !== undefined ? { conceptType: args.concept_type } : {}),
@@ -305,7 +305,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
       name: z.string().trim().min(1).max(REFMOD_ENTRY_LIMITS.name).optional(),
     }).strict(),
   }, async ({ record_id, name }) => run(async () => {
-    requireContextPermission(context, 'characters.edit')
+    requireContextRight(context, 'edit')
     if ((record_id === undefined) === (name === undefined)) throw new RefModEntryError('record_id나 name 중 하나만 줘.')
     const record = name !== undefined ? listUnregisteredRefModRecords().find((entry) => entry.name === name) : undefined
     const input = record_id !== undefined ? { recordIds: [record_id] } : record ? { recordIds: [record.recordId] } : { names: [name!] }
@@ -316,8 +316,7 @@ export function registerRefModEntryTools(server: McpServer, context: McpRequestC
     description: 'Build a RefMod entry on the default ComfyUI server; returns job_id at once. Follow it with get_generation_job; the entry shows pending until the run ends. Blocking issues and a run already pending are refused.',
     inputSchema: z.object({ entry_id: id }).strict(),
   }, async ({ entry_id }) => run(async () => {
-    requireContextPermission(context, 'characters.edit')
-    requireContextPermission(context, 'generation.execute')
+    // Building is generating: sign-in only, as POST /api/refmod-entries/:id/build.
     const result = await buildRefModEntry(entry_id, context.requester ?? { accountId: null, accountType: null })
     return { job_id: result.jobId, server_id: result.serverId, entry_id, next: 'get_generation_job' }
   }))

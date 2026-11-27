@@ -13,7 +13,6 @@ import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, withLatestMediaGeneration } from './chatAttachments'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatFlagStore } from './chatFlags'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
@@ -30,7 +29,7 @@ import { withoutNarrationMarks } from '@conai/shared'
 import { finishReplyText } from './chatReplyFinish'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { chatToolRoundLimit, loadChatSettings, TOOL_BUDGET_FAILURE, TOOL_BUDGET_NOTE } from './chatSettings'
-import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
+import { canUseChatProfile, chatProfileScopes, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
@@ -48,7 +47,7 @@ import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
 import { requireResearchProfile, type ChatResearchExecution } from './chatResearch'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { contextContentText, contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -323,7 +322,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   let preparing: Promise<Awaited<ReturnType<typeof prepareRequest>>> | null = null
   const prepareRequest = async (tools: ChatCompletionTool[], catalogued: readonly string[]) => {
     await turn.translation
-    const mediaRequester = chatProfileRequester(requester, { threadId: thread.id, profileId: profile.id, kind: thread.kind, page: turn.page })
+    const mediaRequester = requester
     const history = withLatestMediaGeneration(listMessages(), profile, mediaRequester)
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     // A session prepares its latest input itself. Other requests can only show their unsummarized window.
@@ -340,7 +339,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
     // The "no page" note only matters to a model that has tools to misuse; a plain roleplay reply goes without it.
-    const reference = [turn.page ? chatPageReference(turn.page, requester, profileContentLimit(profile)) : tools.some((tool) => !isChatOwnTool(tool.function.name)) ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
+    const reference = [turn.page ? chatPageReference(turn.page, requester, profileContentLimit(profile), chatProfileScopes(profile)) : tools.some((tool) => !isChatOwnTool(tool.function.name)) ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages]) + generatedImagesTokens(profile.id, generatedImages)
@@ -541,7 +540,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
     }
     if (!turn.engineSession && offeredTools.some(tool => tool.function.name === 'workspace_read')) {
-      const instruction = workspaceInstructions(chatWorkspaces(chatContext ? chatProfileRequester(requester, chatContext) : requester, turn.threadId, profile.id))
+      const instruction = workspaceInstructions(chatWorkspaces(chatContext ? requester : requester, turn.threadId, profile.id))
       if (instruction) {
         const system = built.find(message => message.role === 'system')
         if (system) system.content = `${instruction}\n\n${system.content}`
@@ -664,7 +663,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
             await refreshTools()
             requireProfileAccess(requester, profile)
             if (turn.research) {
-              requireRequesterPermission(requester, 'posts.view')
+              requireRequesterRight(requester, 'read')
               turn.research.validateSources(requester, profile.id)
               if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'A summary has no tools. Answer only from the text already supplied.' }] }
             }
@@ -675,7 +674,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           onRequestBody: (body, actualTarget) => {
             if (turn.research) {
               requireProfileAccess(requester, profile)
-              requireRequesterPermission(requester, 'posts.view')
+              requireRequesterRight(requester, 'read')
               turn.research.validateSources(requester, profile.id)
               turn.research.takeModel()
             }

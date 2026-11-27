@@ -503,7 +503,7 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
   const defaults = {} as import('../src/lib/api-codex-chat').ChatProfileDefaults
   let state!: ReturnType<typeof useProfileEditorDraft>
   function Editor({ imported = false, cold = false }: { imported?: boolean; cold?: boolean }) {
-    const result = useProfileEditorDraft({ open: true, profile: null, initialFolderId: 55, initialDraft: imported ? { name: 'Imported', folderId: 55, delegatedPermissions: ['images.view', 'generation.execute'] } : undefined, defaults: cold ? undefined : defaults })
+    const result = useProfileEditorDraft({ open: true, profile: null, initialFolderId: 55, initialDraft: imported ? { name: 'Imported', folderId: 55, allowedGroupKeys: ['guest', 'friends'] } : undefined, defaults: cold ? undefined : defaults })
     useLayoutEffect(() => { state = result }, [result])
     return h('div', null, result.draft ? 'editor' : 'loading')
   }
@@ -511,11 +511,11 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
   try {
     await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor))))
     assert.equal(state.draft?.folderId, 55)
-    assert.deepEqual(state.draft?.delegatedPermissions, [])
+    assert.deepEqual(state.draft?.allowedGroupKeys, [])
     assert.equal(state.dirty, false)
-    await act(async () => state.setDraft(draft => ({ ...draft, delegatedPermissions: ['images.view'] })))
+    await act(async () => state.setDraft(draft => ({ ...draft, allowedGroupKeys: ['guest'] })))
     assert.equal(state.dirty, true)
-    await act(async () => state.setDraft(draft => ({ ...draft, delegatedPermissions: [] })))
+    await act(async () => state.setDraft(draft => ({ ...draft, allowedGroupKeys: [] })))
     assert.equal(state.dirty, false)
     await act(async () => state.setDraft(draft => ({ ...draft, name: 'Edited' })))
     assert.equal(state.dirty, true)
@@ -523,7 +523,7 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
     assert.equal(state.dirty, false)
     await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { key: 'import', imported: true }))))
     assert.equal(state.dirty, true)
-    assert.deepEqual(state.draft?.delegatedPermissions, ['images.view', 'generation.execute'])
+    assert.deepEqual(state.draft?.allowedGroupKeys, ['guest', 'friends'])
     let response!: Promise<Response>
     let requests = 0
     t.mock.method(globalThis, 'fetch', async () => { requests++; return response })
@@ -545,7 +545,7 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
       assert.equal(state.draft?.folderId, 55)
       assert.equal(state.draft?.systemPrompt, 'Loaded defaults')
       assert.equal(state.draft?.name, imported ? 'Imported' : '')
-      assert.deepEqual(state.draft?.delegatedPermissions, imported ? ['images.view', 'generation.execute'] : [])
+      assert.deepEqual(state.draft?.allowedGroupKeys, imported ? ['guest', 'friends'] : [])
       assert.equal(state.dirty, imported)
     }
     await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { key: 'cached', cold: true }))))
@@ -1077,7 +1077,7 @@ test('chat notifications share directory refreshes, refetch only the new-message
   const { useChatGenerationNotifications } = await import('../src/features/runtime-events/use-chat-generation-notifications')
   const { scheduleChatDirectoryRefresh } = await import('../src/features/codex-chat/chat-query-refresh')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: [] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   const notices: string[] = []
   let directoryReads = 0
@@ -1551,7 +1551,7 @@ test('a reply streaming in one chat does not block sending in another chat', { t
   const { useCodexChat, codexChatThreadQueryKey } = await import('../src/features/codex-chat/codex-chat-context')
   const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: [] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
   for (const id of [1, 2]) client.setQueryData(codexChatThreadQueryKey(id), { thread: { id, kind: 'direct', flag_ids: '[]' }, messages: [], media: {}, running: null })
@@ -1607,7 +1607,7 @@ test('streamed deltas publish once per frame, final text wins, and unmount cance
   const { useCodexChat, useCodexChatLiveTurn, codexChatThreadQueryKey } = await import('../src/features/codex-chat/codex-chat-context')
   const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: [] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
   client.setQueryData(codexChatThreadQueryKey(1), { thread: { id: 1, kind: 'direct', flag_ids: '[]' }, messages: [], media: {}, running: null })
@@ -1964,80 +1964,6 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
       assert.equal(page.commandActions.some(action => action.id === 'profile.save'), false, 'the command palette never offers a save')
     } finally { setChatAutoApprove(false); saves = 0 }
   })
-  await t.test('profile delegation stays manual while assistant drafts cannot escalate and reviewed saves retain it', async () => {
-    const { ChatProfileToolsPanel } = await import('../src/features/settings/components/chat-profile-editor-tools')
-    const { useProfileEditorDraft } = await import('../src/features/settings/components/chat-profile-editor')
-    const { useProfileEditorChatPage, ProfileAssistContext } = await import('../src/features/settings/components/use-profile-editor-chat-page')
-    const { chatProfileSaveInput } = await import('../src/lib/api-codex-chat')
-    const { ConfirmProvider } = await import('../src/components/ui/confirm-dialog')
-    const { TooltipProvider } = await import('../src/components/ui/tooltip')
-    const defaults = { style: {} } as import('../src/lib/api-codex-chat').ChatProfileDefaults
-    const runs = { preset: null, emotionNames: [], slotState: () => ({ working: false, failed: false, candidates: [] }) } as unknown as import('../src/features/settings/components/chat-profile-asset-runs').AssetRuns
-    const link = { synced: false, canView: false, canEdit: false, otherSyncedProfiles: [], setting: { ready: false, draft: {}, baseRef: { current: null }, draftRef: { current: { sections: [], outfits: [] } } } } as unknown as import('../src/features/settings/components/use-profile-character-link').ProfileCharacterLink
-    let state!: ReturnType<typeof useProfileEditorDraft>
-    let saved: import('../src/lib/api-codex-chat').ChatProfileInput | undefined
-    function ProfileEditor() {
-      const api = useChatPage()!
-      const editor = useProfileEditorDraft({ open: true, profile: null, defaults })
-      const draft = editor.draft!
-      const assist = useProfileEditorChatPage({
-        open: true, profile: null, draft, setDraft: editor.setDraft, dirty: editor.dirty,
-        section: 'tools', go() {}, slots: [], runs, link, save: async () => { saved = chatProfileSaveInput(draft) },
-      })
-      useLayoutEffect(() => { page = api; state = editor }, [api, editor])
-      return h(ProfileAssistContext.Provider, { value: assist }, h(ChatProfileToolsPanel, {
-        open: false, draft, defaults, skills: undefined, patch: next => editor.setDraft(current => ({ ...current, ...next })),
-      }))
-    }
-    client.setQueryData(['workspaces', 'list', 1, 'pages'], { pages: [[]], pageParams: [0] })
-    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'profile-delegation', initialEntries: ['/chat/profiles'] },
-      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
-        h(TooltipProvider, null, h(ConfirmProvider, null, h(ChatPageProvider, null, h(ProfileEditor))))))))))
-    await act(async () => page.toggle())
-    assert.deepEqual(state.draft!.delegatedPermissions, [])
-    assert.equal(state.dirty, false)
-    const images = Array.from(document.querySelectorAll('button')).find(button => button.textContent?.startsWith('Images'))
-    assert.ok(images)
-    await act(async () => images.click())
-    const viewImages = Array.from(document.querySelectorAll('label')).find(label => label.textContent === 'View images')?.querySelector<HTMLElement>('[role="checkbox"]')
-    assert.ok(viewImages)
-    await act(async () => viewImages.click())
-    assert.deepEqual(state.draft!.delegatedPermissions, ['images.view'])
-    assert.equal(state.dirty, true)
-    assert.equal(state.draft!.mcpEnabled, false)
-    assert.deepEqual(state.draft!.mcpScopes, ['read'])
-    assert.equal(state.draft!.toolAllowlist, null)
-    assert.deepEqual(state.draft!.generationPresetIds, [])
-    assert.deepEqual(client.getQueryData<{ permissionKeys: string[] }>(['auth-status'])!.permissionKeys, ['page.settings.view'])
-
-    const escalate = await send({ type: 'action', actionId: 'profile.draft', tier: 'draft', arguments: { delegatedPermissions: ['images.view', 'generation.execute'] } })
-    await act(async () => assert.equal((await escalate.answer).ok, false))
-    assert.deepEqual(state.draft!.delegatedPermissions, ['images.view'])
-    const generation = Array.from(document.querySelectorAll('button')).find(button => button.textContent?.startsWith('Generation'))
-    assert.ok(generation)
-    await act(async () => generation.click())
-    const generateImages = Array.from(document.querySelectorAll('label')).find(label => label.textContent === 'Generate images')?.querySelector<HTMLElement>('[role="checkbox"]')
-    assert.ok(generateImages)
-    await act(async () => generateImages.click())
-    const fill = await send({ type: 'action', actionId: 'profile.draft', tier: 'draft', arguments: { tagline: 'Assistant-edited description' } })
-    await act(async () => assert.equal((await fill.answer).ok, true))
-    assert.deepEqual(state.draft!.delegatedPermissions, ['images.view', 'generation.execute'])
-    const snapshot = page.capture()!
-    assert.deepEqual((snapshot.data!.profile as Record<string, unknown>).delegatedPermissions, ['images.view', 'generation.execute'])
-    const action = snapshot.actions!.find(action => action.id === 'profile.save')!
-    const proposal = { id: 903, kind: 'page_action' as const, page: chatPageTarget(snapshot), revision: snapshot.revision!, revisionScope: 'action' as const, action, arguments: {}, before: chatPageActionBefore(snapshot, action, {}), expiresAt: Date.now() + 60_000 }
-    authorizedProposal = proposal
-    await act(async () => page.applyAction(proposal))
-    assert.deepEqual(saved?.delegatedPermissions, ['images.view', 'generation.execute'])
-    assert.deepEqual((snapshot.data!.selected as Record<string, unknown>).delegatedPermissions, ['images.view', 'generation.execute'])
-    const clear = await send({ type: 'action', actionId: 'profile.draft', tier: 'draft', arguments: { delegatedPermissions: [] } })
-    await act(async () => assert.equal((await clear.answer).ok, false))
-    assert.deepEqual(state.draft!.delegatedPermissions, ['images.view', 'generation.execute'])
-    await act(async () => viewImages.click())
-    await act(async () => generateImages.click())
-    assert.deepEqual(state.draft!.delegatedPermissions, [])
-    authorizedProposal = undefined
-  })
   await t.test('the profile editor page revision follows draft replacements, an undo back to earlier content included, and not re-renders', async () => {
     const { useProfileEditorDraft } = await import('../src/features/settings/components/chat-profile-editor')
     const { useProfileEditorChatPage } = await import('../src/features/settings/components/use-profile-editor-chat-page')
@@ -2141,7 +2067,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     authorizedProposal = undefined
   })
   await t.test('sprite extract undo survives video selection and URL changes without previewing a stale selection', async () => {
-    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.sprite.view', 'images.edit'] })
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.sprite.view', 'content.read', 'content.edit'] })
     const first = 'a'.repeat(32), second = 'b'.repeat(32)
     let selectVideo!: (hash: string) => void
     let videoList: string[] = []
@@ -2280,7 +2206,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const { useImageDetailChatPage } = await import('../src/features/images/use-image-detail-chat-page')
     const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
     const hash = 'a'.repeat(32)
-    const permissions = ['page.home.view', 'images.view', 'images.edit', 'images.upload', 'images.delete', 'page.metadata-editor.view']
+    const permissions = ['page.home.view', 'content.read', 'content.edit', 'content.delete', 'page.metadata-editor.view']
     client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
     client.setQueryData(['image-vector-similarity', hash], { content: false, style: false })
     client.setQueryData(['groups-hierarchy-all', 'custom'], [])
@@ -2309,7 +2235,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
     const first = 'a'.repeat(32)
     const second = 'b'.repeat(32)
-    const permissions = ['page.groups.view', 'images.view', 'images.edit', 'images.delete']
+    const permissions = ['page.groups.view', 'content.read', 'content.edit', 'content.delete']
     client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
     let loadMore!: () => void
     let selection: string[] = []
@@ -2345,7 +2271,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const { useNaiChatPage } = await import('../src/features/image-generation/components/use-generation-chat-page')
     const { DEFAULT_NAI_FORM } = await import('../src/features/image-generation/image-generation-shared')
     const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
-    const permissions = ['page.generation.view', 'images.view']
+    const permissions = ['page.generation.view', 'content.read']
     client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
     client.setQueryData(['chat-page-images', 1], { images: [] })
     let vibe: import('../src/features/image-generation/image-generation-shared').NAIVibeDraft = { image: { fileName: 'reference.png', dataUrl: 'data:image/png;base64,AA==' }, encoded: 'old', strength: '0.6', informationExtracted: '1' }
@@ -2397,7 +2323,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const { useNaiChatPage } = await import('../src/features/image-generation/components/use-generation-chat-page')
     const { DEFAULT_NAI_FORM } = await import('../src/features/image-generation/image-generation-shared')
     const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
-    const permissions = ['page.generation.view', 'images.view']
+    const permissions = ['page.generation.view', 'content.read']
     client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
     client.setQueryData(['chat-page-images', 1], { images: [] })
     client.setQueryData(['generation-history-request', 7], { history_id: 7, service_type: 'novelai', workflow_id: null, payload_status: 'available', request_payload: { prompt: 'history prompt' }, result_prompt: null, result_negative_prompt: null })
@@ -2422,7 +2348,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   await t.test('Comfy history requires the open workflow and returns undo on private and public pages', async () => {
     const { useComfyChatPage } = await import('../src/features/image-generation/components/use-comfy-chat-page')
     const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
-    const permissions = ['page.generation.view', 'images.view', 'workflows.view']
+    const permissions = ['page.generation.view', 'content.read']
     client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
     const history = (workflowId: number, payload: Record<string, unknown>) => ({ service_type: 'comfyui', workflow_id: workflowId, payload_status: 'available', request_payload: payload, result_prompt: null })
     client.setQueryData(['generation-history-request', 21], history(2, { prompt_data: { prompt: 'other' } }))

@@ -33,11 +33,13 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
   const { KnowledgeAssessmentStore, getKnowledgeQuality, insertKnowledgeAssessment, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey } = await import('../src/services/posts/knowledgeAssessment')
   type Actor = import('../src/services/posts/postActor').PostActor
 
-  const ALL = ['posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view', 'files.view']
+  const ALL = ['content.read']
   const admin: Actor = { accountId: 1, isAdmin: true, keys: new Set(ALL), profileId: null }
   const alice: Actor = { accountId: 2, isAdmin: false, keys: new Set(ALL), profileId: null }
   const bob: Actor = { accountId: 3, isAdmin: false, keys: new Set(ALL), profileId: null }
-  const reader: Actor = { accountId: 4, isAdmin: false, keys: new Set(['posts.view']), profileId: null }
+  const reader: Actor = { accountId: 4, isAdmin: false, keys: new Set(['content.read']), profileId: null }
+  // Writing, commenting and voting are any reader's own; an account without the read right cannot reach the board.
+  const outsider: Actor = { accountId: 5, isAdmin: false, keys: new Set(), profileId: null }
   const status = (fn: () => unknown) => {
     try { fn(); } catch (error) { return (error as { status?: number }).status ?? 500 }
     return 200
@@ -105,7 +107,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(status(() => PostStore.get(bob, draftId)), 404)
     assert.equal(PostStore.get(admin, draftId).title, '초안')
     assert.equal(status(() => PostStore.create(alice, { title: '숨김', status: 'hidden' })), 403)
-    assert.equal(status(() => PostStore.create(reader, { title: '권한 없음' })), 403)
+    assert.equal(status(() => PostStore.create(outsider, { title: '권한 없음' })), 403)
     const listed = await PostStore.list(bob, {})
     assert.deepEqual(listed.items.map((item) => item.id), [postId])
     assert.equal(listed.items[0].canEdit, false)
@@ -181,7 +183,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     const own = FileStoreService.writeText(fileOwnerKey(2), folder.id, '설정.md', '# 설정')
     const others = FileStoreService.writeText(fileOwnerKey(3), null, '비밀.md', '비밀')
     assert.equal(status(() => PostStore.create(alice, { title: '공용 파일', body: `![](file:${others.id})` })), 200)
-    assert.equal(status(() => PostStore.create({ ...alice, keys: new Set(['posts.view', 'posts.write']) }, { title: '권한 없음', body: `![](file:${others.id})` })), 403)
+    assert.equal(status(() => PostStore.create({ ...alice, keys: new Set() }, { title: '권한 없음', body: `![](file:${others.id})` })), 403)
     const withFile = PostStore.create(alice, { title: '첨부', body: `자료 ![](file:${own.id})` })
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, own.id), fileOwnerKey(2), 'readers reach it through the post')
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, others.id), null)
@@ -203,7 +205,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     const deeper = PostCommentStore.create(bob, postId, { body: '또 답글', parentId: reply.id })
     assert.equal(deeper.parentId, top.id, 'stays two levels deep')
     assert.equal(deeper.quoteCommentId, reply.id)
-    assert.equal(status(() => PostCommentStore.create(reader, postId, { body: '읽기만' })), 403)
+    assert.equal(status(() => PostCommentStore.create(outsider, postId, { body: '읽기만' })), 403)
     assert.equal(status(() => PostCommentStore.update(alice, top.id, { body: '남의 댓글' })), 403)
     db.exec(`CREATE TEMP TRIGGER refuse_count BEFORE UPDATE OF comment_count ON posts WHEN OLD.id=${postId} BEGIN SELECT RAISE(ABORT, 'held count'); END`)
     try {
@@ -309,7 +311,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(PostCategoryStore.list().find((category) => category.id === illust)?.postCount, 0)
   })
 
-  const voter: Actor = { ...alice, keys: new Set([...ALL, 'posts.evaluate']) }
+  const voter: Actor = { ...alice, keys: new Set(ALL) }
   let knowledgeId = 0
   let knowledgeFileId = ''
   await t.test('knowledge: stable ID, immutable content versions, aliases, sources and common AI mutation boundary', async () => {
@@ -358,7 +360,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     let publishedSource = PostStore.update(alice, privateSource.id, { body: '공개 기록', expectedRevision: privateKnowledge.revision })
     publishedSource = PostStore.update(alice, privateSource.id, { status: 'published', expectedRevision: publishedSource.revision })
     assert.equal(getKnowledgeQuality(reader,privateSource.id).reasons.length,0,'later publication does not expose private draft vote text')
-    const reviewOnly: Actor = {...reader,keys:new Set(['posts.view','posts.knowledge.review'])}
+    const reviewOnly: Actor = {...reader,keys:new Set(['content.read', 'content.edit'])}
     const priorIssue=(await KnowledgeStore.reviewQueue(reviewOnly)).items.find(item=>item.post.id===privateSource.id)!.issues[0]
     assert.equal(priorIssue.evidenceQuote,'','review permission does not disclose an old private body')
     assert.equal(priorIssue.evidenceAvailable,false)
@@ -375,7 +377,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
 
   await t.test('knowledge votes: idempotent immutable ledger, latest head, nonstacking history and same-hash restore', () => {
     const post = PostStore.get(voter, knowledgeId)
-    assert.equal(status(() => KnowledgeAssessmentStore.vote(reader, post.id, { contentVersion: 2, idempotencyKey: 'no-permission', quality: 'down' })), 403)
+    assert.equal(status(() => KnowledgeAssessmentStore.vote(outsider, post.id, { contentVersion: 2, idempotencyKey: 'no-permission', quality: 'down' })), 403)
     const first = KnowledgeAssessmentStore.vote(voter, post.id, { contentVersion: 2, idempotencyKey: 'vote-1', quality: 'down', reason: '절차 오류' })
     assert.equal(first.down, 1)
     assert.ok(Math.abs(first.qualityMultiplier - 0.86) < 1e-9)

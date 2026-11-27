@@ -1,4 +1,4 @@
-import { requireImageAction } from '../../middleware/imageAccess';
+import { requireEdit } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import fs from 'fs';
@@ -38,7 +38,7 @@ function parseBatchLimit(limit: unknown): number {
   return limit ? parseInt(limit as string) : 100;
 }
 
-router.post('/:id/tag', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/tag', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = getTaggingCompositeHash(req);
 
   console.log('[TagRoute] POST /:id/tag hit!');
@@ -120,7 +120,7 @@ router.post('/:id/tag', requireImageAction('images.edit'), asyncHandler(async (r
   }
 }));
 
-router.post('/batch-tag', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const { image_ids } = req.body;
 
   if (!validateBatchImageIds(res, image_ids)) {
@@ -175,7 +175,7 @@ router.post('/batch-tag', requireImageAction('images.edit'), asyncHandler(async 
   }
 }));
 
-router.post('/batch-tag-unprocessed', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag-unprocessed', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const { limit } = req.body;
   const maxLimit = parseBatchLimit(limit);
 
@@ -248,20 +248,20 @@ router.post('/batch-tag-unprocessed', requireImageAction('images.edit'), asyncHa
  * Same item selection as before: the newest `limit` rows (100 when omitted), every row when `limit` is not a number.
  * The per-item results list is gone from the response; failures are in the job's errors and counts in its result.
  */
-router.post('/batch-tag-all', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag-all', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const maxLimit = parseBatchLimit(req.body?.limit);
   logger.debug(`[BatchTagAll] Starting job (limit=${maxLimit || 'all'})`);
   return respondWithStartedJob(req, res, 'auto-tag-batch-all', { limit: maxLimit || null }, 'Auto-tag maintenance is already running');
 }));
 
 /** POST /api/images/reset-auto-tags — 202 + `auto-tag-reset` job (paged, one page per transaction). */
-router.post('/reset-auto-tags', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/reset-auto-tags', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   logger.info('[ResetAutoTags] Resetting all auto_tags to NULL');
   return respondWithStartedJob(req, res, 'auto-tag-reset', {}, 'Auto-tag maintenance is already running');
 }));
 
 /** POST /api/images/recalculate-rating-scores — 202 + `rating-score-recalculate` job. */
-router.post('/recalculate-rating-scores', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/recalculate-rating-scores', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   logger.info('[RecalculateRatingScores] Starting rating score recalculation for all images');
   return respondWithStartedJob(req, res, 'rating-score-recalculate', {}, 'Auto-tag maintenance is already running');
 }));

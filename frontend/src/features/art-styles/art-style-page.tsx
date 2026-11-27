@@ -26,13 +26,13 @@ import { useArtStyleLibrary } from './use-art-style-library'
  * Art styles view of the character page (/characters?view=styles): a badge sidebar with counts, search, sort, favorites,
  * several-select, ZIP export / import, and the style card grid that loads in batches as it scrolls; `style=<id>` opens a
  * style's window over the list. `viewSwitch` is the character page's view switch and leads the toolbar. Without
- * characters.edit everything only shows.
+ * the edit right everything only shows.
  */
 export function ArtStylePage({ viewSwitch }: { viewSwitch: ReactNode }) {
   const { t } = useI18n()
   const library = useArtStyleLibrary()
   useArtStyleChatPage(library)
-  const { canEdit, editor, list, loaded, total, selected, selectMode } = library
+  const { canEdit, canDelete, editor, list, loaded, total, selected, selectMode } = library
   const importInput = useRef<HTMLInputElement | null>(null)
   const filtering = Boolean(library.query) || library.favoriteOnly || library.badges.length > 0
 
@@ -43,8 +43,8 @@ export function ArtStylePage({ viewSwitch }: { viewSwitch: ReactNode }) {
     canEdit ? { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: CopyPlus, onSelect: () => void library.duplicate(style) } : null,
     { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => void library.exportStyles({ ids: [style.id] }, style.title) },
     canEdit ? { key: 'select', label: selected.has(style.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { library.setSelectMode(true); library.toggleSelected(style) } } : null,
-    canEdit ? '-' : null,
-    canEdit ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void library.remove(style) } : null,
+    canDelete ? '-' : null,
+    canDelete ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void library.remove(style) } : null,
   ]
 
   const listFooter: ReactNode = list.isFetchNextPageError ? (
@@ -137,7 +137,7 @@ export function ArtStylePage({ viewSwitch }: { viewSwitch: ReactNode }) {
             <SelectionBarAction icon={Star} label={t({ ko: '즐겨찾기', en: 'Favorite' })} disabled={library.bulkPending} onClick={() => void library.bulk({ action: 'favorite', ids: [...selected.keys()], favorite: true }).catch(() => undefined)} />
             <SelectionBarAction icon={StarOff} label={t({ ko: '즐겨찾기 해제', en: 'Unfavorite' })} disabled={library.bulkPending} onClick={() => void library.bulk({ action: 'favorite', ids: [...selected.keys()], favorite: false }).catch(() => undefined)} />
             <SelectionBarAction icon={Download} label={t({ ko: '내보내기', en: 'Export' })} onClick={() => void library.exportStyles({ ids: [...selected.keys()] }, t({ ko: '선택한 스타일', en: 'selected styles' }))} />
-            <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={library.bulkPending} onClick={() => void library.removeSelected()} />
+            {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={library.bulkPending} onClick={() => void library.removeSelected()} /> : null}
           </>}
         />
       ) : null}

@@ -7,8 +7,8 @@ interface RowGroupProps extends Omit<ComponentProps<'div'>, 'title'> {
   /** Optional group label above the rows: bold body-size text over a hairline, never smaller or lighter than the rows' names. */
   heading?: ReactNode
   headingAs?: RowGroupHeadingElement
-  /** Item count after the label (lists). Leave out while loading. */
-  count?: number
+  /** Item count after the label (lists), or a "n/total" tally. Leave out while loading. */
+  count?: number | string
   /** Colour class for the label, e.g. the kind colour (`text-resource-*`) that the rows' icons use. Default foreground. */
   headingClassName?: string
   /** Small actions at the heading row end (add, sort…). */

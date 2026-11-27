@@ -73,7 +73,7 @@ pluginMediaRoutes.get(['/workspace/:token', '/:token'], async (req, res, next) =
     const { entry, filePath, requester } = await resolve(String(req.params.token))
     const mime = await filePreviewMime(entry, filePath)
     if (!mime || !/^(image|video|audio)\//.test(mime)) throw new PluginError('표시할 수 없는 미디어야.', 415)
-    if (/^(image|video)\//.test(mime) && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, 'images.view')) throw new PluginError('미디어 접근 권한이 없어.', 403)
+    if (/^(image|video)\//.test(mime) && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, 'content.read')) throw new PluginError('미디어 접근 권한이 없어.', 403)
     // The async MIME probe must not let revocation or file replacement race the final send.
     await resolve(String(req.params.token))
     res.setHeader('Content-Type', mime)

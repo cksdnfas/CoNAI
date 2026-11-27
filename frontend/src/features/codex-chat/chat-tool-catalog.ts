@@ -15,6 +15,7 @@ export type ChatToolGroupId =
   | 'image-gen' | 'workflow-run' | 'audio-gen'
   | 'configure'
   | 'image-groups' | 'prompt-groups' | 'character-ops' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
+  | 'image-delete' | 'file-delete' | 'audio-delete'
   | 'sprites' | 'sprite-ops'
   | 'wallpaper' | 'wallpaper-ops'
   | 'web'
@@ -49,6 +50,9 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
   { id: 'audio-ops', scope: 'organize', label: { ko: '오디오 정리', en: 'Audio organizing' } },
   { id: 'wallpaper-ops', scope: 'organize', label: { ko: '배경화면 전환', en: 'Wallpaper switching' } },
+  { id: 'image-delete', scope: 'delete', label: { ko: '이미지·그룹 삭제', en: 'Image and group deletion' } },
+  { id: 'file-delete', scope: 'delete', label: { ko: '파일 삭제', en: 'File deletion' } },
+  { id: 'audio-delete', scope: 'delete', label: { ko: '오디오 삭제', en: 'Audio deletion' } },
   { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
 ]
 
@@ -144,9 +148,11 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   create_image_group: { group: 'image-groups', label: { ko: '그룹 만들기', en: 'Create group' }, ko: '새 그룹을 만들어. 자동수집 조건을 같이 넣으면 바로 모으기 시작해.' },
   update_image_group: { group: 'image-groups', label: { ko: '그룹 설정 바꾸기', en: 'Update group' }, ko: '그룹 이름·설명·색과 자동수집 조건을 바꿔.' },
   move_image_groups: { group: 'image-groups', label: { ko: '그룹 옮기기', en: 'Move groups' }, ko: '그룹을 다른 그룹 아래나 최상위로 옮겨. 안의 이미지와 하위 그룹도 같이 가.' },
-  delete_image_groups: { group: 'image-groups', label: { ko: '그룹 삭제', en: 'Delete groups' }, ko: '그룹을 지워. 이미지는 지우지 않고, 하위 그룹은 기본적으로 최상위로 올려.' },
+  delete_image_groups: { group: 'image-delete', label: { ko: '그룹 삭제', en: 'Delete groups' }, ko: '그룹을 지워. 이미지는 지우지 않고, 하위 그룹은 기본적으로 최상위로 올려.' },
   run_group_auto_collect: { group: 'image-groups', label: { ko: '자동수집 다시 실행', en: 'Run auto-collect' }, ko: '자동수집이 켜진 그룹을 한 번 더 모아.' },
   remove_images_from_group: { group: 'image-groups', label: { ko: '그룹에서 이미지 빼기', en: 'Remove images from group' }, ko: '그룹 소속만 풀어. 파일은 지우지 않아.' },
+  delete_images: { group: 'image-delete', label: { ko: '이미지 삭제', en: 'Delete images' }, ko: '고른 미디어의 모든 사본을 휴지통으로 보내. 사용자가 직접 부탁할 때만 써.' },
+  restore_deleted_images: { group: 'image-delete', label: { ko: '삭제한 이미지 되돌리기', en: 'Restore deleted images' }, ko: '휴지통으로 보낸 미디어를 되돌려.' },
   batch_create_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 만들기', en: 'Create prompt groups' }, ko: '프롬프트 그룹을 하나 또는 여러 개 만들어.' },
   create_prompt_preset: { group: 'prompt-groups', label: { ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' }, ko: '프롬프트를 이름 붙여 프리셋으로 저장해. 같은 이름은 덮어쓰지 않아.' },
   move_prompts_between_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 이동', en: 'Move prompts between groups' }, ko: '프롬프트를 그룹에 넣거나 옮겨. 대상 그룹 0은 미분류야.' },
@@ -156,7 +162,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   create_file_folder: { group: 'file-ops', label: { ko: '폴더 만들기', en: 'Create folder' }, ko: '파일 보관함에 폴더를 만들어.' },
   rename_file: { group: 'file-ops', label: { ko: '이름 바꾸기', en: 'Rename file' }, ko: '보관함의 파일이나 폴더 이름을 바꿔.' },
   move_files: { group: 'file-ops', label: { ko: '파일 이동', en: 'Move files' }, ko: '보관함의 파일·폴더를 다른 폴더로 옮겨.' },
-  delete_files: { group: 'file-ops', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
+  delete_files: { group: 'file-delete', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
   restore_file_version: { group: 'file-ops', label: { ko: '이전 버전 되돌리기', en: 'Restore file version' }, ko: '보관함 텍스트 파일을 이전 버전으로 되돌려. 지금 내용은 버전으로 남아.' },
   set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
   set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
@@ -174,6 +180,9 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   update_audio_group: { group: 'audio-ops', label: { ko: '그룹 수정', en: 'Update audio group' }, ko: '그룹 이름·라벨·설명을 바꿔.' },
   move_audio_candidates: { group: 'audio-ops', label: { ko: '후보 옮기기', en: 'Move candidates' }, ko: '후보를 같은 프로젝트의 다른 그룹으로 옮겨.' },
   import_audio: { group: 'audio-ops', label: { ko: '오디오 가져오기', en: 'Import audio' }, ko: '오디오 파일(data URL 또는 보관함 파일)을 후보로 넣어.' },
+  delete_audio_group: { group: 'audio-delete', label: { ko: '그룹 삭제', en: 'Delete audio group' }, ko: '효과음 그룹과 후보·코멘트·주문을 지워. 쓰지 않는 파일은 휴지통으로 가.' },
+  delete_audio_folder: { group: 'audio-delete', label: { ko: '폴더 삭제', en: 'Delete audio folder' }, ko: '프로젝트의 폴더를 지워. 안의 효과음은 프로젝트 바로 아래로 옮겨.' },
+  delete_audio_project: { group: 'audio-delete', label: { ko: '프로젝트 삭제', en: 'Delete audio project' }, ko: '오디오 프로젝트를 통째로 지워. 쓰지 않는 파일은 휴지통으로 가.' },
   list_audio_workflows: { group: 'audio', label: { ko: '오디오 워크플로 목록', en: 'List audio workflows' }, ko: '오디오 생성에 연결된 워크플로와 기본값, 서버 호환 결과를 나열해.' },
   get_audio_order: { group: 'audio', label: { ko: '오디오 주문 읽기', en: 'Read audio order' }, ko: '오디오 주문의 작업별 상태와 만들어진 후보를 읽어.' },
   order_audio: { group: 'audio-gen', label: { ko: '효과음 생성 주문', en: 'Order sound effects' }, ko: '그룹에 효과음 후보를 여러 개 생성해. seed는 하나씩 늘어나.' },
@@ -181,13 +190,13 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   cancel_audio_order: { group: 'audio-gen', label: { ko: '오디오 주문 취소', en: 'Cancel audio order' }, ko: '주문에서 아직 안 끝난 작업을 취소해.' },
   retry_audio_order_job: { group: 'audio-gen', label: { ko: '오디오 작업 다시', en: 'Retry audio job' }, ko: '실패한 작업 하나를 같은 seed로 다시 돌려.' },
   set_audio_candidate_review: { group: 'audio-ops', label: { ko: '후보 검수·메모', en: 'Review audio take' }, ko: '요청한 채택·보류·미검수 상태와 메모를 반영해. 읽은 뒤 바뀐 후보는 거절해.' },
-  delete_audio_candidate: { group: 'audio-ops', label: { ko: '후보 하나 삭제', en: 'Delete audio take' }, ko: '명시한 후보 하나를 휴지통으로 보내. 읽은 뒤 바뀐 후보는 거절해.' },
+  delete_audio_candidate: { group: 'audio-delete', label: { ko: '후보 하나 삭제', en: 'Delete audio take' }, ko: '명시한 후보 하나를 휴지통으로 보내. 읽은 뒤 바뀐 후보는 거절해.' },
   create_audio_group_comment: { group: 'audio-ops', label: { ko: '코멘트 작성', en: 'Write audio comment' }, ko: '효과음 그룹에 코멘트를 남겨.' },
   update_audio_group_comment: { group: 'audio-ops', label: { ko: '코멘트 수정', en: 'Edit audio comment' }, ko: '읽은 리비전이 같은 코멘트의 내용을 바꿔.' },
-  delete_audio_group_comment: { group: 'audio-ops', label: { ko: '코멘트 삭제', en: 'Delete audio comment' }, ko: '요청한 코멘트를 리비전 확인 후 지워.' },
+  delete_audio_group_comment: { group: 'audio-delete', label: { ko: '코멘트 삭제', en: 'Delete audio comment' }, ko: '요청한 코멘트를 리비전 확인 후 지워.' },
   set_audio_group_comment_status: { group: 'audio-ops', label: { ko: '코멘트 완료 처리', en: 'Complete comment' }, ko: '작업 요청 코멘트를 완료로 표시하거나 다시 열어.' },
   edit_audio_candidate: { group: 'audio-ops', label: { ko: '편집본 저장', en: 'Save audio edit' }, ko: '후보를 자르고 음량·피치·속도·페이드를 바꾼 편집본을 새 후보로 저장해. 원본은 그대로야.' },
-  delete_unselected_audio_candidates: { group: 'audio-ops', label: { ko: '미채택 정리', en: 'Clear unselected takes' }, ko: '그룹의 미채택 후보를 휴지통으로 보내. 채택된 후보는 지우지 않아.' },
+  delete_unselected_audio_candidates: { group: 'audio-delete', label: { ko: '미채택 정리', en: 'Clear unselected takes' }, ko: '그룹의 미채택 후보를 휴지통으로 보내. 채택된 후보는 지우지 않아.' },
   export_audio_selected: { group: 'audio-ops', label: { ko: '채택본 내보내기', en: 'Export selected takes' }, ko: '채택된 효과음을 그룹 라벨 파일명으로 WAV·OGG 또는 ZIP으로 내보내.' },
   get_audio_download: { group: 'audio', label: { ko: '오디오 내려받기', en: 'Download audio' }, ko: '후보 파일이나 내보내기 결과의 다운로드 링크를 받아.' },
   get_chat_setup_guide: { group: 'configure', label: { ko: '설정 안내 읽기', en: 'Read setup guide' }, ko: '프로필·표시 블록을 어떻게 짜는지 안내를 읽어.' },
@@ -274,7 +283,7 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
     fallback.tools.push({ name: tool.name, scope: tool.scope, label, description, search })
   }
   const ordered: ChatToolGroup[] = []
-  for (const scope of ['read', 'generate', 'organize', 'configure'] as ChatScope[]) {
+  for (const scope of ['read', 'generate', 'organize', 'delete', 'configure'] as ChatScope[]) {
     for (const group of groups.values()) if (group.scope === scope && group.tools.length > 0) ordered.push(group)
     const outside = external.get(scope)
     if (outside) ordered.push(outside)

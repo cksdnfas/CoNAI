@@ -24,7 +24,7 @@ interface PromptListItemProps {
 
 /** One prompt as a hairline row: checkbox · text · group · ⋯ menu (also on right-click / long-press) · usage count. Click copies. */
 export function PromptListItem({ item, groupName, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
-  const { canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
+  const permissions = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   // A long-press opens the menu; the click that may follow it should not also copy the prompt.
   const touchMenuAt = useRef(0)
@@ -34,9 +34,9 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
     event.stopPropagation()
   }
   const entries: ActionMenuEntry[] = [
-    { key: 'assign', label: t('prompts.components.prompt.list.item.assign.group'), icon: FolderInput, disabled: !canAssign || !canUpdatePrompts, onSelect: () => onAssignGroup?.() },
+    { key: 'assign', label: t('prompts.components.prompt.list.item.assign.group'), icon: FolderInput, disabled: !canAssign || !permissions.canEdit, onSelect: () => onAssignGroup?.() },
     '-',
-    canDelete && canDeletePrompts && { key: 'delete', label: t('prompts.components.prompt.list.item.delete'), icon: Trash2, destructive: true, onSelect: () => onDelete?.() },
+    canDelete && permissions.canDelete && { key: 'delete', label: t('prompts.components.prompt.list.item.delete'), icon: Trash2, destructive: true, onSelect: () => onDelete?.() },
   ]
 
   return (

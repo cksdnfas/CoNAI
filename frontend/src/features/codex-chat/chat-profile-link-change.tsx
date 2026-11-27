@@ -18,7 +18,7 @@ function readLink(value: unknown): LinkValue {
 /** One side of the change: the setting's path and name, synced or detached, and how many profiles a sync reaches. */
 function LinkSide({ value, profileId }: { value: LinkValue; profileId: number | null }) {
   const { t } = useI18n()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const settingQuery = useQuery({
     queryKey: characterSettingQueryKey(value?.settingId ?? 0),
     queryFn: ({ signal }) => getCharacterSetting(value!.settingId, signal),

@@ -12,7 +12,7 @@ import { listTypesafeModels } from '../services/judge/typesafeClient';
 import { checkThinkingSwitch } from '../services/codex-chat/thinkingSwitchProbe';
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
+import { requireAdmin, requireRead, optionalAuth } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import type {
   CreateExternalApiProviderInput,
@@ -34,7 +34,7 @@ router.use(optionalAuth);
  * GET /api/external-api/llm-options
  * Returns sanitized provider metadata without secrets or base URLs.
  */
-router.get('/llm-options', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/llm-options', requireRead, asyncHandler(async (_req: Request, res: Response) => {
   const providers = ExternalApiProvider.findEnabledLlmOptions();
 
   res.json({
@@ -47,7 +47,7 @@ router.get('/llm-options', requirePermission('workflows.view'), asyncHandler(asy
  * API LLM chat profiles a workflow LLM node can use: name, connection and model only (no prompts or secrets).
  * GET /api/external-api/llm-profile-options
  */
-router.get('/llm-profile-options', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/llm-profile-options', requireRead, asyncHandler(async (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: ChatProfileStore.workflowOptions(),
@@ -69,7 +69,7 @@ router.get('/security-status', requireAdmin, asyncHandler(async (_req: Request, 
 }));
 
 /** Bounded authored LLM preset options for workflow nodes, without global configuration access. */
-router.get('/llm-presets/options', requirePermission('workflows.view'), (_req: Request, res: Response) => {
+router.get('/llm-presets/options', requireRead, (_req: Request, res: Response) => {
   res.json({ success: true, data: settingsService.getLlmPresetOptions() });
 });
 

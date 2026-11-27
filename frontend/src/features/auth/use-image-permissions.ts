@@ -1,22 +1,23 @@
-import { IMAGE_VIEW_PERMISSION } from '@conai/shared'
+import { CONTENT_PERMISSIONS, IMAGE_DETAIL_PAGE_PERMISSION, METADATA_EDITOR_PAGE_PERMISSION } from '@conai/shared'
 import { createContext, useContext } from 'react'
 import { hasAuthPermission } from './auth-permissions'
 
-/** Feature grants shared by media controls on every page. Page navigation retains its own guard. */
+/** Media controls on every page, from the account's basic rights. Page navigation retains its own guard. */
 export function resolveImagePermissions(permissionKeys?: string[], authenticated = false) {
   const has = (key: string) => hasAuthPermission(permissionKeys, key)
-  const canViewImages = has(IMAGE_VIEW_PERMISSION)
+  const canViewImages = has(CONTENT_PERMISSIONS.read)
+  const canEditImages = authenticated && has(CONTENT_PERMISSIONS.edit)
   return {
     canViewImages,
-    canOpenDetailPage: canViewImages && has('page.image-detail.view'),
-    canOpenMetadataEditor: canViewImages && has('page.metadata-editor.view'),
+    canOpenDetailPage: canViewImages && has(IMAGE_DETAIL_PAGE_PERMISSION),
+    canOpenMetadataEditor: canViewImages && has(METADATA_EDITOR_PAGE_PERMISSION),
     canExportImages: canViewImages,
-    canEditImages: authenticated && canViewImages && has('images.edit'),
-    canEditMetadata: authenticated && canViewImages && has('images.edit'),
-    canAssignGroups: authenticated && canViewImages && has('images.edit'),
-    canDeleteImages: authenticated && canViewImages && has('images.delete'),
-    /** New library items from existing ones (batch resize): editing plus uploading. */
-    canCreateImageCopies: authenticated && canViewImages && has('images.edit') && has('images.upload'),
+    canEditImages,
+    canEditMetadata: canEditImages,
+    canAssignGroups: canEditImages,
+    canDeleteImages: authenticated && has(CONTENT_PERMISSIONS.delete),
+    /** New library items from existing ones (batch resize) are made like generations: reading is enough. */
+    canCreateImageCopies: authenticated && canViewImages,
   }
 }
 

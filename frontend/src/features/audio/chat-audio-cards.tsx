@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AudioLines, CircleAlert, Download, ExternalLink, LoaderCircle, Music, Pause, Play } from 'lucide-react'
@@ -39,8 +40,8 @@ function argumentGroupId(call: ChatToolCall): string | null {
 export function ChatAudioCards({ calls }: { calls: ChatToolCall[] }) {
   const auth = useAuthStatusQuery().data
   const signedIn = !!auth?.authenticated
-  const canView = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.view'))
-  const canViewFiles = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'files.view'))
+  const canView = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, CONTENT_PERMISSIONS.read))
+  const canViewFiles = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, CONTENT_PERMISSIONS.read))
   // Audio files the reply's file-store lookups found: played straight from the file store.
   const fileIds = canViewFiles ? [...new Set(calls.flatMap((call) => call.audioFileIds ?? []))] : []
   const fileCard = fileIds.length > 0 ? <ChatAudioFileCard ids={fileIds} /> : null

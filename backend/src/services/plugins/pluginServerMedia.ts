@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import type { McpRequester } from '../../mcp/context'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { resolvePluginMediaReference } from './pluginWorkspace'
 import { getPlugin } from './pluginRegistry'
 import { pluginDataDir } from './pluginData'
@@ -35,7 +35,7 @@ export async function callPluginServerMedia(pluginId: string, requester: McpRequ
   if (method !== 'save') throw new PluginError('알 수 없는 미디어 작업이야.')
   const input = z.object({ path: z.string().min(1).max(1000), groupPath: z.string().trim().min(1).max(200).optional() }).strict().parse(raw)
   const saver = publicScopeRequester(requester, publicScope, 'media.save')
-  const authorize = () => { check(); for (const permission of ['images.view', 'images.upload', 'images.edit']) requireRequesterPermission(saver, permission) }
+  const authorize = () => { check(); requireRequesterRight(saver, 'edit') }
   authorize()
   // Restrict imports to ordinary output files underneath this package's private data folder.
   const root = pluginDataDir(pluginId), source = path.resolve(root, input.path), relative = path.relative(root, source)

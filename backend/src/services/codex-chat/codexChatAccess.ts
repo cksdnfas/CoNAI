@@ -14,7 +14,6 @@ import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
 import { requireChatPageAccess } from './chatPageContext'
 import { chatWorkspaces } from './chatWorkspace'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { mcpToolNames } from '../../mcp/context'
 import { pluginProfileTools } from '../plugins/pluginServerTools'
 
@@ -22,10 +21,9 @@ const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
-/** `chat.diagnostics.view` shows how your own replies were composed; administrator prompts stay with administrators. */
-export function diagnosticsScopeOf(permissionKeys: readonly string[], isAdmin: boolean): ChatDiagnosticsScope {
-  if (isAdmin) return 'prompts'
-  return permissionKeys.includes('chat.diagnostics.view') ? 'content' : 'none'
+/** A signed-in account sees how its own replies were composed; administrator prompts stay with administrators. */
+export function diagnosticsScopeOf(signedIn: boolean, isAdmin: boolean): ChatDiagnosticsScope {
+  return isAdmin ? 'prompts' : signedIn ? 'content' : 'none'
 }
 
 /** A reply whose profile was deleted shows only its composition: its texts can no longer be traced to a source. */
@@ -33,55 +31,51 @@ export function diagnosticsScopeForProfile(scope: ChatDiagnosticsScope, profileE
   return profileExists || scope === 'none' ? scope : 'view'
 }
 
-export const CHAT_PERMISSION_KEYS = {
-  codex: 'chat.agent.use',
-  llm: 'chat.use',
-  claude: 'chat.agent.use',
-} as const
-
 export type ChatAccess = {
   claude: boolean
   codex: boolean
   llm: boolean
   /**
    * Scopes this account's chats may use: every scope, except chat setup proposals which are for administrators.
-   * Each tool still needs the same feature key the web needs for that action.
+   * Each tool still needs the account right its scope needs (scopeRequirement).
    */
   scopes: ChatScope[]
   diagnostics: ChatDiagnosticsScope
   isAdmin: boolean
   /** The account's permission groups (inherited ones included), for profiles limited to some groups. */
   groupKeys: string[]
-  /** The account's feature keys, which each tool still needs (a profile's delegated keys come on top in its chats). */
+  /** The account's permission keys (its basic rights decide each tool, see toolAccess). */
   permissionKeys: string[]
 }
 
 /**
- * What one account may do with chat, from its permission keys. `null` is the trusted bootstrap owner, allowed
- * everything only while no accounts are configured.
+ * What one account may do with chat: every signed-in active account may chat (agent profiles name their audience,
+ * canUseChatProfile). `null` is the trusted bootstrap owner, allowed everything only while no accounts are configured.
  */
 export function resolveChatAccess(accountId: number | null): ChatAccess {
   let permissionKeys: string[]
   let groupKeys: string[] = []
   let isAdmin: boolean
+  let signedIn: boolean
   if (accountId === null) {
     isAdmin = !hasConfiguredAuth()
+    signedIn = isAdmin
     permissionKeys = isAdmin ? AuthAccessControlService.resolveBootstrapAccess().permissionKeys : []
   } else {
     const account = AuthAccount.findById(accountId)
     isAdmin = isActiveAdminRecord(account)
-    const resolved = account?.status === 'active' ? AuthAccessControlService.resolveForAccountId(accountId) : null
+    signedIn = account?.status === 'active'
+    const resolved = signedIn ? AuthAccessControlService.resolveForAccountId(accountId) : null
     permissionKeys = resolved?.permissionKeys ?? []
     groupKeys = resolved?.groupKeys ?? []
   }
 
-  const has = (key: string) => permissionKeys.includes(key)
   return {
-    claude: has(CHAT_PERMISSION_KEYS.claude),
-    codex: has(CHAT_PERMISSION_KEYS.codex),
-    llm: has(CHAT_PERMISSION_KEYS.llm),
+    claude: signedIn,
+    codex: signedIn,
+    llm: signedIn,
     scopes: CHAT_SCOPES.filter((scope) => scope !== 'configure' || isAdmin),
-    diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys, isAdmin) : 'none',
+    diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(signedIn, isAdmin) : 'none',
     isAdmin,
     groupKeys,
     permissionKeys,
@@ -89,8 +83,8 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
 }
 
 /**
- * Whether the account may chat with this profile: the engine's key, and membership in one of the profile's groups when
- * it names any. Administrators always may. Whether the profile is switched on is the caller's own check.
+ * Whether the account may chat with this profile: signed in, and membership in one of the profile's groups when it
+ * names any. Administrators always may. Whether the profile is switched on is the caller's own check.
  */
 export function canUseChatProfile(access: ChatAccess, profile: Pick<ChatProfile, 'engine' | 'allowedGroupKeys'>): boolean {
   const engine = profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm
@@ -102,11 +96,15 @@ export function intersectChatScopes(configured: readonly ChatScope[], access: Ch
   return configured.filter((scope) => access.scopes.includes(scope))
 }
 
+/** The scopes the profile's tool settings allow (the account's role and rights are checked separately). */
+export function chatProfileScopes(profile: Pick<ChatProfile, 'mcpEnabled' | 'mcpScopes' | 'generationPresetIds'>): ChatScope[] {
+  return profile.mcpEnabled ? [...new Set<ChatScope>([...profile.mcpScopes, ...(profile.generationPresetIds.length ? ['generate' as const] : [])])] : []
+}
+
 /** Linking a generation preset explicitly enables that tool, independently of the general tool selection. */
 export function resolveChatProfileToolGrant(profile: Pick<ChatProfile, 'mcpEnabled' | 'mcpScopes' | 'toolAllowlist' | 'generationPresetIds'>, access: ChatAccess, threadId?: number) {
   const presetTools = profile.generationPresetIds.map((_, index) => chatGenerationToolName(index))
-  const configured: ChatScope[] = [...new Set<ChatScope>([...profile.mcpScopes, ...(presetTools.length ? ['generate' as const] : [])])]
-  const scopes = profile.mcpEnabled ? intersectChatScopes(configured, access) : []
+  const scopes = intersectChatScopes(chatProfileScopes(profile), access)
   const own = pluginProfileTools(threadId).filter(tool => access.scopes.includes(tool.scope))
   if (!own.length) return { scopes, toolAllowlist: profile.toolAllowlist === null ? null : [...new Set([...profile.toolAllowlist, ...presetTools])] }
   // Expanding a scope for an owning plugin must not enable unrelated native or other-plugin tools.
@@ -125,7 +123,8 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   const profileEngine = profile?.engine ?? 'llm'
   if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
   const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
-  const pageTool = profile?.pageAssist && isConnectedChatPageTool(context, toolName, page)
+  // Only the generic page tools follow the page assistant; a screen's domain tools follow the profile's tools and scopes.
+  const pageTool = CHAT_PAGE_TOOLS.has(toolName) && profile?.pageAssist && isConnectedChatPageTool(context, toolName, page)
   const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspaces?.length && toolName.startsWith('workspace_'))
   if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
@@ -163,7 +162,7 @@ const tokens = new Map<string, { research?: McpHttpAuthentication['research']; r
  */
 export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext, research?: McpHttpAuthentication['research']) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspaces: research ? [] : chatWorkspaces(chatContext ? chatProfileRequester(requester, chatContext) : requester, chatContext?.threadId, chatContext?.profileId) })
+  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspaces: research ? [] : chatWorkspaces(chatContext ? requester : requester, chatContext?.threadId, chatContext?.profileId) })
   return token
 }
 
@@ -179,7 +178,7 @@ export function setCodexChatExecution(token: string, context: ChatExecutionConte
 
 /**
  * Authenticate an internal chat token. Only direct loopback requests qualify (the app-server runs next to the
- * backend), and the grant is re-checked on every call: chat enabled, the account still holds `chat.agent.use`, and the
+ * backend), and the grant is re-checked on every call: chat enabled, the account still signed in and active, and the
  * scopes are the profile's, narrowed to what the account may use.
  * Works while the public HTTP MCP endpoint is disabled.
  */

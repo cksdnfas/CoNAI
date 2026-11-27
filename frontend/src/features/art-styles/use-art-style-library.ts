@@ -61,7 +61,7 @@ export function useArtStyleLibrary() {
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
-  const canEdit = permissions.has('characters.edit')
+  const canEdit = permissions.canEdit
   const { params, query, searchText, setSearchText, update } = useLibraryLocation(ART_STYLES_PAGE_SIZE, ['style'])
   const sortParam = params.get('sort') as ArtStyleSort | null
   const sort: ArtStyleSort = sortParam && SORTS.includes(sortParam) ? sortParam : 'name'
@@ -228,11 +228,11 @@ export function useArtStyleLibrary() {
 
   return {
     canEdit,
+    canDelete: permissions.canDelete,
     canViewImages,
-    /** Uploads are staged as generation inputs (generation.execute); the library pick is for every editor. */
-    canUpload: canEdit && canViewImages && permissions.has('generation.execute'),
-    /** The file store pick (files.view). */
-    canPickFiles: canEdit && canViewImages && permissions.has('files.view'),
+    /** Uploads are staged as generation inputs; the library pick is for every editor. */
+    canUpload: canEdit && canViewImages,
+    canPickFiles: canEdit && canViewImages,
     // List state (URL)
     query, searchText, setSearchText, search,
     sort, favoriteOnly, badges, setListView, toggleBadge,

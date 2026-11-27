@@ -149,7 +149,7 @@ test('server check: choices of literal combo inputs, without dynamic, upload or 
 test('hidden fields: the public page, MCP details and chat presets never offer them; a public queue ignores their values', { timeout: 60000 }, async (t) => {
   const auth = getAuthDb()
   const guest = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('hidden-guest', 'unused', 'guest')").run().lastInsertRowid)
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'hidden-generator', permissionKeys: ['generation.execute', 'workflows.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'hidden-generator', permissionKeys: ['content.read'] })
   AuthPermissionGroup.addAccountMembership(group.id, guest)
   invalidateConfiguredAuthCache()
   const workflowId = WorkflowModel.create({ name: 'hidden fields', workflow_json: workflowJson, marked_fields: fields, is_public_page: true, public_slug: 'hidden-fields' })

@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useEffect, useState } from 'react'
 import type { SystemFolderRootId } from '@conai/shared'
 import { useSearchParams } from 'react-router-dom'
@@ -53,7 +54,7 @@ function WorkspaceLanding({ onProject, onCreate, onStore, onSystem }: { onProjec
 export function FilesPage() {
   const [params, setParams] = useSearchParams()
   const auth = useAuthStatusQuery()
-  const canCreateProject = auth.data?.permissionKeys?.includes('files.edit') === true
+  const canCreateProject = auth.data?.permissionKeys?.includes(CONTENT_PERMISSIONS.edit) === true
   const [creating, setCreating] = useState(false)
   const openProject = (id: string) => setParams({ view: 'workspaces', workspace: id })
   const openStore = (folder: string | null) => setParams(folder ? { folder } : {})

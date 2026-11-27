@@ -41,7 +41,7 @@ test('shared plugin pages lend only the declared scope', { timeout: 120000 }, as
   })
 
   // The built-in guest group's keys this test relies on the viewer lacking.
-  const stripped = ['plugins.view', 'images.view', 'files.view', 'files.edit', 'files.delete', 'workflows.view', 'generation.execute']
+  const stripped = ['page.extensions.view', 'content.read', 'content.edit', 'content.delete']
   const removed = auth.prepare(`SELECT g.id AS group_id, p.id AS permission_id FROM auth_permission_groups g JOIN auth_group_permissions gp ON gp.group_id = g.id JOIN auth_permissions p ON p.id = gp.permission_id
     WHERE g.group_key = 'guest' AND p.permission_key IN (${stripped.map(() => '?').join(',')})`).all(...stripped) as Array<{ group_id: number; permission_id: number }>
   // A throwaway database: nothing to restore afterwards.
@@ -49,8 +49,8 @@ test('shared plugin pages lend only the declared scope', { timeout: 120000 }, as
   const addAccount = (name: string) => Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES (?, 'unused', 'guest')").run(name).lastInsertRowid)
   const viewerId = addAccount('scope-viewer'), memberId = addAccount('scope-member')
   auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('scope-admin', 'unused', 'admin')").run()
-  // A member opens plugin pages without sharing but holds none of the feature keys.
-  AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'scope-plugin-only', permissionKeys: ['plugins.view'] }).id, memberId)
+  // A member opens plugin pages without sharing but holds none of the basic rights.
+  AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'scope-plugin-only', permissionKeys: ['page.extensions.view'] }).id, memberId)
   invalidateConfiguredAuthCache(); invalidateResolvedAuthAccessCache()
   const viewer = { requester: { accountId: viewerId, accountType: 'guest' as const }, sessionId: 'scope-viewer-session' }
   const member = { requester: { accountId: memberId, accountType: 'guest' as const }, sessionId: 'scope-member-session' }
@@ -147,10 +147,10 @@ test('shared plugin pages lend only the declared scope', { timeout: 120000 }, as
       next()
     })
     web.use('/api', pluginRouteLending)
-    web.get('/api/images/:hash/thumbnail', allowAnonymousPermission('images.view'), (req, res) => { res.json({ query: req.query }) })
-    web.get('/api/workflows', requirePermission('workflows.view'), (req, res) => { res.json({ requester: requesterPermissionKeys(getRequester(req)).includes('workflows.view') }) })
-    web.get('/api/generation-history', requirePermission('images.view'), (_req, res) => { res.json({}) })
-    web.get('/api/images', allowAnonymousPermission('images.view'), (_req, res) => { res.json({}) })
+    web.get('/api/images/:hash/thumbnail', allowAnonymousPermission('content.read'), (req, res) => { res.json({ query: req.query }) })
+    web.get('/api/workflows', requirePermission('content.read'), (req, res) => { res.json({ requester: requesterPermissionKeys(getRequester(req)).includes('content.read') }) })
+    web.get('/api/generation-history', requirePermission('content.read'), (_req, res) => { res.json({}) })
+    web.get('/api/images', allowAnonymousPermission('content.read'), (_req, res) => { res.json({}) })
     const listener = web.listen(0, '127.0.0.1')
     await new Promise<void>((resolve) => listener.once('listening', resolve))
     try {
@@ -227,14 +227,14 @@ test('shared plugin pages lend only the declared scope', { timeout: 120000 }, as
     const scope = { pluginId: 'lend-submit', pageId: 'main' }
     const promptData = { image: { composite_hash: 'b'.repeat(64) } }
     const grant = grants.createPluginPublicQueueImageGrant(scope, viewerId, 7, promptData)
-    assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, viewerId), /images\.view/, 'not shared: refused')
+    assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, viewerId), /content\.read/, 'not shared: refused')
     registry.setPluginPagePublic('lend-submit', 'main', true)
     assert.doesNotThrow(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, viewerId))
     assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, memberId), /Invalid/, 'bound to the submitting account')
     assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, { image: { composite_hash: 'c'.repeat(64) } }, viewerId), /Invalid/, 'bound to the input')
     assert.throws(() => grants.requireMcpQueueImageGrant({ ...grant, pageId: 'other' }, 7, promptData, viewerId), /Invalid/)
     registry.setPluginPagePublic('lend-submit', 'main', false)
-    assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, viewerId), /images\.view/, 'unsharing revokes queued grants')
+    assert.throws(() => grants.requireMcpQueueImageGrant(grant, 7, promptData, viewerId), /content\.read/, 'unsharing revokes queued grants')
   })
 
   await t.test('bundled packages declare exactly the native tools they call', () => {

@@ -34,7 +34,7 @@ test('post editor keeps the draft through a save conflict and asks before discar
   const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
   const { PostEditor } = await import('../src/features/posts/post-editor')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, isAdmin: false, permissionKeys: ['posts.write'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, isAdmin: false, permissionKeys: ['content.read'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'ko' } })
   client.setQueryData(['post-settings'], { topicEvaluation: { autoEnabled: false }, knowledge: { enabled: true }, layout: 'feed' })
   const opened = {

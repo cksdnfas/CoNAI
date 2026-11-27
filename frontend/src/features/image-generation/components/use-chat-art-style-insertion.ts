@@ -27,11 +27,11 @@ export async function loadArtStyleImageDraft(style: Pick<ArtStyle, 'id' | 'title
 export function useChatArtStyleInsertion() {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const { canViewImages } = useImagePermissions()
 
   return {
-    /** Whether the form can take the style's images (`images.view`). */
+    /** Whether the form can take the style's images (the read right). */
     canImages: canViewImages,
     /** `images`: the form has somewhere for them (then `imageIds` is offered). */
     actions: (targets: Record<string, ChatPageSchema>, required: string[], description: string, images: boolean) => canView ? [pageAction(

@@ -23,7 +23,7 @@ const SETTING_LIMIT = 200
  * revisions, more on request) and the open editor, moves between folders and settings, fills the editor's draft without
  * saving, and saves, deletes or arranges folders through review cards with the person's own session.
  */
-export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settings, loadMore, editor, canEdit, editorTab, setEditorTab, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
+export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settings, loadMore, editor, canEdit, canDelete, editorTab, setEditorTab, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
   sort: CharacterSettingSort
   favoriteOnly: boolean
   filters: CharacterSettingFilters
@@ -41,6 +41,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   loadMore: (() => Promise<unknown>) | null
   editor: CharacterSettingEditorState
   canEdit: boolean
+  canDelete: boolean
   editorTab: CharacterAppearanceTab
   setEditorTab: (tab: CharacterAppearanceTab) => void
   openFolder: (folderId: number | null) => void
@@ -144,7 +145,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
         ...(listedSettingIds.length ? [
           pageAction('character.favorite', t({ ko: '즐겨찾기 표시', en: 'Mark favorites' }), t({ ko: 'data.settings의 외형 설정에 즐겨찾기를 켜거나 꺼. 바로 반영돼.', en: 'Turn the favorite mark of listed settings on or off; applies at once.' }), pageObject({ settingIds: pageArray(pageChoice(listedSettingIds), listedSettingIds.length, 1), favorite: { type: 'boolean' } }, ['settingIds', 'favorite']), 'save'),
           pageAction('character.bulk_move', t({ ko: '여러 외형 설정 옮기기', en: 'Move settings' }), t({ ko: 'data.settings의 외형 설정 여러 개를 폴더(0은 최상위)로 옮겨. 대상 폴더에 같은 이름이 있으면 전부 거절돼.', en: 'Move listed settings into a folder (0: top level); a taken name refuses the whole move.' }), pageObject({ settingIds: pageArray(pageChoice(listedSettingIds), listedSettingIds.length, 1), folderId: folderChoice }, ['settingIds', 'folderId']), 'save'),
-          pageAction('character.bulk_delete', t({ ko: '여러 외형 설정 삭제', en: 'Delete settings' }), t({ ko: 'data.settings의 외형 설정 여러 개를 지워. 연결된 프로필은 지금 값의 사본을 유지하고 이미지는 남아.', en: 'Delete listed settings; linked profiles keep a copy and images stay.' }), pageObject({ settingIds: pageArray(pageChoice(listedSettingIds), listedSettingIds.length, 1) }, ['settingIds']), 'save'),
+          ...(canDelete ? [pageAction('character.bulk_delete', t({ ko: '여러 외형 설정 삭제', en: 'Delete settings' }), t({ ko: 'data.settings의 외형 설정 여러 개를 지워. 연결된 프로필은 지금 값의 사본을 유지하고 이미지는 남아.', en: 'Delete listed settings; linked profiles keep a copy and images stay.' }), pageObject({ settingIds: pageArray(pageChoice(listedSettingIds), listedSettingIds.length, 1) }, ['settingIds']), 'save')] : []),
         ] : []),
         ...(editor.open && ready ? [
           pageAction('character.draft', t({ ko: '외형 설정 초안 채우기', en: 'Fill setting draft' }), t({ ko: '열린 편집기의 주어진 항목만 채워. 저장하지 않아.', en: 'Fill only the given fields of the open editor; nothing is saved.' }), draftSchema),
@@ -159,7 +160,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
           ] : []),
           pageAction('character.fill', t({ ko: '외형 자동 채우기', en: 'Fill appearance' }), t({ ko: '열린 편집기의 항목을 Danbooru 캐릭터(character: 영문 태그나 정확한 한국어 이름), 기준 이미지 자동 태그(image) 또는 지금 태그 다시 분류(resort)로 채워. 의상 태그는 기본 의상에 들어가. 저장하지 않아.', en: 'Fill the open editor from a Danbooru character (character: tag or exact Korean name), the reference image tags (image) or a re-sort of the current tags (resort); outfit tags go to the default outfit. Nothing is saved.' }), pageObject({ source: pageChoice(['danbooru', 'image', 'resort']), character: pageText(200) }, ['source'])),
           pageAction('character.save', t({ ko: '외형 설정 저장', en: 'Save setting' }), t({ ko: '편집기의 현재 초안을 저장해. 기존 설정은 selected.revision 기준이고, 그사이 바뀌었으면 거절돼.', en: 'Save the editor draft as it is; an existing setting saves against selected.revision and is refused if it changed.' }), pageObject({}), 'save'),
-          ...(base ? [pageAction('character.delete', t({ ko: '외형 설정 삭제', en: 'Delete setting' }), t({ ko: '열린 외형 설정을 지워. 연결된 프로필은 지금 값의 사본을 유지해.', en: 'Delete the open setting; linked profiles keep a copy of its values.' }), pageObject({}), 'save')] : []),
+          ...(base && canDelete ? [pageAction('character.delete', t({ ko: '외형 설정 삭제', en: 'Delete setting' }), t({ ko: '열린 외형 설정을 지워. 연결된 프로필은 지금 값의 사본을 유지해.', en: 'Delete the open setting; linked profiles keep a copy of its values.' }), pageObject({}), 'save')] : []),
         ] : []),
       ] : []),
     ],

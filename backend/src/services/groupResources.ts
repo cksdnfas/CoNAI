@@ -27,7 +27,7 @@ export type GroupResource = z.infer<typeof groupResourceSchema>;
 type Context = Pick<McpRequestContext, 'requester' | 'keyGroup' | 'contentRatingLimit' | 'chatContext'>;
 
 export async function validateGroupResource(context: Context, ref: GroupResource) {
-  requireContextPermission(context, ref.source === 'audio' ? 'audio.view' : ref.source === 'library' ? 'images.view' : 'files.view');
+  requireContextPermission(context, 'content.read');
   if (ref.source === 'library') {
     const media = MediaMetadataFileQueries.findVisibilityGuardByHash(ref.compositeHash);
     if (!media || !MediaPostprocessVisibilityService.isReadyRecord(media) || ImageSafetyService.isHidden(media.rating_score)) throw new WorkspaceError('미디어가 없거나 현재 표시 정책에서 사용할 수 없어.', 404);
@@ -61,14 +61,13 @@ export function attachGroupResources(groupId: number, refs: GroupResource[]) {
 }
 
 export async function listGroupResources(context: Context, groupId: number, offset = 0) {
-  requireContextPermission(context, 'images.view');
+  requireContextPermission(context, 'content.read');
   const rows = db.prepare('SELECT id,reference FROM group_resources WHERE group_id=? ORDER BY id LIMIT 31 OFFSET ?').all(groupId, offset) as { id: number; reference: string }[];
   const entries = [];
   for (const row of rows.slice(0, 30)) {
     const reference = groupResourceSchema.parse(JSON.parse(row.reference));
     // Do not expose labels or IDs from a source the account cannot read.
     try {
-      requireContextPermission(context, reference.source === 'audio' ? 'audio.view' : 'files.view');
       if (reference.source !== 'audio') requireFileStoreOwner(context.requester);
     } catch { continue; }
     let available = true;

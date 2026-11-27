@@ -294,7 +294,7 @@ router.get('/auto-collect-jobs/:jobId', asyncHandler(async (req: Request, res: R
 /**
  * The group's queued or running auto-collect job (runtime job record), or null, so a page opened again picks up its
  * progress. The job's group is its singleton key. Visible like `GET /api/jobs/:jobId`: unowned jobs, the starter,
- * admins, or any account allowed to start it (images.edit; its permission keys were just resolved by allowImagesView).
+ * admins, or any account allowed to start it (the edit right; its permission keys were just resolved by allowRead).
  */
 router.get('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
   try {

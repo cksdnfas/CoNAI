@@ -41,7 +41,7 @@ test('character page assistants: RefMod and art style registrations survive the 
   type Detail = import('@conai/shared').RefModEntryDetail
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.characters.view', 'characters.view', 'characters.edit', 'generation.execute', 'images.view'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.characters.view', 'content.read', 'content.edit'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   const replies = new Map<string, (answer: { ok: boolean; error?: string; page?: ChatPageSnapshot }) => void>()
   t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
@@ -157,7 +157,7 @@ test('character page assistants: RefMod and art style registrations survive the 
       save: async () => { refmodState.saves++; return detail }, remove: async () => true,
     }
     const library = {
-      editor, canEdit: true, canBuild: true, loadMore: async () => {}, presence: { isPending: false, isError: false, data: presence }, presenceOk: true,
+      editor, canEdit: true, canDelete: true, loadMore: async () => {}, presence: { isPending: false, isError: false, data: presence }, presenceOk: true,
       visibleEntries: entries, total: 12, query: '', serverFilter: 'all', concept: '', sort: 'updated',
       unregisteredRows, allUnregisteredRows: unregisteredRows, unregisteredCount: unregisteredRows.length, isPending: (entry: Summary) => entry.pending, isOnServer: (name: string) => presence.entries.some((item) => item.name === name),
       search() {}, setListView() {}, refreshPresence: async () => {}, openEntry() {}, closeEntry() {}, create: async () => null, setCreating() {},
@@ -246,7 +246,7 @@ test('character page assistants: RefMod and art style registrations survive the 
     const editor = { open, styleId: open ? 1 : null, ready: open, base: open ? stored : null, baseRef: { current: open ? stored : null }, draft, draftRef, dirty: false, busy: false, isBusy: () => false, save: async () => {}, remove: async () => {},
       patch(next: { images?: unknown[] }) { if (next.images) { draftRef.current = { ...draftRef.current, images: next.images }; setImages(next.images) } } }
     const library = {
-      editor, canEdit: true, canViewImages: true, loaded: styles, total: 3, loadMore: undefined, query: '', badges: [], favoriteOnly: false, sort: 'updated',
+      editor, canEdit: true, canDelete: true, canViewImages: true, loaded: styles, total: 3, loadMore: undefined, query: '', badges: [], favoriteOnly: false, sort: 'updated',
       badgeList: [{ badge: 'watercolor', count: 3 }], setListView() {}, openStyle() {}, closeStyle() {}, create: async () => null, bulk: async () => null,
     }
     useArtStyleChatPage(library as unknown as ArtStyleLibrary)

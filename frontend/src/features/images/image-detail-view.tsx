@@ -284,7 +284,7 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
   }, [compositeHash, queryClient])
 
   const { canViewImages } = useImagePermissions()
-  // A scoped detail endpoint (a public workflow run) authorizes this one image; gallery searches still need images.view.
+  // A scoped detail endpoint (a public workflow run) authorizes this one image; gallery searches still need the read right.
   const canViewDetail = canViewImages || Boolean(detailUrl)
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { allowImagesView, requireImageAction } from '../middleware/imageAccess';
+import { allowRead } from '../middleware/authMiddleware';
 import multer from 'multer';
 import { AiWorkerError } from '../services/aiWorker/aiWorkerClient';
 import { inpaintImage } from '../services/aiWorker/aiInpaintService';
@@ -8,8 +8,8 @@ import { listSaveBrowserImagePage, listSaveBrowserImages } from './imageEditorRo
 import { parseDirectoryPageRequest } from '../services/directoryListingSnapshot';
 
 const router = Router();
-router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD'
-  ? allowImagesView(req, res, next) : requireImageAction('images.edit')(req, res, next));
+// Erasing returns a new image and saves nothing, so it only needs sign-in (the mount); listing reads the library.
+router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD' ? allowRead(req, res, next) : next());
 
 /**
  * List save-folder images for attachment picker UIs.

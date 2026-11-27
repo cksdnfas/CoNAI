@@ -1,4 +1,4 @@
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireRead, requireEdit, requireDelete } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express';
 import { NAI_CHARACTER_REFERENCE_TYPES, type NaiCharacterReference } from '@conai/shared';
 import {
@@ -15,12 +15,12 @@ import {
 
 const router = Router();
 
-router.get('/vibes', requirePermission('workflows.view'), requirePermission('images.view'), async (req: Request<{}, {}, {}, { model?: string }>, res: Response) => {
+router.get('/vibes', requireRead, async (req: Request<{}, {}, {}, { model?: string }>, res: Response) => {
   const items = await listNaiVibeAssets(req.query.model);
   res.json({ items });
 });
 
-router.get('/vibes/:assetId', requirePermission('workflows.view'), requirePermission('images.view'), async (req: Request<{ assetId: string }>, res: Response) => {
+router.get('/vibes/:assetId', requireRead, async (req: Request<{ assetId: string }>, res: Response) => {
   const item = await getNaiVibeAsset(req.params.assetId);
   if (!item) {
     res.status(404).json({ error: 'Stored vibe not found' });
@@ -30,7 +30,7 @@ router.get('/vibes/:assetId', requirePermission('workflows.view'), requirePermis
   res.json(item);
 });
 
-router.post('/vibes', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{}, {}, {
+router.post('/vibes', requireEdit, async (req: Request<{}, {}, {
   label?: string;
   description?: string;
   model?: string;
@@ -65,7 +65,7 @@ router.post('/vibes', requirePermission('workflows.edit'), requirePermission('im
   res.status(201).json(item);
 });
 
-router.delete('/vibes/:assetId', requirePermission('workflows.edit'), async (req: Request<{ assetId: string }>, res: Response) => {
+router.delete('/vibes/:assetId', requireDelete, async (req: Request<{ assetId: string }>, res: Response) => {
   const deleted = await deleteNaiVibeAsset(req.params.assetId);
   if (!deleted) {
     res.status(404).json({ error: 'Stored vibe not found' });
@@ -75,7 +75,7 @@ router.delete('/vibes/:assetId', requirePermission('workflows.edit'), async (req
   res.json({ success: true });
 });
 
-router.put('/vibes/:assetId', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{ assetId: string }, {}, {
+router.put('/vibes/:assetId', requireEdit, async (req: Request<{ assetId: string }, {}, {
   label?: string;
   description?: string;
 }>, res: Response) => {
@@ -98,11 +98,11 @@ router.put('/vibes/:assetId', requirePermission('workflows.edit'), requirePermis
   res.json(item);
 });
 
-router.get('/character-references', requirePermission('workflows.view'), requirePermission('images.view'), async (_req: Request, res: Response) => {
+router.get('/character-references', requireRead, async (_req: Request, res: Response) => {
   res.json({ items: await listNaiCharacterReferenceAssets() });
 });
 
-router.post('/character-references', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{}, {}, Partial<NaiCharacterReference> & {
+router.post('/character-references', requireEdit, async (req: Request<{}, {}, Partial<NaiCharacterReference> & {
   label?: string;
   description?: string;
 }>, res: Response) => {
@@ -133,7 +133,7 @@ router.post('/character-references', requirePermission('workflows.edit'), requir
   res.status(201).json(item);
 });
 
-router.delete('/character-references/:assetId', requirePermission('workflows.edit'), async (req: Request<{ assetId: string }>, res: Response) => {
+router.delete('/character-references/:assetId', requireDelete, async (req: Request<{ assetId: string }>, res: Response) => {
   const deleted = await deleteNaiCharacterReferenceAsset(req.params.assetId);
   if (!deleted) {
     res.status(404).json({ error: 'Stored character reference not found' });
@@ -143,7 +143,7 @@ router.delete('/character-references/:assetId', requirePermission('workflows.edi
   res.json({ success: true });
 });
 
-router.put('/character-references/:assetId', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{ assetId: string }, {}, {
+router.put('/character-references/:assetId', requireEdit, async (req: Request<{ assetId: string }, {}, {
   label?: string;
   description?: string;
 }>, res: Response) => {

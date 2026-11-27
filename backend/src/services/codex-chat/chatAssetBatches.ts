@@ -19,7 +19,7 @@ import { activeMediaFile } from './chatCardAssets'
 import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration, requireLocalProfileAssets } from './chatAssetAccess'
 import { assetTaggerEnabled, tagAsset, readAssetHashes, reviewAsset, type AssetHashes, type AssetTagCache } from './chatAssetReview'
 import { assetJudgeSetup, judgeExpression, type ExpressionJudgement } from './chatJudgeAssets'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { assignExpressionKeywords, styleWithExpressionGroup } from './chatProfileExpressions'
 import { chatAssetOwner, chatAssetOwnerProfile, chatAssetRowOwner } from './chatAssetOwner'
 import { characterSettingRow, ensureCharacterGroups, updateCharacterSetting, characterChanged } from '../characterLibrary'
@@ -62,7 +62,7 @@ function authorize(requester: McpRequester, id: number, target?: ChatAssetOwner 
   const row = batchRow(id)
   const owner = chatAssetRowOwner(row)
   if (target !== undefined && (chatAssetOwner(target).kind !== owner.kind || chatAssetOwner(target).id !== owner.id)) throw new ChatAssetError('자산 묶음을 찾을 수 없어.', 404)
-  if (owner.kind === 'setting') requireRequesterPermission(requester, 'characters.edit')
+  if (owner.kind === 'setting') requireRequesterRight(requester, 'edit')
   if (!chatAssetOwnerProfile(owner)) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
   if (!readOnly) requireLocalProfileAssets(owner, slotRows(id).every((slot) => slot.kind === 'background'))
   return row
@@ -161,7 +161,7 @@ export async function createChatAssetBatch(requester: McpRequester, profileId: C
   const request = JSON.stringify(input)
   const db = getUserSettingsDb()
   const owner = chatAssetOwner(profileId)
-  if (owner.kind === 'setting') requireRequesterPermission(requester, 'characters.edit')
+  if (owner.kind === 'setting') requireRequesterRight(requester, 'edit')
   const id = db.transaction(() => {
     const existing = db.prepare(`SELECT * FROM chat_asset_batches WHERE account_id IS ? AND ${owner.kind === 'profile' ? 'profile_id' : 'setting_id'} = ? AND json_extract(snapshot, '$.requestKey') = ?`).get(requester.accountId, owner.id, input.idempotencyKey) as BatchRow | undefined
     if (existing) {
@@ -410,7 +410,7 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
   const row = authorize(requester, id)
   const parsed = z.object({ avatarCrop: z.unknown().optional() }).strict().safeParse(value)
   if (!parsed.success) throw new ChatAssetError('자산 적용 입력을 확인해줘.')
-  requireRequesterPermission(requester, 'images.edit')
+  requireRequesterRight(requester, 'edit')
   const crop = normalizeAvatarCrop(value.avatarCrop)
   const inScope = (slot: SlotRow) => Boolean(slot.chosen_hash) && (onlySlot === undefined || slot.slot_key === onlySlot)
   const selected = slotRows(id).filter(inScope)

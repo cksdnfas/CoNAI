@@ -222,8 +222,6 @@ type ComfyWorkflowControllerPanelProps = {
   queueMaxCount?: number
   /** Extra message above the fields, e.g. the viewer's queue limit on a public page. */
   notice?: ReactNode
-  /** False on a published workflow page, which grants queueing without `generation.execute`. */
-  requireExecutePermission?: boolean
   onResetDraft: () => void
   onGenerateSelected: () => void
   /** Mark and focus the fields behind the readiness issues without submitting. */
@@ -262,7 +260,6 @@ export function ComfyWorkflowControllerPanel({
   serverRouting = true,
   queueMaxCount = 32,
   notice,
-  requireExecutePermission = true,
   onResetDraft,
   onGenerateSelected,
   onRevealFieldIssues,
@@ -423,7 +420,6 @@ export function ComfyWorkflowControllerPanel({
       generatingLabel={generatingLabel}
       onGenerate={onGenerateSelected}
       generateDisabled={generateDisabled}
-      requireExecutePermission={requireExecutePermission}
       isGenerating={isGenerating}
       repeat={queueRepeat}
       secondaryActions={saveModuleAction}
@@ -468,7 +464,6 @@ export function ComfyWorkflowControllerPanel({
       generatingLabel={generatingLabel}
       onGenerate={onGenerateSelected}
       generateDisabled={generateDisabled}
-      requireExecutePermission={requireExecutePermission}
       isGenerating={isGenerating}
       repeat={queueRepeat}
       secondaryActions={saveModuleAction}

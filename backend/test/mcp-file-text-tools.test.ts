@@ -39,8 +39,8 @@ test('mcp file text tools: write, replace, append and edit text documents', { ti
     AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: `${name}-group`, permissionKeys }).id, id)
     return id
   }
-  const writerId = addAccount('writer', ['files.view', 'files.edit'])
-  const readerId = addAccount('reader', ['files.view'])
+  const writerId = addAccount('writer', ['content.read', 'content.edit'])
+  const readerId = addAccount('reader', ['content.read'])
   invalidateConfiguredAuthCache()
 
   const { createMcpServer } = await import('../src/mcp/server')

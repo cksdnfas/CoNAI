@@ -1,121 +1,82 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../services/auth/sessionAccess';
-import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission, withRequesterPermissionGrant } from '../middleware/featureAccess';
+import { isRequesterAdmin, keyGroupPermissionKeys, keyHasGroup, requesterPermissionKeys, requireContextRight, requireRequesterRight, withRequesterPermissionGrant } from '../middleware/featureAccess';
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
-import { chatMcpRequester } from '../services/codex-chat/chatProfilePermissions';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { isAgentRoom } from '../services/codex-chat/chatRoomWake';
-import { isProposalTool } from '@conai/shared';
+import { CONTENT_PERMISSIONS, isProposalTool, scopeRequirement, type ContentRight } from '@conai/shared';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { currentMcpChatPage } from './context';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
-import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isPublicChatPage, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isPublicChatPage, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, nativeMcpToolNames, type McpRequestContext, type McpRequester } from './context';
 
-export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
-  list_character_library: 'characters.view', get_character_setting: 'characters.view', fill_character_appearance: 'characters.view',
-  manage_character_folders: 'characters.edit', propose_character_library: 'characters.edit',
-  list_art_styles: 'characters.view', get_art_style: 'characters.view', propose_art_style: 'characters.edit',
-  // RefMod entries: the REST rules (reads characters.view, writes characters.edit, a build also generation.execute).
-  list_refmod_entries: 'characters.view', get_refmod_entry: 'characters.view', save_refmod_entry: 'characters.edit', adopt_refmod: 'characters.edit',
-  build_refmod: ['characters.edit', 'generation.execute'],
-  call_agent: [],
-  workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
-  list_group_resources: 'images.view',
-  list_plugin_pages: [], run_plugin_action: [], get_plugin_action: [], cancel_plugin_action: [],
-  list_plugin_drafts: [], create_plugin_draft: [], read_plugin_draft: [], edit_plugin_draft: [], prepare_plugin_install: [], check_plugin_updates: [],
-  workspace_list: 'files.view', workspace_read: 'files.view', workspace_search: 'files.view', workspace_apply: ['files.view', 'files.edit'],
-  search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
-  list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view',
-  get_prompts_in_group: 'prompts.view', backup_prompt_data: 'prompts.view', list_backups: 'prompts.view',
-  create_prompt_preset: 'prompts.edit', batch_create_groups: 'prompts.edit',
-  move_prompts_between_groups: 'prompts.edit',
-  restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view', preview_random_prompt: 'wildcards.view',
-  list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view', list_comfy_refmods: 'workflows.view', check_comfy_workflow: 'workflows.edit',
-  list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
-  get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', workflow_edit: 'workflows.view',
-  list_graph_workflows: 'workflows.view', get_graph_workflow_details: 'workflows.view',
-  get_graph_workflow_execution: ['workflows.view', 'images.view'], export_workflow_definition: 'workflows.view',
-  // The caller's own chats only (account-scoped), like the room fields of the node editor.
-  list_chat_rooms: [],
-  import_workflow_definition: 'workflows.edit', restore_deleted_workflow: 'workflows.edit',
-  get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
-  refresh_artifact_download: 'images.view', get_media_download: 'images.view',
-  search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
-  upload_image: 'images.upload', update_image_metadata: 'images.edit', tag_images: 'images.edit',
-  delete_images: 'images.delete', restore_deleted_images: 'images.delete',
-  search_images_by_tags: 'images.view', search_images_by_meaning: 'images.view', find_similar_images: 'images.view', view_images: 'images.view', view_media_frames: [], list_emoticons: 'images.view',
-  list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',
-  add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
-  create_image_group: 'images.edit', update_image_group: 'images.edit', run_group_auto_collect: 'images.edit',
-  // The same keys as the group page: moving needs images.edit, deleting groups images.delete.
-  move_image_groups: 'images.edit', delete_image_groups: 'images.delete',
-  set_emoticon_keywords: 'images.edit', set_emoticon_group: 'images.edit',
-  // The wallpaper page's key; the writes are also administrator-only (ADMIN_ONLY_TOOLS), like the settings routes.
-  list_wallpapers: 'images.view', set_live_wallpaper: 'images.view', save_wallpaper_schedule: 'images.view',
-  get_generation_artifacts: 'images.view', get_generation_job: [], wait_generation_job: [],
-  get_video_info: 'images.view', get_sprite_job: 'images.view', download_sprite_frames: 'images.view',
-  extract_sprite_sheet: ['images.edit', 'images.upload'], extract_sprite_sheets_batch: ['images.edit', 'images.upload'],
-  normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
-  normalize_sprite_sources: ['images.edit', 'images.upload'],
-  resize_images: ['images.edit', 'images.upload'],
-  save_video_frame: ['images.edit', 'images.upload'],
-  crop_images: ['images.edit', 'images.upload'],
-  convert_images: ['images.edit', 'images.upload'],
-  clip_video: ['images.edit', 'images.upload'],
-  join_videos: ['images.edit', 'images.upload'],
-  get_media_edit_job: ['images.edit', 'images.upload'],
-  list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
-  get_file_download: 'files.view',
-  write_binary_file: ['files.view', 'files.edit'],
-  copy_library_media_to_files: ['files.view', 'files.edit', 'images.view'],
-  import_files_to_library: ['files.view', 'images.upload', 'images.edit'],
-  list_file_versions: 'files.view', read_file_version: 'files.view', restore_file_version: ['files.view', 'files.edit'],
-  posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
-  posts_assess: ['posts.view', 'posts.evaluate'], posts_propose_knowledge: ['posts.view', 'posts.write'],
-  posts_create: ['posts.view', 'posts.write'], posts_update: ['posts.view', 'posts.write'], post_comment: ['posts.view', 'posts.comment'],
-  posts_tags: 'posts.view', posts_revisions: ['posts.view', 'posts.write'], posts_delete: ['posts.view', 'posts.write'], posts_restore_revision: ['posts.view', 'posts.write'],
-  post_comment_edit: ['posts.view', 'posts.comment'], post_comment_delete: ['posts.view', 'posts.comment'],
-  // Administrator-only in the store (and registered only for administrators acting as themselves).
-  post_comment_hide: 'posts.view', posts_category_create: 'posts.view', posts_category_update: 'posts.view', posts_category_delete: 'posts.view',
-  create_file_folder: ['files.view', 'files.edit'], write_text_file: ['files.view', 'files.edit'], update_file_text: ['files.view', 'files.edit'], edit_file_text: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
-  generate_nai: 'generation.execute', generate_comfyui: 'generation.execute', generate_comfyui_all_servers: 'generation.execute',
-  submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',
-  get_codex_generation_options: 'generation.execute', resolve_image_group_path: [],
-  list_audio_projects: 'audio.view', list_audio_groups: 'audio.view', list_audio_candidates: 'audio.view',
-  get_audio_candidate: 'audio.view', list_audio_group_comments: 'audio.view',
-  create_audio_project: ['audio.view', 'audio.edit'], update_audio_project: ['audio.view', 'audio.edit'],
-  create_audio_group: ['audio.view', 'audio.edit'], update_audio_group: ['audio.view', 'audio.edit'],
-  list_audio_folders: 'audio.view', create_audio_folder: ['audio.view', 'audio.edit'], update_audio_folder: ['audio.view', 'audio.edit'],
-  move_audio_candidates: ['audio.view', 'audio.edit'], import_audio: ['audio.view', 'audio.edit'],
-  set_audio_group_comment_status: ['audio.view', 'audio.edit'],
-  set_audio_candidate_review: ['audio.view', 'audio.edit'],
-  delete_audio_candidate: ['audio.view', 'audio.edit'],
-  create_audio_group_comment: ['audio.view', 'audio.edit'],
-  update_audio_group_comment: ['audio.view', 'audio.edit'],
-  delete_audio_group_comment: ['audio.view', 'audio.edit'],
-  delete_audio_group: ['audio.view', 'audio.edit'], delete_audio_folder: ['audio.view', 'audio.edit'], delete_audio_project: ['audio.view', 'audio.edit'],
-  edit_audio_candidate: ['audio.view', 'audio.edit'], delete_unselected_audio_candidates: ['audio.view', 'audio.edit'],
-  export_audio_selected: 'audio.view', get_audio_download: 'audio.view',
-  list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
-  order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
-  cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
-  read_chat_attachment: [], chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], show_form: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
-  linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_view: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
-  // The profile's own skills are part of its instructions, written by administrators only.
-  use_skill: [],
-  // The chat's own settings card; saving rechecks the file store right for links and minutes, as the context tab does.
-  get_chat_settings: [], propose_chat_settings: [],
-  get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
-  web_search: 'chat.web.use', web_read: 'chat.web.use',
-  // The user guides are the app's public documentation: any signed-in account reads them.
-  get_app_guide: [],
-  get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
-  manage_chat_profile_folders: [],
-  propose_display_block: [], list_chat_skills: [], get_chat_skill: [], propose_skill: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
+/**
+ * Tools that need only a signed-in account (or an HTTP key): the chat's and plugin pages' own plumbing, the jobs and
+ * chats the caller owns, the posts and comments the writer owns, web research (the profile's switch decides) and the
+ * guides. Their scope is still the chat profile's setting.
+ */
+const SIGNED_IN_TOOLS = new Set([
+  'list_plugin_pages', 'run_plugin_action', 'get_plugin_action', 'cancel_plugin_action',
+  'list_chat_rooms', 'view_media_frames', 'get_generation_job', 'wait_generation_job', 'read_chat_attachment',
+  'get_current_page', 'page_fill', 'page_act', 'read_page_data', 'propose_page_action', 'get_app_guide',
+  'resolve_image_group_path', 'get_codex_generation_options', 'web_search', 'web_read',
+  'posts_create', 'posts_update', 'posts_delete', 'posts_restore_revision', 'posts_assess', 'posts_propose_knowledge',
+  'post_comment', 'post_comment_edit', 'post_comment_delete',
+]);
+
+/**
+ * Tools that make new things from library media or audio (copies, sprite sheets, audio takes, exports): no edit, as
+ * with generating, but reading their inputs. REST asks the same (the batch-resize, sprite and audio routes).
+ */
+const READ_INPUT_TOOLS = new Set([
+  'resize_images', 'crop_images', 'convert_images', 'save_video_frame', 'clip_video', 'join_videos',
+  'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'normalize_sprite_sources', 'create_sprite_animation',
+  'order_audio', 'wait_audio_order', 'cancel_audio_order', 'retry_audio_order_job', 'export_audio_selected',
+]);
+
+/** Tools without a scope: the chat's own (nothing), and its linked files and project workspace (read or edit). */
+const UNSCOPED_TOOL_RIGHTS: Record<string, ContentRight | null> = {
+  call_agent: null, chat_reply_to: null, room_call_member: null, room_history_search: null, room_history_read: null,
+  task_propose: null, task_status: null, task_update: null, task_wait: null, task_finish: null, get_proposal_status: null,
+  offer_choices: null, show_form: null, read_lore_file: null, save_lore: null, edit_lore_file: null, use_skill: null,
+  get_chat_settings: null, propose_chat_settings: null,
+  workspace_list: 'read', workspace_read: 'read', workspace_search: 'read', workspace_apply: 'edit',
+  linked_list: 'read', linked_search: 'read', linked_read: 'read', linked_view: 'read', linked_write: 'edit', linked_edit: 'edit',
 };
+
+type ToolRequirement = ContentRight | 'signedIn' | 'admin';
+
+/** What the caller must hold for a tool: its scope decides (scopeRequirement). Undefined: unclassified, so refused. */
+export function toolRequirement(toolName: string): ToolRequirement | undefined {
+  if (ADMIN_ONLY_TOOLS.has(toolName)) return 'admin';
+  if (Object.prototype.hasOwnProperty.call(UNSCOPED_TOOL_RIGHTS, toolName)) return UNSCOPED_TOOL_RIGHTS[toolName] ?? 'signedIn';
+  const scope = getMcpToolScope(toolName);
+  if (!scope) return undefined;
+  if (scope === 'configure') return 'admin';
+  if (READ_INPUT_TOOLS.has(toolName)) return 'read';
+  // External MCP and plugin server tools: their server's scope and the profile decide, not the library rights.
+  if (SIGNED_IN_TOOLS.has(toolName) || findExternalMcpTool(toolName) || findPluginServerTool(toolName)) return 'signedIn';
+  return scopeRequirement(scope);
+}
+
+function meets(requirement: ToolRequirement | undefined, keys: ReadonlySet<string>, admin: boolean): boolean {
+  if (requirement === undefined) return false;
+  if (requirement === 'admin') return admin;
+  return requirement === 'signedIn' || admin || keys.has(CONTENT_PERMISSIONS[requirement]);
+}
+
+/** Whether an account holding these keys may use the tool (its chat profile's grant aside). */
+export function accountMeetsTool(toolName: string, permissionKeys: readonly string[], isAdmin: boolean): boolean {
+  return meets(toolRequirement(toolName), new Set(permissionKeys), isAdmin);
+}
+
+/** Every native tool (scoped or not); external MCP and plugin server tools come from their registries. */
+export function nativeToolNames(): string[] {
+  return [...nativeMcpToolNames(), ...Object.keys(UNSCOPED_TOOL_RIGHTS)];
+}
 
 /**
  * A turn answering a posts board call reads posts and comments other people wrote, so plugin actions, lore edits and
@@ -127,9 +88,10 @@ const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_actio
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 
 /**
- * Writes the web allows administrators only; HTTP keys hold no administrator role.
+ * Writes the web allows administrators only; HTTP keys hold no administrator role. Board categories and comment
+ * hiding are for administrators acting as themselves (postTools registers them only then).
  */
-const ADMIN_ONLY_TOOLS = new Set(['set_live_wallpaper', 'save_wallpaper_schedule']);
+const ADMIN_ONLY_TOOLS = new Set(['set_live_wallpaper', 'save_wallpaper_schedule', 'post_comment_hide', 'posts_category_create', 'posts_category_update', 'posts_category_delete']);
 export const isAdminOnlyTool = (toolName: string) => ADMIN_ONLY_TOOLS.has(toolName);
 
 /**
@@ -147,17 +109,6 @@ function lentToolKeys(context: McpRequestContext, toolName: string): readonly st
   return context.source === 'plugin' && context.pluginPublicScope && context.requester ? lentKeysFor(context.pluginPublicScope, toolName) : [];
 }
 
-/** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
-function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
-  if (isChatGenerationTool(toolName)) return 'generation.execute';
-  return TOOL_FEATURE_PERMISSIONS[toolName] ?? (findExternalMcpTool(toolName) || findPluginServerTool(toolName) ? [] : undefined);
-}
-
-export function requiredToolKeys(toolName: string): readonly string[] {
-  const required = featurePermissionOf(toolName) ?? [];
-  return typeof required === 'string' ? [required] : required;
-}
-
 /**
  * Listing asks this once per tool (80-odd) for one context, so the account and profile are read once per context for a
  * moment. Calls never use it: requireMcpToolAccess rechecks the account directly.
@@ -169,7 +120,7 @@ function factsFor(context: McpRequestContext) {
   const requester = context.requester!;
   const facts = {
     at: Date.now(),
-    keys: new Set(requesterPermissionKeys(chatMcpRequester(context) ?? requester)),
+    keys: new Set(requesterPermissionKeys(requester)),
     admin: isRequesterAdmin(requester),
     profile: context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null,
   };
@@ -177,16 +128,11 @@ function factsFor(context: McpRequestContext) {
   return facts;
 }
 
-/** What the account itself must hold: the same key the web needs for that action, and the admin role for chat setup. */
+/** What the account itself must hold for the tool's scope (a shared plugin page may lend read or edit). */
 function accountHoldsTool(context: McpRequestContext, toolName: string): boolean {
   const { keys, admin, profile } = factsFor(context);
-  const required = requiredToolKeys(toolName);
-  if (!required.every((key) => keys.has(key))) {
-    const lent = lentToolKeys(context, toolName);
-    if (!required.every((key) => keys.has(key) || lent.includes(key))) return false;
-  }
-  if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
-  if (ADMIN_ONLY_TOOLS.has(toolName) && !admin) return false;
+  const requirement = toolRequirement(toolName);
+  if (!meets(requirement, keys, admin) && !meets(requirement, new Set([...keys, ...lentToolKeys(context, toolName)]), admin)) return false;
   if (isChatMcpSource(context.source) && CHAT_PAGE_TOOLS.has(toolName) && !profile?.pageAssist) return false;
   if (profile && isVisionTool(toolName) && !profileSeesImages(profile)) return false;
   if (profile && (toolName === 'save_lore' || toolName === 'edit_lore_file') && !profile.allowLoreProposals) return false;
@@ -198,17 +144,17 @@ function isKeyContext(context: McpRequestContext) {
   return !context.requester && context.keyGroup !== undefined;
 }
 
-/** What the key's permission group must hold: the same keys an account of that group would need. */
-const keyListingFacts = new WeakMap<McpRequestContext, { at: number; keys: Set<string> }>();
+/** What the key's permission group must hold: what an account of that group would need (never the administrator role). */
+const keyListingFacts = new WeakMap<McpRequestContext, { at: number; keys: Set<string>; grouped: boolean }>();
 function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
-  if (ADMIN_ONLY_TOOLS.has(toolName)) return false;
   let facts = keyListingFacts.get(context);
   if (!facts || Date.now() - facts.at >= 1000) {
-    facts = { at: Date.now(), keys: new Set(keyGroupPermissionKeys(context.keyGroup ?? null)) };
+    facts = { at: Date.now(), keys: new Set(keyGroupPermissionKeys(context.keyGroup ?? null)), grouped: keyHasGroup(context.keyGroup ?? null) };
     keyListingFacts.set(context, facts);
   }
-  const keys = facts.keys;
-  return requiredToolKeys(toolName).every((key) => keys.has(key));
+  const requirement = toolRequirement(toolName);
+  // A key is "signed in" only through its group: a groupless key gets nothing that needs signing in.
+  return (requirement !== 'signedIn' || facts.grouped) && meets(requirement, facts.keys, false);
 }
 
 /**
@@ -233,14 +179,14 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (toolName.startsWith('workspace_')) {
     if (publicPage) return false;
     const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
-    if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
+    if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && toolRequirement(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
     if (!context.workspaces?.length || !context.chatContext || !isChatMcpSource(context.source)) return false;
     if (writes && !context.workspaces.some((binding) => binding.write)) return false;
-    return featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
+    return toolRequirement(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
   }
   if ((BOARD_CALL_BLOCKED_TOOLS.has(toolName) || BOARD_CALL_BLOCKED_POST_TOOLS.has(toolName)) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
-  if (context.requester && featurePermissionOf(toolName) === undefined) return false;
-  if (isKeyContext(context) && (featurePermissionOf(toolName) === undefined || (accountChecks && !keyHoldsTool(context, toolName)))) return false;
+  if (context.requester && toolRequirement(toolName) === undefined) return false;
+  if (isKeyContext(context) && (toolRequirement(toolName) === undefined || (accountChecks && !keyHoldsTool(context, toolName)))) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && publicPage) return false;
@@ -248,7 +194,8 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if ((context.generationPresetIds?.length ?? 0) > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) return false;
-  if (isConnectedChatPageTool(context, toolName) && (!accountChecks || !context.requester || factsFor(context).profile?.pageAssist)) return true;
+  // A connected page lists its domain tools directly, but they still follow the profile's tool list and scopes below.
+  if (CHAT_PAGE_TOOLS.has(toolName) && isConnectedChatPageTool(context, toolName) && (!accountChecks || !context.requester || factsFor(context).profile?.pageAssist)) return true;
   if (isChatMcpSource(context.source) && CHAT_PAGE_TOOLS.has(toolName)) return false;
   if (publicPage && !isChatGenerationTool(toolName)) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
@@ -285,7 +232,6 @@ export function requireMcpResourceOwner(context: McpRequestContext, record: { re
  */
 export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'after-reply' | 'queued' = 'reply'): void {
   if (context.composerPreview || context.profilePreview) throw new Error('Composer tool listings cannot execute tools.');
-  context.requester = chatMcpRequester(context);
   if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
   // A shared plugin page lends this tool's keys to the viewer (live: stopping the share revokes them mid-call too). The
@@ -297,24 +243,25 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     if (execution !== 'queued') {
       if (execution === 'reply') requireActiveChatReply(context.chatContext);
       const pluginPageAction = (toolName === 'page_act' || toolName === 'propose_page_action') && currentMcpChatPage(context)?.kind === 'extension';
-      // upload_image carries its own media payload: it needs images.upload (checked below), not images.view.
-      const onManagedMedia = toolName === 'upload_image' ? undefined : () => requireRequesterPermission(context.requester, 'images.view');
+      // upload_image carries its own media payload: it needs editing (checked below), not reading.
+      const onManagedMedia = toolName === 'upload_image' ? undefined : () => requireRequesterRight(context.requester, 'read');
       validateMcpToolArguments(params, onManagedMedia, pluginPageAction || findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null, { toolName });
     }
   }
-  // A chat may add its administrator-delegated domain keys; external keys still use only their permission group.
+  // The account's rights (an HTTP key: its permission group's) for the tool's scope.
   if (context.requester || isKeyContext(context)) {
-    if (featurePermissionOf(toolName) === undefined) throw new Error('Unclassified account-bound tool.');
-    for (const permission of requiredToolKeys(toolName)) requireContextPermission(context, permission);
-    if (getMcpToolScope(toolName) === 'configure' && context.requester?.accountType !== 'admin') throw new Error('Administrator access required.');
-    if (ADMIN_ONLY_TOOLS.has(toolName) && !(context.requester && isRequesterAdmin(context.requester))) {
-      throw new Error('Administrator access required: only administrators can switch the live wallpaper or save its schedule, as in the wallpaper editor. list_wallpapers still reads the current state.');
+    const requirement = toolRequirement(toolName);
+    if (requirement === undefined) throw new Error('Unclassified account-bound tool.');
+    if (requirement === 'admin' && !(context.requester && isRequesterAdmin(context.requester))) {
+      throw new Error(toolName === 'set_live_wallpaper' || toolName === 'save_wallpaper_schedule'
+        ? 'Administrator access required: only administrators can switch the live wallpaper or save its schedule, as in the wallpaper editor. list_wallpapers still reads the current state.'
+        : 'Administrator access required.');
     }
-    if (toolName === 'resolve_image_group_path') requireContextPermission(context, params.create === false ? 'images.view' : 'images.edit');
-    if (toolName === 'upload_image' && (params.group_id || params.group_path)) requireContextPermission(context, 'images.edit');
-    if (toolName === 'move_image_groups' && params.preview !== true && params.merge_token) requireContextPermission(context, 'images.delete');
-    if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
-      if (params.group_id || params.group_path) requireContextPermission(context, 'images.edit');
-    }
+    if (requirement === 'signedIn' && !context.requester && !keyHasGroup(context.keyGroup ?? null)) throw new Error('Permission required: this key has no permission group.');
+    if (requirement !== 'admin' && requirement !== 'signedIn') requireContextRight(context, requirement);
+    if (toolName === 'resolve_image_group_path') requireContextRight(context, params.create === false ? 'read' : 'edit');
+    if (toolName === 'move_image_groups' && params.preview !== true && params.merge_token) requireContextRight(context, 'delete');
+    // Generating into an existing group is part of generating (as on REST); a group path may create a group.
+    if ((getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) && params.group_path) requireContextRight(context, 'edit');
   }
 }

@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import type { WildcardRecord } from '@/lib/api-wildcards'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -13,9 +14,9 @@ export interface WildcardWorkspacePermissionState {
 /** Resolve wildcard workspace action permissions from the current auth status payload. */
 export function getWildcardWorkspacePermissions(permissionKeys: string[]): WildcardWorkspacePermissionState {
   return {
-    canEditWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.edit'),
-    canDeleteWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.edit'),
-    canScanLora: hasAuthPermission(permissionKeys, 'wildcards.edit'),
+    canEditWildcardEntries: hasAuthPermission(permissionKeys, CONTENT_PERMISSIONS.edit),
+    canDeleteWildcardEntries: hasAuthPermission(permissionKeys, CONTENT_PERMISSIONS.delete),
+    canScanLora: hasAuthPermission(permissionKeys, CONTENT_PERMISSIONS.edit),
   }
 }
 

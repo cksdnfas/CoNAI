@@ -4,12 +4,12 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardModel } from '../models/Wildcard';
 import { WildcardService } from '../services/wildcardService';
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireRead } from '../middleware/authMiddleware';
 import { withNativeEditRevisions } from '../services/nativeEditRevision';
 
 const router = Router();
 
-router.use(requirePermission('wildcards.view'));
+router.use(requireRead);
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {

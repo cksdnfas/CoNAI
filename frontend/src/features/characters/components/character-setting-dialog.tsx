@@ -38,6 +38,7 @@ type DialogProps = {
   /** Loads the list's next batch (null when everything is loaded) and resolves to the loaded settings after it. */
   onLoadMore: (() => Promise<CharacterSettingSummary[]>) | null
   canEdit: boolean
+  canDelete: boolean
   admin: boolean
   tab: CharacterAppearanceTab
   onTabChange: (tab: CharacterAppearanceTab) => void
@@ -50,9 +51,9 @@ type DialogProps = {
  * One appearance setting over the library (`setting=<id>` or `new=<folder>`): the name as the title, the reference and
  * avatar beside the tabs, stepping through the listed settings (the next batch loads at the end of the list) and saving
  * in the footer. Closing goes through the URL, so the library's leave guard asks once about unsaved edits. Without
- * `characters.edit` it only shows; image generation is for administrators.
+ * the edit right it only shows; image generation is for administrators.
  */
-export function CharacterSettingDialog({ editor, folders, items, total, onLoadMore, canEdit, admin, tab, onTabChange, onOpen, onClose, onToggleFavorite }: DialogProps) {
+export function CharacterSettingDialog({ editor, folders, items, total, onLoadMore, canEdit, canDelete, admin, tab, onTabChange, onOpen, onClose, onToggleFavorite }: DialogProps) {
   const { t, language } = useI18n()
   const { showSnackbar } = useSnackbar()
   const [moving, setMoving] = useState(false)
@@ -79,9 +80,9 @@ export function CharacterSettingDialog({ editor, folders, items, total, onLoadMo
         <ActionMenuButton label={t({ ko: '외형 설정 작업', en: 'Setting actions' })} entries={[
           canEdit ? { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, disabled: busy, onSelect: () => setMoving(true) } : null,
           { key: 'copy', label: t({ ko: '태그 복사', en: 'Copy tags' }), icon: Copy, onSelect: () => void copy() },
-          canEdit && base ? '-' : null,
+          canDelete && base ? '-' : null,
           // Failures are already reported by the editor (preview and delete snackbars).
-          canEdit && base ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting, onSelect: () => void editor.remove(true).catch(() => undefined) } : null,
+          canDelete && base ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting, onSelect: () => void editor.remove(true).catch(() => undefined) } : null,
         ]} />
       </> : undefined}
       ready={editor.ready}

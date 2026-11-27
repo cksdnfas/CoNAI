@@ -17,9 +17,6 @@ import { GRAPH_IMAGE_AUTHORITY_INPUT } from './graph-workflow-executor/graphImag
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
 
-/** Keys a schedule's account must still hold when it runs (the same ones it needed to save the schedule). */
-const SCHEDULE_RUN_PERMISSIONS = ['generation.execute']
-
 function timingOf(schedule: GraphWorkflowScheduleRecord) {
   return {
     scheduleType: schedule.schedule_type,
@@ -265,7 +262,8 @@ export class GraphWorkflowScheduleService {
     // Saved before accounts were recorded: keeps running without one, as it always did.
     const runAs = schedule.run_as_account_id === null || schedule.run_as_account_id === undefined
       ? null
-      : resolveAutomationRunAs(schedule.run_as_account_id, SCHEDULE_RUN_PERMISSIONS)
+      // Saving a schedule only needs sign-in, so running it only needs the account to still be active.
+      : resolveAutomationRunAs(schedule.run_as_account_id, [])
     if (runAs && !runAs.ok) {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'paused',

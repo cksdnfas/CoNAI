@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { IMAGE_VIEW_PERMISSION } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequestContext, McpRequester } from '../../mcp/context'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { libraryMediaAllowed, type ContentRatingLimit } from '../contentRating'
 import { ChatSkillStore, skillGuide } from './chatSkills'
 import { fitAuxiliaryHistory } from './chatAuxiliarySettings'
@@ -69,7 +68,7 @@ export type GeneratedImage = { historyId: number; url: string }
  */
 export async function loadGeneratedImages(params: { threadId: number; requester: McpRequester; limit: number; contentLimit: ContentRatingLimit; skip?: (historyId: number) => boolean }): Promise<GeneratedImage[]> {
   if (params.limit <= 0) return []
-  try { requireRequesterPermission(params.requester, IMAGE_VIEW_PERMISSION) } catch { return [] }
+  try { requireRequesterRight(params.requester, 'read') } catch { return [] }
   const accountId = params.requester.accountId
   const rows = getUserSettingsDb().prepare(`SELECT h.id, h.composite_hash FROM chat_generation_links l
     JOIN generation_queue_jobs j ON j.id = l.job_id
@@ -301,7 +300,7 @@ async function writeAndQueue({ context, thread, profile, preset, toolName, messa
   }
   if (!args) throw new Error(`모델이 쓴 프롬프트를 읽지 못했어.${refused ? ` (${refused.reason})` : ''}`)
   const usesReference = presetUsesReference(preset)
-  if (usesReference) requireRequesterPermission(requester, 'images.view')
+  if (usesReference) requireRequesterRight(requester, 'read')
   // Loaded here: the job tools reach most of the chat services, and this module is loaded by some of them.
   const { enqueueMcpGenerationJob } = await import('../../mcp/tools/generationJobTools')
   const job = await buildChatGenerationPresetJob(preset, args, usesReference ? profile : null)

@@ -132,7 +132,6 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     generationPresetIds: profile?.generationPresetIds ?? [],
     mcpScopes: profile?.mcpScopes ?? ['read'],
     toolAllowlist: profile?.toolAllowlist ?? null,
-    delegatedPermissions: profile?.delegatedPermissions ?? [],
     toolOutputLimit: profile?.toolOutputLimit ?? defaults?.toolOutputLimit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     contextTurns: profile?.contextTurns ?? defaults?.contextTurns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     contextTokens: profile?.contextTokens ?? null,

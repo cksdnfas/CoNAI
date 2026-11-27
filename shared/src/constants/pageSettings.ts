@@ -1,6 +1,7 @@
 import { CHAT_CAPTURE_LIMITS, LORE_SELECTION_LIMITS, TOOL_ROUND_LIMITS } from './chatLimits';
+import { ADMIN_PAGE_PERMISSION } from './permissions';
 
-/** Safe, delegable settings exposed beside a page. Paths are an explicit allowlist, never client supplied paths. */
+/** Safe settings exposed beside a page (administrators only). Paths are an explicit allowlist, never client supplied paths. */
 export interface PageSettingField {
   id: string;
   path?: string;
@@ -19,7 +20,6 @@ const choice = (id: string, ko: string, en: string, options: readonly (string | 
 const text = (id: string, ko: string, en: string): PageSettingField => ({ id, label: { ko, en }, type: 'string' });
 export interface PageSettingsScope {
   label: { ko: string; en: string };
-  permission: string;
   section: string;
   fields: readonly PageSettingField[];
 }
@@ -31,7 +31,7 @@ const pacing = (provider: string, label: string): PageSettingField[] => [
   number(`${provider}.minStartIntervalSeconds`, `${label} 최소 간격(초)`, `${label} minimum interval (seconds)`, 0, 3600),
 ];
 export const PAGE_SETTINGS_SCOPES = {
-  appearance: { label: { ko: '공용 화면', en: 'Shared appearance' }, permission: 'settings.appearance.manage', section: 'general', fields: [
+  appearance: { label: { ko: '공용 화면', en: 'Shared appearance' }, section: 'general', fields: [
     choice('themeMode', '테마', 'Theme', ['system', 'dark', 'light']),
     choice('accentPreset', '강조색', 'Accent', ['conai', 'ocean', 'forest', 'custom']),
     choice('surfacePreset', '배경', 'Surface', ['studio', 'midnight', 'paper', 'custom']),
@@ -40,11 +40,11 @@ export const PAGE_SETTINGS_SCOPES = {
     choice('glassPreset', '반투명 효과', 'Translucency', ['subtle', 'balanced', 'immersive']),
     choice('shadowPreset', '그림자', 'Shadows', ['soft', 'balanced', 'dramatic']),
   ] },
-  general: { label: { ko: '라이브러리 표시', en: 'Library display' }, permission: 'settings.library.manage', section: 'general', fields: [
+  general: { label: { ko: '라이브러리 표시', en: 'Library display' }, section: 'general', fields: [
     flag('enableGallery', '갤러리 기능 사용', 'Enable gallery features'), flag('showRatingBadges', '등급 배지 표시', 'Show rating badges'),
     choice('imageSimilarityCheckMode', '중복 검사', 'Duplicate checks', ['manual', 'always']),
   ] },
-  similarity: { label: { ko: '유사도', en: 'Similarity' }, permission: 'settings.library.manage', section: 'library', fields: [
+  similarity: { label: { ko: '유사도', en: 'Similarity' }, section: 'library', fields: [
     flag('autoGenerateHashOnUpload', '업로드 시 유사도 해시 생성', 'Build similarity hashes on upload'),
     number('detailSimilarThreshold', '이미지 유사도 거리', 'Image similarity distance', 1, 64),
     number('detailSimilarLimit', '유사 이미지 개수', 'Similar image count', 1, 12),
@@ -58,7 +58,7 @@ export const PAGE_SETTINGS_SCOPES = {
     number('promptSimilarity.resultLimit', '유사 프롬프트 개수', 'Similar prompt count', 1, 12),
     number('promptSimilarity.combinedThreshold', '프롬프트 유사도 기준', 'Prompt similarity threshold', 0, 100, false),
   ] },
-  metadata: { label: { ko: '메타데이터 추출', en: 'Metadata extraction' }, permission: 'settings.library.manage', section: 'library', fields: [
+  metadata: { label: { ko: '메타데이터 추출', en: 'Metadata extraction' }, section: 'library', fields: [
     flag('enableSecondaryExtraction', '숨은 메타데이터 추출', 'Extract hidden metadata'),
     choice('stealthScanMode', '탐색 방식', 'Scan mode', ['fast', 'full', 'skip']),
     number('stealthMaxFileSizeMB', '최대 파일 크기(MB)', 'Maximum file size (MB)', 1, undefined, false),
@@ -66,7 +66,7 @@ export const PAGE_SETTINGS_SCOPES = {
     flag('skipStealthForComfyUI', 'ComfyUI 숨은 정보 탐색 생략', 'Skip hidden scan for ComfyUI'),
     flag('skipStealthForWebUI', 'WebUI 숨은 정보 탐색 생략', 'Skip hidden scan for WebUI'),
   ] },
-  'image-save': { label: { ko: '이미지 저장', en: 'Image saving' }, permission: 'settings.media.manage', section: 'media', fields: [
+  'image-save': { label: { ko: '이미지 저장', en: 'Image saving' }, section: 'media', fields: [
     choice('defaultFormat', '저장 형식', 'Format', ['original', 'png', 'jpeg', 'webp']),
     number('quality', '품질', 'Quality', 1, 100), flag('resizeEnabled', '크기 조절', 'Resize'),
     number('maxWidth', '최대 너비', 'Maximum width', 64, 16384), number('maxHeight', '최대 높이', 'Maximum height', 64, 16384),
@@ -77,40 +77,40 @@ export const PAGE_SETTINGS_SCOPES = {
     flag('applyToUpload', '업로드에 적용', 'Apply to uploads'), flag('applyToWorkflowOutputs', '워크플로 출력에 적용', 'Apply to workflow outputs'),
   ] },
   // Pattern text is checked by the native route (validateFileNamePattern), like every other field's range.
-  'file-naming': { label: { ko: '파일 이름', en: 'File names' }, permission: 'settings.media.manage', section: 'media', fields: [
+  'file-naming': { label: { ko: '파일 이름', en: 'File names' }, section: 'media', fields: [
     text('upload', '업로드', 'Uploads'), text('generated', '생성물', 'Generated files'), text('collision', '이름이 겹칠 때', 'When a name is taken'),
   ] },
-  thumbnail: { label: { ko: '썸네일', en: 'Thumbnails' }, permission: 'settings.media.manage', section: 'media', fields: [
+  thumbnail: { label: { ko: '썸네일', en: 'Thumbnails' }, section: 'media', fields: [
     choice('size', '썸네일 크기', 'Thumbnail size', ['original', '2048', '1080', '720', '512']), number('quality', '품질', 'Quality', 60, 100),
   ] },
-  'video-optimization': { label: { ko: '영상 저장', en: 'Video saving' }, permission: 'settings.media.manage', section: 'media', fields: [
+  'video-optimization': { label: { ko: '영상 저장', en: 'Video saving' }, section: 'media', fields: [
     flag('enabled', '영상 최적화', 'Optimize videos'), choice('preset', '최적화 프리셋', 'Optimization preset', ['high-quality', 'balanced', 'economy']),
     number('crf', 'CRF', 'CRF', 18, 40), number('audioBitrateKbps', '오디오 비트레이트(kbps)', 'Audio bitrate (kbps)', 32, 320),
     flag('applyToUpload', '업로드에 적용', 'Apply to uploads'), flag('applyToGeneratedOutputs', '생성 결과에 적용', 'Apply to generated outputs'), flag('applyToBackupImports', '백업 가져오기에 적용', 'Apply to backup imports'),
   ] },
-  'generation-throttle': { label: { ko: '생성 실행', en: 'Generation pacing' }, permission: 'settings.generation.manage', section: 'generation', fields: [
+  'generation-throttle': { label: { ko: '생성 실행', en: 'Generation pacing' }, section: 'generation', fields: [
     ...pacing('novelai', 'NovelAI'), ...pacing('codex', 'Codex'),
     number('reservations.maxConcurrentJobs', '예약 동시 실행', 'Concurrent reservations', 1, 12),
     choice('reservations.userQueuePolicy', '사용자 대기열 처리', 'User queue policy', ['continue_limited', 'hold_until_empty']),
   ] },
-  tagger: { label: { ko: '자동 태그', en: 'Automatic tags' }, permission: 'settings.analysis.manage', section: 'auto', fields: [
+  tagger: { label: { ko: '자동 태그', en: 'Automatic tags' }, section: 'auto', fields: [
     flag('enabled', '태거 활성화', 'Enable tagger'), flag('autoTagOnUpload', '업로드 시 자동 태그', 'Tag on upload'),
     choice('model', '태거 모델', 'Tagger model', ['vit', 'swinv2', 'convnext', 'pixai-v1']), choice('device', '연산 장치', 'Device', ['auto', 'cpu', 'cuda']),
     number('generalThreshold', '일반 태그 기준', 'General tag threshold', 0, 1, false), number('characterThreshold', '캐릭터 태그 기준', 'Character tag threshold', 0, 1, false),
     flag('keepModelLoaded', '모델 메모리 유지', 'Keep model loaded'), number('autoUnloadMinutes', '미사용 해제(분)', 'Unload after idle minutes', 1, 1440),
   ] },
-  kaloscope: { label: { ko: '작가·화풍 분석', en: 'Artist and style analysis' }, permission: 'settings.analysis.manage', section: 'auto', fields: [
+  kaloscope: { label: { ko: '작가·화풍 분석', en: 'Artist and style analysis' }, section: 'auto', fields: [
     flag('enabled', '작가 분석 활성화', 'Enable artist analysis'), flag('autoTagOnUpload', '업로드 시 분석', 'Analyze on upload'),
     choice('device', '연산 장치', 'Device', ['auto', 'cpu', 'cuda']), number('topK', '후보 작가 수', 'Artist candidates', 1, 200),
     flag('styleVectors', '화풍 벡터 저장', 'Store style vectors'), flag('keepModelLoaded', '모델 메모리 유지', 'Keep model loaded'), number('autoUnloadMinutes', '미사용 해제(분)', 'Unload after idle minutes', 1, 1440),
   ] },
-  embedding: { label: { ko: '의미 검색', en: 'Semantic search' }, permission: 'settings.analysis.manage', section: 'auto', fields: [
+  embedding: { label: { ko: '의미 검색', en: 'Semantic search' }, section: 'auto', fields: [
     flag('enabled', '임베딩 활성화', 'Enable embeddings'), flag('imageSearch', '이미지 의미 검색', 'Image semantic search'),
     flag('fileSearch', '파일 의미 검색', 'File semantic search'), flag('postSearch', '지식 문서 의미 검색', 'Knowledge semantic search'),
     flag('chatRecall', '채팅 기억 회상', 'Chat recall'), flag('lorebook', '로어북 의미 발동', 'Semantic lorebook triggers'), flag('chatHistory', '채팅 기록 의미 검색', 'Chat history semantic search'),
     flag('keepModelLoaded', '모델 메모리 유지', 'Keep model loaded'), number('autoUnloadMinutes', '미사용 해제(분)', 'Unload after idle minutes', 1, 1440),
   ] },
-  posts: { label: { ko: '게시판·지식', en: 'Posts and knowledge' }, permission: 'settings.posts.manage', section: 'posts', fields: [
+  posts: { label: { ko: '게시판·지식', en: 'Posts and knowledge' }, section: 'posts', fields: [
     choice('layout', '기본 목록', 'Default layout', ['feed', 'cards', 'sns']), choice('botPostStatus', '봇 게시글 기본 상태', 'Bot post status', ['published', 'draft']),
     flag('safety.summonEnabled', '댓글 봇 호출', 'Summon bots in comments'),
     number('safety.chainDepth', '봇 호출 단계', 'Bot chain depth', 0, 20), number('safety.botsPerComment', '댓글당 봇 수', 'Bots per comment', 1, 30),
@@ -119,7 +119,7 @@ export const PAGE_SETTINGS_SCOPES = {
     number('knowledge.dailyCallLimit', '지식 평가 하루 호출 상한', 'Daily knowledge evaluation calls', 0, 10000), { ...number('knowledge.dailyTok', '지식 평가 하루 토큰 상한', 'Daily knowledge evaluation tokens', 0, 100000000), path: 'knowledge.dailyTokenLimit' },
     flag('topicEvaluation.autoEnabled', '주제 관련도 평가', 'Topic relevance evaluation'),
   ] },
-  chat: { label: { ko: '채팅 공통', en: 'Shared chat settings' }, permission: 'settings.chat.manage', section: 'chat', fields: [
+  chat: { label: { ko: '채팅 공통', en: 'Shared chat settings' }, section: 'chat', fields: [
     { ...flag('enabled', '채팅 활성화', 'Enable chat'), heading: { ko: '기본', en: 'Basics' } },
     { ...flag('loreAutoSave', '로어 자동 저장', 'Automatically save lore'), heading: { ko: '기억', en: 'Memory' } },
     number('loreSelectionLimit', '선택 로어 상위 개수', 'Top lore entries kept', LORE_SELECTION_LIMITS.min, LORE_SELECTION_LIMITS.max),
@@ -181,7 +181,7 @@ const registeredPageRows: SettingRowDefinition[] = (Object.keys(PAGE_SETTINGS_SC
         : scope === 'chat' && field.id === 'diagnostics.enabled' ? 'diagnostics'
           : field.id === 'imageSimilarityCheckMode' ? 'similarity' : scope === 'generation-throttle' && field.id.startsWith('reservations.') ? 'schedules' : location.group,
     scope: 'shared',
-    permission: definition.permission,
+    permission: ADMIN_PAGE_PERMISSION,
     advanced: scope === 'posts' && field.id.startsWith('knowledge.daily'),
   }));
 });
@@ -197,11 +197,11 @@ const advancedKnowledgeRows = [
   ['aiGlobalMinimumCap', '사람 평가 없을 때', 'Without human feedback'], ['aiGlobalHumanRatio', '사람 대비 비율', 'Ratio to human feedback'],
   ['historyWeight', '이전 판 참고 비율', 'Earlier version weight'], ['historyCap', '이전 판 참고 상한', 'Earlier version cap'],
   ['privateRetentionDays', '작업 근거', 'Private evidence'], ['diagnosticRetentionDays', '진단 자료', 'Diagnostics'],
-].map(([id, ko, en]) => setting(`posts.knowledge.${id}`, ko, en, NO_DESCRIPTION, 'posts', 'knowledge', 'settings.posts.manage', true, 'shared', ['지식 평가', 'knowledge evaluation']));
+].map(([id, ko, en]) => setting(`posts.knowledge.${id}`, ko, en, NO_DESCRIPTION, 'posts', 'knowledge', ADMIN_PAGE_PERMISSION, true, 'shared', ['지식 평가', 'knowledge evaluation']));
 const advancedTopicRows = [
   ['dailyCallLimit', '계정당 하루 호출', 'Daily calls per account'], ['dailyTokenLimit', '계정당 하루 토큰', 'Daily tokens per account'],
   ['maxInputCharacters', '입력 글자 수', 'Input characters'], ['maxRetries', '재시도', 'Retries'],
-].map(([id, ko, en]) => setting(`posts.topicEvaluation.${id}`, ko, en, NO_DESCRIPTION, 'posts', 'topics', 'settings.posts.manage', true, 'shared', ['주제 관련도', 'topic evaluation']));
+].map(([id, ko, en]) => setting(`posts.topicEvaluation.${id}`, ko, en, NO_DESCRIPTION, 'posts', 'topics', ADMIN_PAGE_PERMISSION, true, 'shared', ['주제 관련도', 'topic evaluation']));
 
 function settingGroup(section: string, group: string, prefix: string, labels: string[][]): SettingRowDefinition[] {
   return labels.map(([id, ko, en]) => setting(`${prefix}${id}`, ko, en, NO_DESCRIPTION, section, group, 'page.settings.view'));
@@ -233,10 +233,10 @@ const SETTINGS_ROW_DEFINITIONS: readonly SettingRowDefinition[] = [
   setting('mcpHttp.enabled', 'HTTP MCP 사용', 'Enable HTTP MCP', { ko: '권한 그룹이 지정된 API 키로 외부 도구의 접속을 허용해.', en: 'Allow external tools to connect using permission-group API keys.' }, 'system', 'mcp', 'page.settings.view'),
   setting('headerNavigation', '상단 고정 페이지', 'Pinned pages', { ko: '누른 페이지는 상단에 이름과 함께 늘 보이고(휴대폰은 앞 4개가 하단 탭), 나머지는 라이브러리·만들기·확장 메뉴에 들어가. 끌어서 순서를 바꿔. 공용 설정이야.', en: 'Pinned pages stay in the top bar with their names (the first four are the phone’s bottom tabs); the rest sit in the Library, Create and Extensions menus. Drag to reorder. Shared for everyone.' }, 'general', 'display', 'page.settings.view', false, 'shared', ['상단 메뉴', '고정', '핀', '하단 탭', 'navigation', 'pin', 'header menu']),
   setting('headerTools', '오른쪽 고정 메뉴', 'Fixed right-side menu', { ko: '헤더 오른쪽에 고정되는 메뉴야. 눌러서 표시 여부를 바꿔.', en: 'These controls stay on the right of the header. Click to show or hide them.' }, 'general', 'display', 'page.settings.view'),
-  setting('chat.piCodemode', 'pi codemode', 'pi codemode', { ko: 'pi 프로필이 짧은 스크립트로 도구 여러 개를 호출해. 도구 호출 반복 한도가 적용돼.', en: 'Let pi profiles call tools through short scripts. The tool round limit applies.' }, 'chat', 'tools', 'settings.chat.manage'),
+  setting('chat.piCodemode', 'pi codemode', 'pi codemode', { ko: 'pi 프로필이 짧은 스크립트로 도구 여러 개를 호출해. 도구 호출 반복 한도가 적용돼.', en: 'Let pi profiles call tools through short scripts. The tool round limit applies.' }, 'chat', 'tools', ADMIN_PAGE_PERMISSION),
   setting('contentEvaluation.modelSlotId', '주제 관련도 판단 모델', 'Topic relevance judge model', { ko: '등록한 주제의 관련도를 평가할 모델이야.', en: 'The model that evaluates relevance to registered topics.' }, 'posts', 'topics', 'page.settings.view'),
-  setting('posts.knowledge.judgeSlotId', '지식 판단 모델', 'Knowledge judge model', { ko: '지식 문서의 근거와 품질을 평가할 모델이야.', en: 'The model that evaluates knowledge evidence and quality.' }, 'posts', 'knowledge', 'settings.posts.manage'),
-  setting('posts.knowledge.weights', '평가 비중', 'Feedback weights', { ko: '사람·사용 AI·판단 모델의 평가 비중을 정해.', en: 'Set the weights of human, use-AI and judge feedback.' }, 'posts', 'knowledge', 'settings.posts.manage', true),
+  setting('posts.knowledge.judgeSlotId', '지식 판단 모델', 'Knowledge judge model', { ko: '지식 문서의 근거와 품질을 평가할 모델이야.', en: 'The model that evaluates knowledge evidence and quality.' }, 'posts', 'knowledge', ADMIN_PAGE_PERMISSION),
+  setting('posts.knowledge.weights', '평가 비중', 'Feedback weights', { ko: '사람·사용 AI·판단 모델의 평가 비중을 정해.', en: 'Set the weights of human, use-AI and judge feedback.' }, 'posts', 'knowledge', ADMIN_PAGE_PERMISSION, true),
   ...settingGroup('auto', 'runtime', 'aiRuntime.', [['torchBackend', 'AI 런타임 빌드', 'AI runtime build'], ['pythonSource', 'Python 환경', 'Python environment'], ['customPythonPath', '직접 지정 Python 경로', 'Custom Python path'], ['cpuThreads', 'CPU 스레드', 'CPU threads']]),
   ...settingGroup('auto', 'kaloscope', 'kaloscope.', [['artistLinkUrlTemplate', 'Artist 링크 URL', 'Artist link URL']]),
   ...settingGroup('auto', 'ratings', 'ratingWeights.', [['general_weight', 'General 가중치', 'General weight'], ['sensitive_weight', 'Sensitive 가중치', 'Sensitive weight'], ['questionable_weight', 'Questionable 가중치', 'Questionable weight'], ['explicit_weight', 'Explicit 가중치', 'Explicit weight']]),
@@ -247,8 +247,8 @@ const SETTINGS_ROW_DEFINITIONS: readonly SettingRowDefinition[] = [
   setting('promptForDownloadLocation', '다운로드할 때 파일명과 위치 확인', 'Ask for file name and save location', { ko: '다운로드 전에 저장 위치를 확인해.', en: 'Ask for a destination before downloading.' }, 'general', 'display', 'page.settings.view'),
   setting('mine.persona', '채팅 사용자 프로필', 'Chat personas', { ko: '이 계정으로 대화할 때 쓸 이름과 페르소나야.', en: 'Your account’s names and personas for conversations.' }, 'mine', 'persona', 'page.chat.view', false, 'mine', ['사용자 프로필', 'user profile', '페르소나']),
   setting('mine.flags', '플래그', 'Flags', { ko: '내 플래그와 공용 플래그의 내 사본을 관리해. 관리자가 만든 원본은 공용이야.', en: 'Manage your flags and personal copies of shared flags. Administrator-created originals are shared.' }, 'mine', 'flags', 'page.chat.view', false, 'mine', ['flag', '상황']),
-  setting('generation.nai', 'NovelAI 인증', 'NovelAI authentication', { ko: '모든 사용자가 쓸 서버 API 토큰을 연결해.', en: 'Connect the server API token used by all users.' }, 'generation', 'nai', 'settings.generation.manage', false, 'shared', ['NAI', '토큰', '인증', 'token']),
-  setting('generation.comfyui', 'ComfyUI 서버', 'ComfyUI servers', { ko: '생성 서버를 등록하고 연결을 확인해.', en: 'Register generation servers and check connections.' }, 'generation', 'comfyui', 'settings.generation.manage', false, 'shared', ['endpoint', '엔드포인트']),
+  setting('generation.nai', 'NovelAI 인증', 'NovelAI authentication', { ko: '모든 사용자가 쓸 서버 API 토큰을 연결해.', en: 'Connect the server API token used by all users.' }, 'generation', 'nai', ADMIN_PAGE_PERMISSION, false, 'shared', ['NAI', '토큰', '인증', 'token']),
+  setting('generation.comfyui', 'ComfyUI 서버', 'ComfyUI servers', { ko: '생성 서버를 등록하고 연결을 확인해.', en: 'Register generation servers and check connections.' }, 'generation', 'comfyui', ADMIN_PAGE_PERMISSION, false, 'shared', ['endpoint', '엔드포인트']),
   setting('llm.connections', 'AI 연결·모델 슬롯', 'AI connections and model slots', { ko: '연결과 대표 모델을 관리해.', en: 'Manage connections and representative models.' }, 'llm', 'connections', 'page.settings.view', false, 'shared', ['LLM', '모델', 'Codex', 'Claude', 'pi']),
   setting('llm.dashboard', 'AI 사용량', 'AI usage', { ko: '연결별 사용량을 확인해.', en: 'Review usage by connection.' }, 'llm', 'dashboard', 'page.settings.view'),
   setting('llm.prompts', 'AI 프롬프트', 'AI prompts', { ko: '워크플로에서 쓸 프롬프트를 관리해.', en: 'Manage workflow prompts.' }, 'llm', 'prompts', 'page.settings.view'),
@@ -258,15 +258,15 @@ const SETTINGS_ROW_DEFINITIONS: readonly SettingRowDefinition[] = [
   setting('chat.lorebooks', '로어북', 'Lorebooks', { ko: '공용 로어북과 계정 로어북을 관리해.', en: 'Manage shared and account lorebooks.' }, 'chat', 'lorebooks', 'page.settings.view', false, 'shared', ['lore', '로어']),
   setting('chat.routines', '채팅 루틴', 'Chat routines', { ko: '정해진 시각에 채팅을 깨우는 루틴을 관리해.', en: 'Manage the routines that wake chats at set times.' }, 'chat', 'routines', 'page.settings.view', false, 'shared', ['routine', '예약', '스케줄']),
   setting('chat.judge', '판단 기록', 'Judge log', { ko: '판단 모델이 내린 판정과 기준선을 확인해.', en: 'Review the judge model\'s verdicts and thresholds.' }, 'chat', 'judge', 'page.settings.view', false, 'shared', ['judge', '판정', '기록', 'log']),
-  setting('chat.toolRoundLimit', '도구 호출 반복 한도', 'Tool round limit', { ko: '한 답변에서 모델이 도구를 부르고 결과를 받는 왕복의 최대 횟수야.', en: 'Maximum model/tool round trips in one reply.' }, 'chat', 'tools', 'settings.chat.manage', false, 'shared', ['tool', '도구', '반복']),
+  setting('chat.toolRoundLimit', '도구 호출 반복 한도', 'Tool round limit', { ko: '한 답변에서 모델이 도구를 부르고 결과를 받는 왕복의 최대 횟수야.', en: 'Maximum model/tool round trips in one reply.' }, 'chat', 'tools', ADMIN_PAGE_PERMISSION, false, 'shared', ['tool', '도구', '반복']),
   setting('chat.flags', '공용 플래그', 'Shared flags', { ko: '관리자가 만든 원본은 모든 계정에 공유돼. 개인 사본은 내 설정에서 바꿔.', en: 'Administrator-created originals are shared with every account. Edit personal copies in My settings.' }, 'chat', 'flags', 'page.settings.view', false, 'shared', ['flag', '플래그']),
-  setting('chat.loreSelectionLimit', '선택 로어 상위 개수', 'Top lore entries kept', { ko: '항상 적용 로어를 제외하고 키워드가 잘 맞는 로어를 이 개수까지 넣어.', en: 'Keep this many matching keyword lore entries, excluding always-on lore.' }, 'chat', 'memory', 'settings.chat.manage'),
-  setting('chat.loreKeyLanguage', '로어북 추가 키 언어', 'Lorebook second key language', { ko: '영어 키와 함께 찾을 언어야.', en: 'The keyword language to match alongside English.' }, 'chat', 'memory', 'settings.chat.manage', true),
-  setting('chat.webResearch.engine', '웹 검색 담당', 'Web search by', { ko: '채팅의 웹 검색을 맡을 엔진이야.', en: 'The engine responsible for chat web search.' }, 'chat', 'web', 'settings.chat.manage', false, 'shared', ['web', '검색']),
-  setting('chat.webResearch.model', '웹 검색 모델', 'Web search model', { ko: '비워 두면 엔진의 기본 모델을 써.', en: 'Leave empty to use the engine default.' }, 'chat', 'web', 'settings.chat.manage'),
-  setting('chat.webResearch.dailyLimit', '계정당 하루 검색', 'Searches per account a day', { ko: '비워 두면 검색 횟수를 제한하지 않아.', en: 'Leave empty for unlimited searches.' }, 'chat', 'web', 'settings.chat.manage'),
-  setting('chat.diagnostics.captureRaw', '원문 기록', 'Capture raw requests', { ko: '진단할 때 요청 원문도 보관해.', en: 'Keep raw requests for diagnostics.' }, 'chat', 'diagnostics', 'settings.chat.manage', true),
-  setting('chat.diagnostics.captureLimit', '채팅당 보관', 'Keep per chat', { ko: '채팅마다 보관할 진단 기록 수야.', en: 'Number of diagnostic records retained per chat.' }, 'chat', 'diagnostics', 'settings.chat.manage', true),
+  setting('chat.loreSelectionLimit', '선택 로어 상위 개수', 'Top lore entries kept', { ko: '항상 적용 로어를 제외하고 키워드가 잘 맞는 로어를 이 개수까지 넣어.', en: 'Keep this many matching keyword lore entries, excluding always-on lore.' }, 'chat', 'memory', ADMIN_PAGE_PERMISSION),
+  setting('chat.loreKeyLanguage', '로어북 추가 키 언어', 'Lorebook second key language', { ko: '영어 키와 함께 찾을 언어야.', en: 'The keyword language to match alongside English.' }, 'chat', 'memory', ADMIN_PAGE_PERMISSION, true),
+  setting('chat.webResearch.engine', '웹 검색 담당', 'Web search by', { ko: '채팅의 웹 검색을 맡을 엔진이야.', en: 'The engine responsible for chat web search.' }, 'chat', 'web', ADMIN_PAGE_PERMISSION, false, 'shared', ['web', '검색']),
+  setting('chat.webResearch.model', '웹 검색 모델', 'Web search model', { ko: '비워 두면 엔진의 기본 모델을 써.', en: 'Leave empty to use the engine default.' }, 'chat', 'web', ADMIN_PAGE_PERMISSION),
+  setting('chat.webResearch.dailyLimit', '계정당 하루 검색', 'Searches per account a day', { ko: '비워 두면 검색 횟수를 제한하지 않아.', en: 'Leave empty for unlimited searches.' }, 'chat', 'web', ADMIN_PAGE_PERMISSION),
+  setting('chat.diagnostics.captureRaw', '원문 기록', 'Capture raw requests', { ko: '진단할 때 요청 원문도 보관해.', en: 'Keep raw requests for diagnostics.' }, 'chat', 'diagnostics', ADMIN_PAGE_PERMISSION, true),
+  setting('chat.diagnostics.captureLimit', '채팅당 보관', 'Keep per chat', { ko: '채팅마다 보관할 진단 기록 수야.', en: 'Number of diagnostic records retained per chat.' }, 'chat', 'diagnostics', ADMIN_PAGE_PERMISSION, true),
 ];
 /** A hand-written row replaces the one generated from a page-settings field with the same id (it adds the description and search terms). */
 export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [...new Map(SETTINGS_ROW_DEFINITIONS.map((row) => [row.id, row])).values()];
@@ -312,7 +312,6 @@ function featureSettingsScopes(path: string): PageSettingsScopeId[] {
   if (path === '/sprite') return ['image-save'];
   return [];
 }
-export function pageSettingsPermission(scope: PageSettingsScopeId) { return PAGE_SETTINGS_SCOPES[scope].permission; }
 export function selectPageSettings(scope: PageSettingsScopeId, source: unknown): Record<string, PageSettingValue> {
   return Object.fromEntries((PAGE_SETTINGS_SCOPES[scope].fields as readonly PageSettingField[]).map((field) => {
     const value = (field.path ?? field.id).split('.').reduce<unknown>((node, key) => node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined, source);

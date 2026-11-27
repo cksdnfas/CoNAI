@@ -20,11 +20,11 @@ type ReferenceMode = 'auto' | 'required' | 'off'
 export function useChatCharacterSettingInsertion() {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const { canViewImages } = useImagePermissions()
 
   return {
-    /** Whether the form can take a reference image from the setting (`images.view`). */
+    /** Whether the form can take a reference image from the setting (the read right). */
     canReference: canViewImages,
     actions: (targets: Record<string, ChatPageSchema>, required: string[], description: string) => canView ? [pageAction(
       'character_setting.insert',

@@ -1,4 +1,4 @@
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireAuth } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import axios from 'axios'
 // @ts-ignore - no types available
@@ -70,7 +70,7 @@ function respondWithNaiError(res: Response, error: any, fallbackError: string) {
   })
 }
 
-router.post('/encode-vibe', requirePermission('generation.execute'), async (req: Request<{}, {}, { image?: string; model?: string; information_extracted?: number }>, res: Response): Promise<void> => {
+router.post('/encode-vibe', requireAuth, async (req: Request<{}, {}, { image?: string; model?: string; information_extracted?: number }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {
@@ -107,7 +107,7 @@ router.post('/encode-vibe', requirePermission('generation.execute'), async (req:
   }
 })
 
-router.post('/upscale', requirePermission('generation.execute'), requirePermission('images.view'), async (req: Request<{}, {}, { image?: string; scale?: number }>, res: Response): Promise<void> => {
+router.post('/upscale', requireAuth, async (req: Request<{}, {}, { image?: string; scale?: number }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {

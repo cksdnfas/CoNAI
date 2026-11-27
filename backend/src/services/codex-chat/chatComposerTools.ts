@@ -2,7 +2,6 @@ import type { ChatExecutionContext, ChatPageSnapshot } from '@conai/shared'
 import { chatGenerationToolName, getMcpToolScope, isChatGenerationTool, type McpRequester } from '../../mcp/context'
 import { WorkspaceService } from '../workspaceService'
 import { requireFileStoreOwner } from '../fileStoreAccess'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { resolveChatAccess, resolveChatProfileToolGrant, canUseChatProfile } from './codexChatAccess'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { openChatMcpBridge } from './chatMcpBridge'
@@ -24,9 +23,9 @@ async function listChatComposerTools(requester: McpRequester, profile: ChatProfi
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId), thread?.id)
   const chatContext: ChatExecutionContext = { threadId: thread?.id ?? 0, profileId: profile.id, kind: 'direct', page }
   const workspaces = thread ? undefined : (() => {
-    // Match chatWorkspaces: without shared-file access (the account's or the profile's delegated) a turn has no project tools.
+    // Match chatWorkspaces: without the account's shared-file access a turn has no project tools.
     try {
-      const owner = requireFileStoreOwner(chatProfileRequester(requester, chatContext, true))
+      const owner = requireFileStoreOwner(requester)
       return profile.workspaces.filter(link => WorkspaceService.exists(link.id)).map(link => ({
         project: WorkspaceService.get(owner, link.id), bindingRevision: `profile:${link.write ? 1 : 0}`, write: link.write, source: 'profile' as const,
       }))

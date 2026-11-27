@@ -54,7 +54,7 @@ export type CharacterSettingSummary = {
   id: number
   folderId: number | null
   name: string
-  /** Library composite hashes; null when unset or when the viewer lacks `images.view`. */
+  /** Library composite hashes; null when unset or when the viewer lacks `content.read`. */
   referenceHash: string | null
   avatarHash: string | null
   avatarCrop: CharacterAvatarCrop | null
@@ -88,7 +88,7 @@ export type CharacterSetting = CharacterSettingSummary & {
   sections: CharacterAppearanceSections
   outfits: CharacterOutfit[]
   /**
-   * The reference gallery in its order; empty when the viewer lacks `images.view`. `referenceHash` (the image crops,
+   * The reference gallery in its order; empty when the viewer lacks `content.read`. `referenceHash` (the image crops,
    * auto tags and generation read) is usually one of them but need not be.
    */
   references: CharacterReferenceImage[]
@@ -156,8 +156,7 @@ export type CharacterAppearanceFill = { sections: CharacterAppearanceSections; o
 /**
  * `POST /settings/:settingId/references/catalog`: add the installed Danbooru dictionary's sample images of a catalog
  * character to the setting's reference gallery (uncategorized, after the ones it has), against `revision`. When the
- * setting has no reference image yet, the first added image becomes it. Needs `characters.edit`, `images.view` and
- * `images.upload`.
+ * setting has no reference image yet, the first added image becomes it. Needs `content.edit` (which includes reading).
  */
 export type CharacterCatalogReferenceImportInput = { character: string; revision: number }
 /** `dropped`: sample images that could not be read or stored. */
@@ -181,7 +180,7 @@ export type CharacterLibraryExportEntry = {
   sections: CharacterAppearanceSections
   outfits: CharacterOutfit[]
   favorite: boolean
-  /** Composite hashes of the bundled images; null/empty for viewers without `images.view`. */
+  /** Composite hashes of the bundled images; null/empty for viewers without `content.read`. */
   referenceHash: string | null
   avatarHash: string | null
   avatarCrop: CharacterAvatarCrop | null
@@ -199,7 +198,7 @@ export type CharacterLibraryExportInput = { ids: number[] } | { folderId: number
 /**
  * `POST /settings/import` (multipart `file`: an exported ZIP, `folderId`: target, empty for the top level): folders
  * are created (or reused by name) under it, taken names get ` (2)`, ` (3)`…, bundled images join the library (needs
- * `images.view` and `images.upload`), and an image neither bundled nor already in the library is dropped and counted.
+ * `content.edit`), and an image neither bundled nor already in the library is dropped and counted.
  */
 export type CharacterLibraryImportResult = { createdSettings: number; createdFolders: number; renamed: number; importedImages: number; droppedImages: number }
 

@@ -89,7 +89,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   })
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('server-admin', 'unused', 'admin')").run().lastInsertRowid)
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const adminGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-server-admins', permissionKeys: ['files.view', 'files.edit', 'images.view', 'images.edit', 'chat.use'] })
+  const adminGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-server-admins', permissionKeys: ['content.read', 'content.edit', 'page.chat.view'] })
   AuthPermissionGroup.addAccountMembership(adminGroup.id, adminId)
   invalidateConfiguredAuthCache()
   const admin = { accountId: adminId, accountType: 'admin' as const }
@@ -240,7 +240,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
         assert.deepEqual(await callPluginAppTool(context, name, args), await client.callTool({ name, arguments: args }))
       }
       const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('native-selector-guest', 'unused', 'guest')").run().lastInsertRowid)
-      const group = AuthPermissionGroup.createCustomGroup({ name: 'native-selector', permissionKeys: ['images.view'] })
+      const group = AuthPermissionGroup.createCustomGroup({ name: 'native-selector', permissionKeys: ['content.read'] })
       const guestContext = { ...context, requester: { accountId: guestId, accountType: 'guest' as const } }
       AuthPermissionGroup.addAccountMembership(group.id, guestId)
       assert.notEqual((await callPluginAppTool(guestContext, 'list_image_groups', {})).isError, true)
@@ -315,7 +315,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const profile = ChatProfileStore.create({ name: '주민', engine: 'llm', modelSlotId: model, systemPrompt: 'You are a village resident.', maxTokens: 100 })
     const off = ChatProfileStore.create({ name: '비활성', engine: 'llm', modelSlotId: model, isEnabled: false })
     const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('llm-guest','unused','guest')").run().lastInsertRowid)
-    const guestGroup = AuthPermissionGroup.createCustomGroup({ name: 'llm-users', permissionKeys: ['chat.use'] })
+    const guestGroup = AuthPermissionGroup.createCustomGroup({ name: 'llm-users', permissionKeys: ['page.chat.view'] })
     AuthPermissionGroup.addAccountMembership(guestGroup.id, guestId)
     const guest = { accountId: guestId, accountType: 'guest' as const }
     const nobody = { accountId: 999999, accountType: 'admin' as const }
@@ -379,7 +379,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.setPluginEnabled('web-llm', true, adminId)
     const { openPluginInstance, closePluginInstance } = await import('../src/services/plugins/pluginHost')
     // Opening a page needs the plugin permission (or a shared page); the LLM below still needs only chat permission.
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'web-llm-page', permissionKeys: ['plugins.view'] }).id, guest.accountId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'web-llm-page', permissionKeys: ['page.extensions.view'] }).id, guest.accountId)
     const webCaller = { requester: guest, sessionId: 'web-llm-user' }
     const webPage = openPluginInstance('web-llm', 'rules', [], webCaller)
     assert.ok(llm.listPluginLlmProfiles('web-llm', guest).some(item => item.id === profile.id), 'LLM use needs chat permission, not server code or file permission')
@@ -398,7 +398,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     // Image bytes stay behind llm.asset.
     assert.doesNotMatch(JSON.stringify(publicProfile), /base64|uploads/)
     assert.equal(llm.listPluginLlmProfiles('llm-bridge', guest).find(p => p.id === profile.id)!.assets.avatar, false)
-    await assert.rejects(bridge('asset', { profileId: profile.id }), /images.view/)
+    await assert.rejects(bridge('asset', { profileId: profile.id }), /content\.read/)
     const portrait = await runtime.requestPluginServer('llm-bridge', { op: 'asset', input: { profileId: profile.id, maxSize: 128 } }, admin, {}) as import('@conai/shared').PluginProfileAsset
     assert.equal(portrait.state, 'ready')
     assert.deepEqual(portrait.crop, crop)
@@ -750,7 +750,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.removePlugin('llm-bridge')
   })
 
-  await t.test('a plugin server tool called from a chat that delegates files.view still reads shared files as the account alone', async () => {
+  await t.test('a plugin server tool called from a chat reads shared files as the account alone', async () => {
     const dir = path.join(root, 'delegated-media-plugin')
     fs.mkdirSync(dir)
     fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'delegated-media', name: 'delegated-media', version: '1.0.0', description: '', server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'media', entry: 'index.html', accepts: [], actions: [] }] }))
@@ -766,19 +766,16 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
-    const { chatProfileRequester } = await import('../src/services/codex-chat/chatProfilePermissions')
-    const { requireFileStoreOwner } = await import('../src/services/fileStoreAccess')
     const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
     const { createMcpServer } = await import('../src/mcp/server')
     const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
     updateChatSettings({ enabled: true })
     const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('delegated-media-guest','unused','guest')").run().lastInsertRowid)
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'delegated-media-chat', permissionKeys: ['chat.use'] }).id, guestId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'delegated-media-chat', permissionKeys: ['page.chat.view'] }).id, guestId)
     const guest = { accountId: guestId, accountType: 'guest' as const }
     const file = FileStoreService.writeText(fileOwnerKey(adminId), null, 'delegated-media.txt', 'shared', { create: true })
-    const profile = ChatProfileStore.create({ name: 'Delegated media', engine: 'llm', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['p_delegated_media_read_file'], delegatedPermissions: ['files.view'] })
+    const profile = ChatProfileStore.create({ name: 'Delegated media', engine: 'llm', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['p_delegated_media_read_file'] })
     const chat = { threadId: CodexChatStore.createThread(guestId, 'delegated media', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'delegated-media-reply' }
-    assert.ok(requireFileStoreOwner(chatProfileRequester(guest, chat)), 'the chat itself holds the delegated files.view')
     const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
     const server = createMcpServer({ scopes: ['read'], source: 'llm-chat', requester: guest, chatContext: chat, toolCatalog: false })
     const client = new Client({ name: 'delegated-media-test', version: '1' })
@@ -787,7 +784,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
       const result = await client.callTool({ name: 'p_delegated_media_read_file', arguments: { fileId: file.id } })
       assert.notEqual(result.isError, true, JSON.stringify(result))
-      assert.match(JSON.stringify(result.content), /refused: 파일 보관함 접근 권한이 없어/, 'the plugin does not inherit the delegation')
+      assert.match(JSON.stringify(result.content), /refused: 파일 보관함 접근 권한이 없어/, 'the account itself cannot read shared files')
     } finally { stop(); await client.close(); await server.close() }
     await registry.removePlugin('delegated-media')
   })
@@ -1103,7 +1100,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   })
 
   await t.test('isolated profile research enforces published post scope, receipts, budgets, grants and cancellation', async st => {
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'research-readers', permissionKeys: ['posts.view', 'chat.agent.use'] }).id, adminId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'research-readers', permissionKeys: ['content.read', 'page.chat.view'] }).id, adminId)
     const llm = await import('../src/services/plugins/pluginLlm')
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
@@ -1484,7 +1481,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const tasks = await import('../src/services/plugins/pluginTasks')
     const { RuntimeJobRunner } = await import('../src/services/runtimeJobs/runtimeJobRunner')
     const runnerId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('processing-runner','unused','guest')").run().lastInsertRowid)
-    const runnerGroup = AuthPermissionGroup.createCustomGroup({ name: 'processing-test', permissionKeys: ['generation.execute', 'files.view', 'images.upload'] })
+    const runnerGroup = AuthPermissionGroup.createCustomGroup({ name: 'processing-test', permissionKeys: ['page.generation.view', 'content.read', 'content.edit'] })
     AuthPermissionGroup.addAccountMembership(runnerGroup.id, runnerId)
     AuthPermissionGroup.addAccountMembership(runnerGroup.id, adminId)
     const runner = { accountId: runnerId, accountType: 'guest' as const }
@@ -1514,7 +1511,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await assert.rejects(runtime.requestPluginServer('chat-instructions', { op: 'save', path: '../outside.mp4' }, admin, {}), /데이터 폴더/)
     AuthPermissionGroup.removeAccountMembership(runnerGroup.id, runnerId)
     await assert.rejects(read(), /권한/)
-    await assert.rejects(submit('revoked-request-123', { value: 1 }), /generation.execute/)
+    assert.ok((await submit('revoked-request-123', { value: 1 })).jobId, 'starting a job needs only sign-in')
     RuntimeJobRunner.shutdown()
     await registry.setPluginEnabled('chat-instructions', false)
   })

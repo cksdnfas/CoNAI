@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FolderKanban, Plus, RotateCcw, Unlink, X } from 'lucide-react'
-import { MAX_WORKSPACE_LINKS, type WorkspaceBinding, type WorkspaceChatMode } from '@conai/shared'
+import { CONTENT_PERMISSIONS, MAX_WORKSPACE_LINKS, type WorkspaceBinding, type WorkspaceChatMode } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Switch } from '@/components/ui/switch'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -20,8 +20,8 @@ import { cn } from '@/lib/utils'
 export function ChatWorkspaceBlock({ threadId, group = false }: { threadId: number; group?: boolean }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
-  const canRead = auth.data?.permissionKeys?.includes('files.view') === true
-  const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
+  const canRead = auth.data?.permissionKeys?.includes(CONTENT_PERMISSIONS.read) === true
+  const canWrite = auth.data?.permissionKeys?.includes(CONTENT_PERMISSIONS.edit) === true
   const account = auth.data?.accountId ?? 'bootstrap'
   const [picking, setPicking] = useState(false)
   const client = useQueryClient()

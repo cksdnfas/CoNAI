@@ -41,7 +41,7 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
   const { chatWorkflowModules, withChatWorkflowChoices, requireChatWorkflowChoiceValues } = await import('../src/services/codex-chat/chatWorkflowContext')
   const { registerChatRoomListTools } = await import('../src/mcp/tools/chatRoomListTools')
   const { getMcpToolScope } = await import('../src/mcp/context')
-  const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
+  const { toolRequirement } = await import('../src/mcp/toolAccess')
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const authHelpers = await import('../src/services/auth/sessionAccess')
 
@@ -99,7 +99,7 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
   authHelpers.invalidateConfiguredAuthCache()
   try { assert.equal((await listRooms(null)).total, 0, 'nobody owns rooms once accounts exist') } finally { admins.mock.restore(); authHelpers.invalidateConfiguredAuthCache() }
   assert.equal(getMcpToolScope('list_chat_rooms'), 'read')
-  assert.deepEqual(TOOL_FEATURE_PERMISSIONS.list_chat_rooms, [])
+  assert.equal(toolRequirement('list_chat_rooms'), 'signedIn')
 
   // ---- live choices for node id fields -------------------------------------------------------------------------------
   const modules = chatWorkflowModules()
@@ -134,8 +134,11 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
     assert.equal(shared.chatPageActionAllowed('/generation', id), true, id)
     assert.equal(shared.chatPageActionAllowed('/posts', id), false, id)
   }
-  assert.equal(shared.CHAT_PAGE_ACTION_PERMISSIONS['workflow.run'], 'generation.execute')
-  assert.equal(shared.CHAT_PAGE_ACTION_PERMISSIONS['workflow.schedule_save'], 'workflows.edit')
+  assert.equal(shared.chatPageActionScope('workflow.run'), 'generate')
+  assert.equal(shared.chatPageActionRequirement('workflow.run'), 'signedIn')
+  assert.equal(shared.chatPageActionScope('workflow.schedule_save'), 'organize')
+  assert.equal(shared.chatPageActionRequirement('workflow.schedule_save'), 'edit')
+  assert.equal(shared.chatPageActionScope('workflow.schedule_delete'), 'delete')
   const schema = { type: 'object' as const, properties: {}, required: [] }
   assert.equal(shared.normalizeChatPageActions('/generation', [{ id: 'workflow.run', label: '실행', description: '', effect: 'save', schema }])[0].effect, 'save')
   assert.throws(() => shared.normalizeChatPageActions('/generation', [{ id: 'workflow.run', label: '실행', description: '', effect: 'draft', schema }]), /저장 범위/, 'a run is never a draft')

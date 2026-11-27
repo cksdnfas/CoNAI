@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { withPagePermissions } from '@conai/shared';
+import { resolvePermissionKeys } from '@conai/shared';
 import { getAuthDb } from '../database/authDb';
 import { AuthAccount } from '../models/AuthAccount';
 
@@ -101,18 +101,7 @@ export class AuthAccessControlService {
 
   /** Resolve full bootstrap access when no local auth is configured yet. */
   static resolveBootstrapAccess(): ResolvedAuthAccessRecord {
-    return getCachedResolvedAccess('bootstrap', () => {
-      const permissionKeys = (prepared(`
-        SELECT permission_key
-        FROM auth_permissions
-        ORDER BY permission_key ASC
-      `).all() as Array<{ permission_key: string }>).map((row) => row.permission_key);
-
-      return {
-        groupKeys: ['bootstrap'],
-        permissionKeys: withPagePermissions(permissionKeys, true),
-      };
-    });
+    return { groupKeys: ['bootstrap'], permissionKeys: resolvePermissionKeys([], true) };
   }
 
   /** Resolve effective access for one account id. */
@@ -160,10 +149,10 @@ export class AuthAccessControlService {
         `).all(...groupIds) as Array<{ permission_key: string }>).map((row) => row.permission_key);
 
     const groupKeys = inheritedGroups.map((group) => group.group_key);
-    // Page keys are never stored; they follow from the features held (and settings from the administrator role).
+    // Administrators hold every key and the settings page; edit and delete include reading.
     return {
       groupKeys,
-      permissionKeys: withPagePermissions(permissionKeys, isAdmin),
+      permissionKeys: resolvePermissionKeys(permissionKeys, isAdmin),
     };
   }
 

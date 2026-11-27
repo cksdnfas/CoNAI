@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import { db } from '../../database/init'
-import { requireContextPermission } from '../../middleware/featureAccess'
+import { requireContextRight } from '../../middleware/featureAccess'
 import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks'
 import { contextContentLimit, ratingRestrictedHashes } from '../../services/codex-chat/chatContentRating'
 import { ImageSafetyService } from '../../services/imageSafetyService'
@@ -32,7 +32,7 @@ const jobDownloads = new Map<string, { expires: number; items: Map<string, Promi
 async function downloadsFor(context: McpRequestContext, job: RuntimeJobRecord, result: MediaEditResult): Promise<Map<string, Download>> {
   const downloads = new Map<string, Download>()
   if (!context.baseUrl) return downloads
-  try { requireContextPermission(context, 'images.view') } catch { return downloads }
+  try { requireContextRight(context, 'read') } catch { return downloads }
   const hashes = result.saved.map((item) => item.compositeHash)
   const restricted = ratingRestrictedHashes(context, hashes)
   const visible = new Set<string>()

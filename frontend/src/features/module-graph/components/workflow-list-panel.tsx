@@ -63,7 +63,7 @@ export function WorkflowListPanel({
   variant = 'panel',
   className,
 }: WorkflowListPanelProps) {
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { t, locale, formatNumber } = useI18n()
   const [query, setQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<number>>(() => new Set())
@@ -170,7 +170,7 @@ export function WorkflowListPanel({
         {!isPicker ? (
           <>
             {onEditGraph ? (
-              <IconButton size="icon-xs" variant="ghost" onClick={() => onEditGraph(graph)} disabled={!canUpdateWorkflows} label={t({ ko: '노드 편집', en: 'Edit nodes' })}>
+              <IconButton size="icon-xs" variant="ghost" onClick={() => onEditGraph(graph)} disabled={!canEdit} label={t({ ko: '노드 편집', en: 'Edit nodes' })}>
                 <PenSquare />
               </IconButton>
             ) : null}
@@ -181,13 +181,13 @@ export function WorkflowListPanel({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {onDuplicateGraph ? <DropdownMenuItem disabled={!canUpdateWorkflows} onSelect={() => onDuplicateGraph(graph)}><Copy />{t({ ko: '복제', en: 'Duplicate' })}</DropdownMenuItem> : null}
+                {onDuplicateGraph ? <DropdownMenuItem disabled={!canEdit} onSelect={() => onDuplicateGraph(graph)}><Copy />{t({ ko: '복제', en: 'Duplicate' })}</DropdownMenuItem> : null}
                 {onExportGraph ? <DropdownMenuItem onSelect={() => onExportGraph(graph)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem> : null}
-                {onMoveGraph ? <DropdownMenuItem disabled={!canUpdateWorkflows} onSelect={() => onMoveGraph(graph)}><FolderInput />{t({ ko: '폴더 이동', en: 'Move to folder' })}</DropdownMenuItem> : null}
+                {onMoveGraph ? <DropdownMenuItem disabled={!canEdit} onSelect={() => onMoveGraph(graph)}><FolderInput />{t({ ko: '폴더 이동', en: 'Move to folder' })}</DropdownMenuItem> : null}
                 {onDeleteGraph ? (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" disabled={!canUpdateWorkflows} onSelect={() => onDeleteGraph(graph)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive" disabled={!canDelete} onSelect={() => onDeleteGraph(graph)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
                   </>
                 ) : null}
               </DropdownMenuContent>
@@ -243,8 +243,8 @@ export function WorkflowListPanel({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {onFolderSettings ? <DropdownMenuItem disabled={!canUpdateWorkflows} onSelect={() => onFolderSettings(folder)}><Settings2 />{t({ ko: '폴더 설정', en: 'Folder settings' })}</DropdownMenuItem> : null}
-                {onDeleteFolder ? <DropdownMenuItem variant="destructive" disabled={!canUpdateWorkflows} onSelect={() => onDeleteFolder(folder)}><Trash2 />{t({ ko: '폴더 삭제', en: 'Delete folder' })}</DropdownMenuItem> : null}
+                {onFolderSettings ? <DropdownMenuItem disabled={!canEdit} onSelect={() => onFolderSettings(folder)}><Settings2 />{t({ ko: '폴더 설정', en: 'Folder settings' })}</DropdownMenuItem> : null}
+                {onDeleteFolder ? <DropdownMenuItem variant="destructive" disabled={!canDelete} onSelect={() => onDeleteFolder(folder)}><Trash2 />{t({ ko: '폴더 삭제', en: 'Delete folder' })}</DropdownMenuItem> : null}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
@@ -271,7 +271,7 @@ export function WorkflowListPanel({
           <span className="ml-1 font-mono text-xs text-muted-foreground">{formatNumber(graphs.length)}</span>
           <span className="flex-1" />
           {onCreateFolder ? (
-            <IconButton size="icon-sm" variant="ghost" onClick={onCreateFolder} disabled={!canUpdateWorkflows} label={t({ ko: '폴더 만들기', en: 'New folder' })}>
+            <IconButton size="icon-sm" variant="ghost" onClick={onCreateFolder} disabled={!canEdit} label={t({ ko: '폴더 만들기', en: 'New folder' })}>
               <FolderPlus />
             </IconButton>
           ) : null}
@@ -288,13 +288,13 @@ export function WorkflowListPanel({
                   if (file) onImportWorkflow(file)
                 }}
               />
-              <IconButton size="icon-sm" variant="ghost" onClick={() => importInputRef.current?.click()} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로 가져오기', en: 'Import workflow' })}>
+              <IconButton size="icon-sm" variant="ghost" onClick={() => importInputRef.current?.click()} disabled={!canEdit} label={t({ ko: '워크플로 가져오기', en: 'Import workflow' })}>
                 <Upload />
               </IconButton>
             </>
           ) : null}
           {onCreateWorkflow ? (
-            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '새 워크플로', en: 'New workflow' })} onClick={onCreateWorkflow} disabled={!canUpdateWorkflows}>
+            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '새 워크플로', en: 'New workflow' })} onClick={onCreateWorkflow} disabled={!canEdit}>
               <Plus />
             </IconButton>
           ) : null}

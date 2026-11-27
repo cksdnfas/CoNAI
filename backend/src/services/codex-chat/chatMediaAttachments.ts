@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { IMAGE_VIEW_PERMISSION } from '@conai/shared'
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
@@ -15,7 +15,7 @@ import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 export type ChatMediaAttachment = { compositeHash: string; name: string; mimeType: string | null }
 
 /**
- * images.view attaches any library media. Without it only what the conversation itself delivered to the account
+ * content.read attaches any library media. Without it only what the conversation itself delivered to the account
  * (`delivered`, asked for only then) can go back: a hash alone is never a grant.
  */
 function requireChatMediaAccess(requester: McpRequester, hashes: unknown, delivered?: () => ReadonlySet<string>) {
@@ -23,7 +23,7 @@ function requireChatMediaAccess(requester: McpRequester, hashes: unknown, delive
   const permissions = id === null
     ? (hasConfiguredAuth() ? [] : AuthAccessControlService.resolveBootstrapAccess().permissionKeys)
     : (AuthAccount.findById(id)?.status === 'active' ? AuthAccessControlService.resolveForAccountId(id).permissionKeys : [])
-  if (permissions.includes(IMAGE_VIEW_PERMISSION)) return
+  if (permissions.includes(CONTENT_PERMISSIONS.read)) return
   const allowed = delivered && Array.isArray(hashes) ? delivered() : null
   if (!allowed || (hashes as unknown[]).some((hash) => !allowed.has(hash as string))) {
     throw new FileStoreError('앱 미디어 접근 권한이 없어.', 403)

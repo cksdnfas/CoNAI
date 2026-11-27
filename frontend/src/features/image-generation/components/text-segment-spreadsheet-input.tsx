@@ -72,7 +72,7 @@ export function TextSegmentSpreadsheetInput({
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
-  const { canViewPrompts } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const rows = getTextSegmentSpreadsheetRows(value)
   const presetButtonRefs = useRef(new Map<number, HTMLButtonElement | null>())
   const [presetPickerRowIndex, setPresetPickerRowIndex] = useState<number | null>(null)
@@ -86,7 +86,7 @@ export function TextSegmentSpreadsheetInput({
   }
 
   const handleInsertPreset = (index: number, insertionText: string) => {
-    if (!canViewPrompts) return
+    if (!canRead) return
     handleRowChange(index, appendPromptRowText(rows[index] ?? '', insertionText))
   }
 
@@ -136,7 +136,7 @@ export function TextSegmentSpreadsheetInput({
                   }}
                   size="icon-sm"
                   variant="ghost"
-                  disabled={!canViewPrompts}
+                  disabled={!canRead}
                   onClick={() => setPresetPickerRowIndex((current) => current === index ? null : index)}
                   label={t('image-generation.components.text.segment.spreadsheet.input.insert.preset.into.prompt.row', { row: index + 1 })}
                   tooltipSide="left"

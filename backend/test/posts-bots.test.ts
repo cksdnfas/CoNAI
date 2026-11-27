@@ -20,6 +20,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
   const { AutomationSwitch } = await import('../src/services/automationSwitch')
   const { PostStore, PostCommentStore } = await import('../src/services/posts/postStore')
@@ -29,10 +30,11 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   type Actor = import('../src/services/posts/postActor').PostActor
 
   updateChatSettings({ enabled: true })
-  const KEYS = ['chat.use', 'posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view', 'files.view']
+  const KEYS = ['content.read']
   t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, username: `user${id}`, account_type: id === 1 ? 'admin' : 'guest', status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number) => ({ permissionKeys: id === 9 ? ['posts.view', 'posts.comment'] : KEYS, groupKeys: [] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number) => ({ permissionKeys: KEYS, groupKeys: id === 9 ? [] : ['members'] }))
   t.mock.method(AuthAccessControlService, 'hasPermission', () => true)
+  t.mock.method(AuthPermissionGroup, 'listAllGroups', () => [{ group_key: 'members' }] as never)
   const provider = { provider_name: 'chat', display_name: 'Chat', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://chat.invalid/v1', additional_config: '{}' }
   t.mock.method(ExternalApiProvider, 'findByName', (name: string) => (name === 'chat' ? provider : null))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => 'key')
@@ -67,10 +69,10 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 10 } })
   })
 
-  const luna = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, systemPrompt: '너는 루나야.' })
-  const kai = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, systemPrompt: '너는 카이야.' })
+  const luna = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, systemPrompt: '너는 루나야.', allowedGroupKeys: ['members'] })
+  const kai = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, systemPrompt: '너는 카이야.', allowedGroupKeys: ['members'] })
   const alice: Actor = { accountId: 2, isAdmin: false, keys: new Set(KEYS), profileId: null }
-  const viewer: Actor = { accountId: 9, isAdmin: false, keys: new Set(['posts.view', 'posts.comment']), profileId: null }
+  const viewer: Actor = { accountId: 9, isAdmin: false, keys: new Set(['content.read']), profileId: null }
   const db = () => dbModule.getUserSettingsDb()
   const runs = (postId: number) => db().prepare('SELECT * FROM post_bot_runs WHERE post_id = ? ORDER BY id').all(postId) as Array<{ id: number; profile_id: number; status: string; chain_depth: number; error: string | null; run_as_account_id: number | null; result_comment_id: number | null }>
   const settle = async (postId: number) => {
@@ -133,8 +135,8 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     updatePostsSettings({ safety: { botsPerComment: 3 } })
 
     PostCommentStore.create(viewer, post.id, { body: '@루나 나도 불러볼래' })
-    assert.match(runs(post.id).at(-1)!.error ?? '', /권한/, 'typed @name without posts.summon')
-    assert.deepEqual(PostBotRuns.mentionable(viewer), [], 'an account without chat cannot call bots either')
+    assert.match(runs(post.id).at(-1)!.error ?? '', /부를 수 없는 봇/, 'typed @name by an account outside the bots\' audience')
+    assert.deepEqual(PostBotRuns.mentionable(viewer), [], 'nor are they offered to it')
 
     updatePostsSettings({ safety: { summonEnabled: false } })
     PostCommentStore.create(alice, post.id, { body: '@카이 꺼졌지?' })
@@ -178,7 +180,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
 
     const before = runs(post.id).length
     PostCommentStore.create(viewer, post.id, { body: '나도 한마디', parentId: lunaReplyId })
-    assert.equal(runs(post.id).length, before, 'without posts.summon it is a plain reply, no refused call under it')
+    assert.equal(runs(post.id).length, before, 'outside the bot\'s audience it is a plain reply, no refused call under it')
     PostCommentStore.create(alice, post.id, { body: '사람 댓글에 답글', parentId: answer.id })
     assert.equal(runs(post.id).length, before, 'answering a person calls no one')
     PostCommentStore.create({ ...alice, profileId: kai.id }, post.id, { body: '카이가 루나에게', parentId: lunaReplyId })
@@ -198,7 +200,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   await t.test('a bot with the board tools reads the post and answers with post_comment itself; the answer leads back to the room', async () => {
     lunaCalls = false
     const sera = ChatProfileStore.create({
-      name: '세라', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, systemPrompt: '너는 세라야.',
+      name: '세라', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, systemPrompt: '너는 세라야.', allowedGroupKeys: ['members'],
       mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: ['posts_read', 'post_comment', 'list_files', 'read_file_text'],
     })
     const post = PostStore.create(alice, { title: '심야 상담소', body: '본문에만 있는 문장: 등대 아래 우체통.' })

@@ -4,8 +4,7 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { HistoryCommandService } from '../services/historyCommandService';
 import { buildGenerationHistoryRequestSnapshot } from '../services/generationHistoryRequestSnapshot';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { requireAdmin } from '../middleware/authMiddleware';
-import { requireImagesView, requireImageAction } from '../middleware/imageAccess';
+import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import {
   applyHistoryAccessScope,
   authorizeHistoryRecordOrBlock,
@@ -25,15 +24,8 @@ import {
 } from './generation-history/mediaRouteHandlers';
 
 const router = express.Router();
-// One row's reads authorize per record (authorizeHistoryRecordOrBlock): published workflow runs need no images.view.
-const HISTORY_RECORD_READ_PATH = /^\/\d+(?:\/(?:file|thumbnail|image|request|audio\/[^/]+))?\/?$/;
-router.use((req, res, next) => {
-  if ((req.method === 'GET' || req.method === 'HEAD') && HISTORY_RECORD_READ_PATH.test(req.path)) next();
-  else if (req.method === 'GET' || req.method === 'HEAD') requireImagesView(req, res, next);
-  else if (req.path === '/download/batch') next(); // authorized per record in handleHistoryBatchDownload
-  else if (req.method === 'DELETE' && req.query.deleteFiles === 'true') requireImageAction('images.delete')(req, res, next);
-  else requireImagesView(req, res, next);
-});
+// History is the account's own (applyHistoryAccessScope, canAccessHistoryRecord); signing in is all it needs.
+router.use(requireAuth);
 const CLEARABLE_HISTORY_STATUSES = ['completed', 'failed'] as const;
 
 /**
@@ -256,7 +248,7 @@ router.get(
 
 /**
  * DELETE /api/generation-history/:id
- * Delete generation history (통합 삭제 서비스 사용)
+ * Delete generation history (통합 삭제 서비스 사용). The record's owner or an administrator.
  *
  * Query Parameter:
  * - deleteFiles: true | false (기본값: false)
@@ -265,10 +257,15 @@ router.get(
  */
 router.delete(
   '/:id',
-  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const id = routeParam(req.params.id);
     const deleteFiles = req.query.deleteFiles === 'true';
+    const record = await GenerationHistoryService.getHistoryDetail(parseInt(id));
+    if (!record) {
+      res.status(404).json({ success: false, error: 'Generation history not found' });
+      return;
+    }
+    if (!authorizeHistoryRecordOrBlock(req, res, record)) return;
 
     // Import DeletionService dynamically
     const { DeletionService } = await import('../services/deletionService');

@@ -1,7 +1,7 @@
-import { allowAnonymousAnyPermission } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { NAI_CHARACTER_REFERENCE_ANLAS, resolveNaiRequestModel, supportsNaiCharacterReferences } from '@conai/shared';
 import { calculateAnlasCost, getMaxSamples, isOpusFreeGeneration } from '../../utils/nai/anlasCost';
+import { requireAuth } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -27,7 +27,7 @@ interface CostCalculationRequest {
  * POST /api/nai/cost/calculate
  * NovelAI 이미지 생성 비용 계산 (SMEA 비활성화 버전)
  */
-router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'generation.execute']), async (req: Request, res: Response) => {
+router.post('/calculate', requireAuth, async (req: Request, res: Response) => {
   try {
     const {
       width,

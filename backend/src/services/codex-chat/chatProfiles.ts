@@ -1,4 +1,4 @@
-import { CHAT_DELEGATABLE_PERMISSION_KEYS, CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
+import { CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
@@ -165,8 +165,6 @@ export type ChatProfile = {
   mcpScopes: ChatScope[]
   /** General tools within the scopes; linked generation presets have their own explicit grant. */
   toolAllowlist: string[] | null
-  /** Administrator-granted domain permissions, usable only through this profile in an authorized chat. */
-  delegatedPermissions: string[]
   /** Linking enables these generation tools; any linked withholds free-form generation. */
   generationPresetIds: number[]
   /** LLM: characters of one tool result the model sees within a reply. */
@@ -315,7 +313,6 @@ type ProfileRow = CharacterProfileRow & {
   system_prompt: string
   prompt_sections: string | null
   tool_allowlist: string | null
-  delegated_permissions: string | null
   tool_output_limit: number | null
   character_description: string
   example_dialogue: string
@@ -500,7 +497,6 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     allowedGroupKeys: (parseJsonArray(row.allowed_group_keys) ?? []).filter((key): key is string => typeof key === 'string'),
     mcpScopes: parseScopes(row.mcp_scopes),
     toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
-    delegatedPermissions: normalizeDelegatedPermissions(parseJsonArray(row.delegated_permissions)),
     toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     generationPresetIds: dependencies ? generationPresetIds.filter((id) => dependencies.generationPresets.has(id)) : ChatGenerationPresetStore.existing(generationPresetIds),
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
@@ -691,14 +687,6 @@ function judgePresetId(value: unknown) {
 }
 
 /** `draft`: a preview of an unsaved profile, which must not create model rows for legacy pairs. */
-function normalizeDelegatedPermissions(value: unknown): string[] {
-  if (value === undefined || value === null) return []
-  if (!Array.isArray(value) || value.some((key) => typeof key !== 'string' || !(CHAT_DELEGATABLE_PERMISSION_KEYS as readonly string[]).includes(key))) {
-    throw new ChatProfileError('위임할 수 없는 기능 권한이 포함되어 있어.')
-  }
-  return [...new Set(value as string[])]
-}
-
 function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKeys?: Set<string> } = {}) {
   const strict = (key: string) => !options.strictKeys || options.strictKeys.has(key)
   input = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === undefined || !strict(key) ? value : normalizeProfileScalarField(key, value)])) as ChatProfileInput
@@ -808,7 +796,6 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     max_tokens: optionalNumber('maxTokens', CHAT_PROFILE_LIMITS.maxTokens, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,
     allowed_group_keys: JSON.stringify(normalizeAllowedGroupKeys(input.allowedGroupKeys)),
-    delegated_permissions: JSON.stringify(normalizeDelegatedPermissions(input.delegatedPermissions)),
     mcp_scopes: JSON.stringify(parseScopes(input.mcpScopes ?? ['read'])),
     tool_allowlist: Array.isArray(input.toolAllowlist)
       ? JSON.stringify([...new Set(input.toolAllowlist.filter((name): name is string => typeof name === 'string' && /^[a-z0-9_]{1,64}$/.test(name)))])
@@ -874,7 +861,7 @@ const PROFILE_SETTING_COLUMNS = `id, folder_id, revision, background_revision, n
   background_hash, engine, model, llm_runtime, reasoning_effort, reasoning_budget_tokens, extra_params, system_prompt,
   prompt_sections, tool_allowlist, tool_output_limit, character_description, example_dialogue, user_persona, greeting,
   alternate_greetings, opening_history, greeting_position, temperature, max_tokens, mcp_enabled, mcp_scopes,
-  allowed_group_keys, delegated_permissions, generation_preset_ids, context_turns, context_tokens, summary_enabled, summary_trigger_turns,
+  allowed_group_keys, generation_preset_ids, context_turns, context_tokens, summary_enabled, summary_trigger_turns,
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
   model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, reaction_slot_id, reaction_enabled, removed_model_roles, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
@@ -895,17 +882,16 @@ export const ChatProfileStore = {
       allowedGroupKeys: (parseJsonArray(row.allowed_group_keys) ?? []).filter((key): key is string => typeof key === 'string') }))
   },
 
-  /** Read just the caller's tool configuration for delegation admission. */
+  /** Read just the caller's tool configuration for agent call admission. */
   findToolGrant(profileId: number) {
-    const row = getUserSettingsDb().prepare(`SELECT engine, allowed_group_keys, delegated_permissions, mcp_enabled, mcp_scopes, tool_allowlist, generation_preset_ids
+    const row = getUserSettingsDb().prepare(`SELECT engine, allowed_group_keys, mcp_enabled, mcp_scopes, tool_allowlist, generation_preset_ids
       FROM llm_chat_profiles WHERE id = ? AND is_enabled = 1`).get(profileId) as
-      Pick<ProfileRow, 'engine' | 'allowed_group_keys' | 'delegated_permissions' | 'mcp_enabled' | 'mcp_scopes' | 'tool_allowlist' | 'generation_preset_ids'> | undefined
+      Pick<ProfileRow, 'engine' | 'allowed_group_keys' | 'mcp_enabled' | 'mcp_scopes' | 'tool_allowlist' | 'generation_preset_ids'> | undefined
     if (!row) return null
     const allowlist = parseJsonArray(row.tool_allowlist)
     return { mcpEnabled: row.mcp_enabled === 1, mcpScopes: parseScopes(row.mcp_scopes),
       engine: (row.engine === 'codex' || row.engine === 'claude' ? row.engine : 'llm') as ChatProfileEngine,
       allowedGroupKeys: (parseJsonArray(row.allowed_group_keys) ?? []).filter((key): key is string => typeof key === 'string'),
-      delegatedPermissions: normalizeDelegatedPermissions(parseJsonArray(row.delegated_permissions)),
       toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
       generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)) }
   },
@@ -941,7 +927,7 @@ export const ChatProfileStore = {
       translation_slot_id, suggest_slot_id, reaction_slot_id, reaction_enabled, removed_model_roles, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
-      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, delegated_permissions, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
+      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
       CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
       CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.imageMarkers ? MARKED_PROFILE_COLUMNS : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
     const where = [options.enabledOnly ? 'is_enabled = 1' : '', options.folderId !== undefined ? 'folder_id IS @folderId' : '', options.query ? 'instr(lower(name), lower(@query)) > 0' : ''].filter(Boolean)

@@ -3,7 +3,7 @@ import { ALL_MCP_HTTP_SCOPES, type McpRequestContext, type McpRequester } from '
 import { inProcessMcpClient, NO_TOOL_DEADLINE } from '../../mcp/inProcessClient'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
-import { requireRequesterImagePermission } from '../../middleware/imageAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { pluginAppToolScope, pluginAppTools } from './pluginAppPolicy'
 import { PluginError } from './pluginStore'
 import { findPluginServerTool } from './pluginServerTools'
@@ -32,7 +32,7 @@ export async function callPluginAppTool(context: McpRequestContext, name: string
   if (!pluginAppToolScope(name)) throw new PluginError(`플러그인 실행 문맥에서 지원하지 않는 앱 도구야: ${name}`, 400)
   const native = { ...context, source: 'plugin' as const, chatContext: undefined, generationPresetIds: [], toolAllowlist: [name] }
   requireMcpToolAccess(native, name, args)
-  validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester), findPluginServerTool(name) !== null, { toolName: name, workflowInputAssets: name === 'submit_generation_job' })
+  validateMcpToolArguments(args, () => requireRequesterRight(native.requester, 'read'), findPluginServerTool(name) !== null, { toolName: name, workflowInputAssets: name === 'submit_generation_job' })
   return withPluginAppClient(native, [name], client => client.callTool({ name, arguments: args }, { timeout: NO_TOOL_DEADLINE, signal }))
 }
 

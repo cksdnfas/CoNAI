@@ -150,7 +150,7 @@ export type WebResearchSettings = { engine: 'off' | 'codex' | 'claude'; model: s
 export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean; toolRoundLimit: number; loreSelectionLimit: number }
 export { TOOL_ROUND_LIMITS, LORE_SELECTION_LIMITS } from '@conai/shared'
 
-export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
+export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'delete', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
 export const CHAT_PROFILE_DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
@@ -443,8 +443,6 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   mcpScopes: ChatScope[]
   /** Only these tools; null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
-  /** Additional feature permissions used only by this profile's enabled tools; never account or administration grants. */
-  delegatedPermissions: string[]
   /** Generation presets the profile draws with; any linked withholds free-form generation and workflow lookups. */
   generationPresetIds: number[]
   toolOutputLimit: number

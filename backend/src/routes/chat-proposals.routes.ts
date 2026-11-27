@@ -1,8 +1,7 @@
 import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
-import { requireRequesterPermission } from '../middleware/featureAccess'
-import { canRequesterViewImages } from '../middleware/imageAccess'
+import { requireAdmin, requireEdit } from '../middleware/authMiddleware'
+import { requesterHasRight, requireRequesterRight } from '../middleware/featureAccess'
 import { requireCharacterImageAccess } from '../services/characterLibrary'
 import { requireArtStyleImageAccess } from '../services/artStyles'
 import { ChatProposalStore } from '../services/codex-chat/chatProposals'
@@ -12,7 +11,7 @@ import { FileStoreError } from '../services/fileStoreService'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { getRequester, getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { ChatPageContextError, requireChatPageAccess, requireChatPageActionAccess, requireChatPageProposalBinding } from '../services/codex-chat/chatPageContext'
-import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
+import { chatProfileScopes, requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import type { ChatProposal } from '@conai/shared'
 import { requireChatWorkflowModules } from '../services/codex-chat/chatWorkflowContext'
@@ -45,9 +44,9 @@ function pageProposal(req: Request, res: Response, receipt = false): Extract<Cha
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
     const page = { ...proposal.page, fields: [] }
     requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct', page } }, tool, page)
-    if (proposal.kind === 'workflow_graph') requireRequesterPermission(requester, 'workflows.view')
+    if (proposal.kind === 'workflow_graph') requireRequesterRight(requester, 'read')
     requireChatPageAccess(requester, proposal.page)
-    if (proposal.kind === 'page_action') requireChatPageActionAccess(requester, proposal.page, proposal.action.id, proposal.arguments)
+    if (proposal.kind === 'page_action') requireChatPageActionAccess(requester, proposal.page, proposal.action.id, proposal.arguments, chatProfileScopes(profile))
     const undo = req.body?.undo === true
     if (proposal.dismissed || (!receipt && !undo && proposal.saved)) throw new ChatPageContextError('이미 적용하거나 무시한 제안이야.', 409)
     const started = receipt && (proposal.saved === true || ChatProposalStore.pageApplicationStarted(id))
@@ -104,7 +103,7 @@ function visibleProposalId(req: Request, res: Response) {
  */
 router.post('/:proposalId/saved', (req, res, next) => {
   const proposal = ChatProposalStore.find(Number(req.params.proposalId))
-  return (proposal?.kind === 'character_library' || proposal?.kind === 'art_style' ? requirePermission('characters.edit') : requireAdmin)(req, res, next)
+  return (proposal?.kind === 'character_library' || proposal?.kind === 'art_style' ? requireEdit : requireAdmin)(req, res, next)
 }, asyncHandler(async (req: Request, res: Response) => {
   const proposalId = parseId(req.params.proposalId)
   const threadId = proposalId === null ? null : ChatProposalStore.threadIdOf(proposalId)
@@ -116,12 +115,12 @@ router.post('/:proposalId/saved', (req, res, next) => {
   const proposal = ChatProposalStore.find(proposalId)
   const rawSavedId = (req.body as { savedId?: unknown } | undefined)?.savedId
   if (proposal?.kind === 'character_library' && proposal.action === 'save_setting') {
-    try { requireCharacterImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
-    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
+    try { requireCharacterImageAccess(proposal.input, requesterHasRight(getRequester(req), 'read')) }
+    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: content.read' }); return }
   }
   if (proposal?.kind === 'art_style' && proposal.action === 'save_style') {
-    try { requireArtStyleImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
-    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
+    try { requireArtStyleImageAccess(proposal.input, requesterHasRight(getRequester(req), 'read')) }
+    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: content.read' }); return }
   }
   if (proposal?.kind === 'profile_folder') {
     res.status(400).json({ success: false, error: '폴더 제안은 승인 경로에서 적용해줘.' })

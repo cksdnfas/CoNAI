@@ -29,7 +29,7 @@ interface SheetSource { hash: string; name: string; width: number; height: numbe
 export function SpriteAnimationTab({ active }: { active: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const isWide = useDesktopPageLayout()
   const [sheet, setSheet] = useState<SheetSource | null>(null)
   const [options, setOptions] = useState<SpriteAnimationOptions>({ columns: 8, rows: 1, frameCount: 8, spacing: 0, fps: 12, outputFormat: 'webp', backgroundColor: '#000000' })
@@ -78,7 +78,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
   const cell = sheet ? cellSize(sheet.width, sheet.height, options.columns, options.rows, options.spacing) : null
   const invalid = !sheet || !cell?.exact || options.frameCount < 1 || options.frameCount > options.columns * options.rows
   const running = Boolean(jobId) || starting
-  const canRun = has('images.edit') && !invalid && !running
+  const canRun = canRead && !invalid && !running
 
   const run = async (save: boolean) => {
     if (!sheet) return
@@ -94,7 +94,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
     }
   }
 
-  useSpriteAnimationChatPage({ active, sheet, setSheet, prepareSheet, options, setOptions, invalid, running, canRun, canSave: has('images.upload'), run, savedHashes })
+  useSpriteAnimationChatPage({ active, sheet, setSheet, prepareSheet, options, setOptions, invalid, running, canRun, canSave: canRead, run, savedHashes })
 
   const left = (
     <div className="flex min-w-0 flex-col">
@@ -126,7 +126,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
       <SpriteActionBar>
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{t({ ko: '{count}프레임', en: '{count} frames' }, { count: options.frameCount })} · {options.fps}fps · {options.outputFormat.toUpperCase()}</span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: '파일로 받기', en: 'Download file' })} onClick={() => void run(false)}><Download /></IconButton>
-        <Button size="sm" variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined}>
+        <Button size="sm" variant="default" disabled={!canRun} onClick={() => void run(true)} aria-busy={running || undefined}>
           {running ? <LoaderCircle className="animate-spin" /> : null}
           {t({ ko: '저장', en: 'Save' })}
         </Button>

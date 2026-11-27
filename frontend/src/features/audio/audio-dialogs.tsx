@@ -206,10 +206,11 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
 
 const COMMENT_PAGE = 20
 
-export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }: {
+export function AudioCommentsDialog({ open, group, canEdit, canDelete, onClose, onChanged }: {
   open: boolean
   group: AudioGroup
   canEdit: boolean
+  canDelete: boolean
   onClose: () => void
   onChanged: () => void
 }) {
@@ -299,7 +300,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
               {canEdit ? (
                 <div className="flex shrink-0 gap-0.5">
                   <IconButton variant="ghost" size="icon-xs" label={t({ ko: '수정', en: 'Edit' })} onClick={() => setEditing({ id: comment.id, text: comment.text })}><Pencil /></IconButton>
-                  <Button variant="destructive-ghost" size="xs" onClick={() => void run(() => deleteAudioComment(group.id, comment.id))}>{t({ ko: '삭제', en: 'Delete' })}</Button>
+                  {canDelete ? <Button variant="destructive-ghost" size="xs" onClick={() => void run(() => deleteAudioComment(group.id, comment.id))}>{t({ ko: '삭제', en: 'Delete' })}</Button> : null}
                 </div>
               ) : null}
             </li>

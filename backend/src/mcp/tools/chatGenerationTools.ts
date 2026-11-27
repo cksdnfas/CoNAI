@@ -9,7 +9,7 @@ import { chatGenerationToolName, type McpRequestContext } from '../context';
 import { enqueueMcpGenerationJob } from './generationJobTools';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
 import { isContextToolAllowed, requireMcpToolAccess } from '../toolAccess';
-import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { requireRequesterRight } from '../../middleware/featureAccess';
 import { errorResult, textResult } from '../toolResults';
 
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES, joinPrompt } from '../../services/codex-chat/chatGenerationPayload';
@@ -56,7 +56,7 @@ function withGuide(description: string, preset: ChatGenerationPreset) {
 function generationProfile(context: McpRequestContext, toolName: string, args: Record<string, unknown>, reference: boolean) {
   requireMcpToolAccess(context, toolName, args);
   if (!reference) return null;
-  requireRequesterPermission(context.requester, 'images.view');
+  requireRequesterRight(context.requester, 'read');
   return context.chatContext ? ChatProfileStore.find(context.chatContext.profileId, context.chatContext.threadId) : null;
 }
 

@@ -3,7 +3,7 @@ import { routeParam } from '../routeParam';
 import { WorkflowServerModel } from '../../models/ComfyUIServer';
 import { WorkflowResponse } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireEdit, requireDelete } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -44,7 +44,7 @@ router.get('/:id/servers', asyncHandler(async (req: Request, res: Response) => {
  * 워크플로우에 서버 연결
  * POST /api/workflows/:id/servers
  */
-router.post('/:id/servers', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/servers', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const { server_ids } = req.body;
 
@@ -81,7 +81,7 @@ router.post('/:id/servers', requirePermission('workflows.edit'), asyncHandler(as
  * 워크플로우에서 서버 연결 해제
  * DELETE /api/workflows/:id/servers/:serverId
  */
-router.delete('/:id/servers/:serverId', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id/servers/:serverId', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const serverId = parseInt(routeParam(req.params.serverId));
 

@@ -243,10 +243,10 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin-audio', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)
-  const listenerGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-listener', permissionKeys: ['audio.view', 'images.view'] })
+  const listenerGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-listener', permissionKeys: ['content.read'] })
   const listenerId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('listener', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(listenerGroup.id, listenerId)
-  const editorGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-editor', permissionKeys: ['audio.view', 'audio.edit', 'images.view'] })
+  const editorGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-editor', permissionKeys: ['content.read', 'content.edit', 'content.delete'] })
   const editorId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('editor', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(editorGroup.id, editorId)
   invalidateConfiguredAuthCache()
@@ -280,14 +280,13 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     return new AdmZip(buffer).getEntries().map((entry) => entry.entryName)
   }
 
-  await t.test('preview streams a temp render that is removed afterwards; edits need audio.edit', async () => {
+  await t.test('preview streams a temp render that is removed afterwards; edits need the edit right', async () => {
     const preview = await call(`/api/audio/candidates/${source.id}/preview`, editorId, { method: 'POST', body: JSON.stringify({ end: 1.2, pitch_semitones: 3 }) })
     assert.equal(preview.status, 200, preview.buffer.toString().slice(0, 200))
     assert.equal(preview.headers.get('content-type'), 'audio/wav')
     assert.equal(preview.buffer.subarray(0, 4).toString('ascii'), 'RIFF')
     await new Promise((resolve) => setTimeout(resolve, 100))
     assert.deepEqual(fs.readdirSync(path.join(root, 'temp', 'audio-preview')), [], 'the preview file is deleted after streaming')
-    assert.equal((await call(`/api/audio/candidates/${source.id}/preview`, listenerId, { method: 'POST', body: JSON.stringify({ end: 1 }) })).status, 403)
     assert.equal((await call(`/api/audio/candidates/${source.id}/edit`, listenerId, { method: 'POST', body: JSON.stringify({ end: 1 }) })).status, 403)
     const bad = await call(`/api/audio/candidates/${source.id}/edit`, editorId, { method: 'POST', body: JSON.stringify({ end: 1, speed: 5 }) })
     assert.equal(bad.status, 422)

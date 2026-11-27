@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useQuery } from '@tanstack/react-query'
 import { useChatPage } from './chat-page-context'
 import { pageAction, pageChoice, pageObject, pageText } from './page-action-helpers'
@@ -15,8 +16,8 @@ export function useChatPageMedia(targets: string[]) {
   const auth = useAuthStatusQuery().data
   const { t } = useI18n()
   const accountKey = auth?.accountId ?? 'bootstrap'
-  const canReadImages = !!auth?.permissionKeys.includes('images.view')
-  const canReadFiles = !!auth?.permissionKeys.includes('files.view')
+  const canReadImages = !!auth?.permissionKeys.includes(CONTENT_PERMISSIONS.read)
+  const canReadFiles = !!auth?.permissionKeys.includes(CONTENT_PERMISSIONS.read)
   const images = useQuery({ queryKey: ['chat-page-images', accountKey], queryFn: () => getImages({ limit: 30 }), enabled: !!page?.enabled && canReadImages, staleTime: 30000 })
   const files = useQuery({ queryKey: ['chat-page-files', accountKey], queryFn: () => listStoredFiles(null), enabled: !!page?.enabled && canReadFiles && canReadImages, staleTime: 30000 })
   const candidates: ChatPageData[] = [

@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Code, Download, File, History, SquarePen, WrapText } from 'lucide-react'
@@ -51,7 +52,7 @@ export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openH
   const [deniedEntryId, setDeniedEntryId] = useState<string | null>(null)
   const [history, setHistory] = useState(openHistory)
   const versioned = TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES
-  const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
+  const canWrite = auth.data?.permissionKeys?.includes(CONTENT_PERMISSIONS.edit) === true
   const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}`
   const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id, order?.sort, order?.direction], queryFn: () => getStoredFileNeighbors(entry.id, order) })
   return <Modal open title={entry.name} onClose={onClose} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" headerContent={<div className="flex items-center gap-1">

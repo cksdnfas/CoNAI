@@ -1,4 +1,5 @@
-import { requirePermission } from '../../middleware/authMiddleware'
+import { requesterHasRight } from '../../middleware/featureAccess';
+import { requireAuth, requireRead } from '../../middleware/authMiddleware'
 import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
@@ -8,7 +9,6 @@ import { GenerationQueueService } from '../../services/generationQueueService'
 import { parseCodexGenerationRequest } from '../../services/codexGenerationOptions'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
 import { ComfyInputValidationError, validateComfyPromptData } from '../../services/prepareComfyPromptData'
-import { canRequesterViewImages, requireImagesView } from '../../middleware/imageAccess'
 import { WorkflowInputAssetError } from '../../services/workflowInputAssetStore'
 import { createPluginPublicQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY } from '../../services/generation-queue/queueMcpImageGrant'
 import { hasRefModEntryRunKey, RefModEntryLinkForgedError } from '../../services/generation-queue/queueRefModEntryLink'
@@ -38,7 +38,7 @@ export function createGenerationQueueActionRoutes() {
 
   /** POST /api/generation-queue */
 
-  router.post('/', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/', requireAuth, asyncHandler(async (req: Request, res: Response) => {
 
     const {
 
@@ -301,7 +301,7 @@ export function createGenerationQueueActionRoutes() {
         if (validateComfyPromptData(workflowMarkedFields, normalizedPromptData)) {
           usesLibraryImages = true
           let allowed = false
-          requireImagesView(req, res, () => { allowed = true })
+          requireRead(req, res, () => { allowed = true })
           if (!allowed) return
         }
 
@@ -343,7 +343,7 @@ export function createGenerationQueueActionRoutes() {
     // Library inputs lent by a shared plugin page (middleware/pluginRouteLending): the queue re-checks that share when
     // the job runs, since the account itself cannot read the library.
     if (usesLibraryImages && req.pluginPublicScope && typeof workflowIdNumber === 'number'
-      && !canRequesterViewImages({ accountId: requesterAccountId, accountType: getRequesterAccountType(req) })) {
+      && !requesterHasRight({ accountId: requesterAccountId, accountType: getRequesterAccountType(req) }, 'read')) {
       normalizedRequestPayload = { ...normalizedRequestPayload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createPluginPublicQueueImageGrant(req.pluginPublicScope, requesterAccountId, workflowIdNumber, (normalizedRequestPayload as { prompt_data: Record<string, unknown> }).prompt_data) }
     }
 
@@ -448,7 +448,7 @@ export function createGenerationQueueActionRoutes() {
 
   /** POST /api/generation-queue/:id/retry */
 
-  router.post('/:id/retry', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/:id/retry', requireAuth, asyncHandler(async (req: Request, res: Response) => {
 
     const resolvedJob = resolveAccessibleQueueJob(req, res)
 

@@ -32,7 +32,7 @@ test('installed HyperFrames manages shared projects with revision-safe saves and
   })
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('hyperframes-test','unused','admin')").run().lastInsertRowid)
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'hyperframes-test', permissionKeys: ['files.view', 'files.edit', 'files.delete', 'images.view', 'images.edit', 'images.upload', 'generation.execute'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'hyperframes-test', permissionKeys: ['content.read', 'content.edit', 'content.delete', 'page.generation.view'] })
   AuthPermissionGroup.addAccountMembership(group.id, adminId)
   ;(await import('../src/services/auth/sessionAccess')).invalidateConfiguredAuthCache()
   const actor = { accountId: adminId, accountType: 'admin' as const }

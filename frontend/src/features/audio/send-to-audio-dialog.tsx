@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -13,10 +14,10 @@ import { useI18n } from '@/i18n'
 import { AUDIO_QUERY_KEY, importAudioFromFileStore, listAudioGroupsPage, listAudioProjectsPage } from '@/lib/api-audio'
 import { getErrorMessage } from '@/lib/error-message'
 
-/** Copying from the file store into the audio workspace needs audio.edit; the server re-checks. */
+/** Copying from the file store into the audio workspace needs the edit right; the server re-checks. */
 export function useCanSendToAudio() {
   const auth = useAuthStatusQuery().data
-  return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.edit'))
+  return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, CONTENT_PERMISSIONS.edit))
 }
 
 /** "오디오로 보내기": copy shared audio files into a project's 받은 파일 or a group. */

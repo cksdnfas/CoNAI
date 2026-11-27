@@ -89,13 +89,13 @@ export function CharacterLibraryPage() {
     return <Navigate to={`/chat/profiles${next.size ? `?${next}` : ''}`} replace />
   }
   if (params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
-  if (view === 'catalog' && permissions.has('prompts.view')) return <CharacterCatalogPage viewSwitch={<CharacterViewSwitch />} />
+  if (view === 'catalog' && permissions.canRead) return <CharacterCatalogPage viewSwitch={<CharacterViewSwitch />} />
   if (view === 'styles') return <ArtStylePage viewSwitch={<CharacterViewSwitch />} />
   if (view === 'refmods') return <RefModLibraryPage viewSwitch={<CharacterViewSwitch />} />
   return <AppearanceLibraryPage />
 }
 
-/** The page's views: the appearance library, the Danbooru character catalog (with the dictionary's `prompts.view`), art styles and RefMods; the switch leads each view's toolbar. */
+/** The page's views: the appearance library, the Danbooru character catalog (with the read right), art styles and RefMods; the switch leads each view's toolbar. */
 function CharacterViewSwitch() {
   const { t } = useI18n()
   const permissions = useFeaturePermissions()
@@ -104,7 +104,7 @@ function CharacterViewSwitch() {
   const label = (full: string, short: string) => <><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{full}</span></>
   const items = [
     { value: 'appearance', name: t({ ko: '외형 라이브러리', en: 'Appearance library' }), label: label(t({ ko: '외형 라이브러리', en: 'Appearance library' }), t({ ko: '외형', en: 'Looks' })) },
-    ...(permissions.has('prompts.view') ? [{ value: 'catalog', name: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), label: label(t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), t({ ko: '카탈로그', en: 'Catalog' })) }] : []),
+    ...(permissions.canRead ? [{ value: 'catalog', name: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), label: label(t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), t({ ko: '카탈로그', en: 'Catalog' })) }] : []),
     { value: 'styles', name: t({ ko: '그림 스타일', en: 'Art styles' }), label: label(t({ ko: '그림 스타일', en: 'Art styles' }), t({ ko: '스타일', en: 'Styles' })) },
     { value: 'refmods', name: 'RefMod', label: 'RefMod' },
   ]
@@ -142,7 +142,8 @@ function AppearanceLibraryPage() {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
-  const canEdit = permissions.has('characters.edit')
+  const canEdit = permissions.canEdit
+  const canDelete = permissions.canDelete
   const { params: searchParams, folderId, query, searchText, setSearchText, update, openFolder: navigateFolder } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE, ['setting', 'new'])
   const tabParam = searchParams.get('tab')
   const editorTab: CharacterAppearanceTab = tabParam === 'images' || tabParam === 'expressions' || tabParam === 'candidates' ? tabParam : 'tags'
@@ -351,7 +352,7 @@ function AppearanceLibraryPage() {
   const folderManagementMenu = (folder: CharacterFolder | null, disabled = false): ActionMenuEntry[] => [
     { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, run: (target: CharacterFolder) => setNameDialog({ mode: 'rename', folder: target, name: target.name }) },
     { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, run: (target: CharacterFolder) => setMoving({ kind: 'folder', folder: target }) },
-    { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, run: (target: CharacterFolder) => void deleteFolder(target) },
+    ...(canDelete ? [{ key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, run: (target: CharacterFolder) => void deleteFolder(target) }] : []),
   ].map(({ run, ...entry }) => ({ ...entry, disabled: disabled || !folder, onSelect: folder ? () => run(folder) : () => undefined }))
 
   const folderMenu = (folder: CharacterFolder): ActionMenuEntry[] => canEdit ? [
@@ -367,12 +368,12 @@ function AppearanceLibraryPage() {
     canEdit ? { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'setting', setting }) } : null,
     { key: 'copy', label: t({ ko: '태그 복사', en: 'Copy tags' }), icon: Copy, onSelect: () => void copyTags(setting) },
     canEdit ? { key: 'select', label: selected.has(setting.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { setSelectMode(true); toggleSelected(setting) } } : null,
-    canEdit ? '-' : null,
-    canEdit ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void deleteSetting(setting) } : null,
+    canDelete ? '-' : null,
+    canDelete ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void deleteSetting(setting) } : null,
   ]
 
   useCharacterLibraryChatPage({
-    folders, folderId, path, subfolders, query, settings: loaded ? { items: loaded, total: settingsTotal ?? loaded.length, hasMore: Boolean(loadMore) } : undefined, loadMore, editor, canEdit, editorTab, setEditorTab,
+    folders, folderId, path, subfolders, query, settings: loaded ? { items: loaded, total: settingsTotal ?? loaded.length, hasMore: Boolean(loadMore) } : undefined, loadMore, editor, canEdit, canDelete, editorTab, setEditorTab,
     openFolder, search, openSetting, newSetting,
     createFolder: (parentId, name) => nameMutation.mutateAsync({ mode: 'create', parentId, name }),
     renameFolder: (folder, name) => nameMutation.mutateAsync({ mode: 'rename', folder, name }),
@@ -475,7 +476,7 @@ function AppearanceLibraryPage() {
             />
           </RowGroup>
       </LibraryFolderContent>
-      {editor.open ? <CharacterSettingDialog editor={editor} folders={folders} items={listed} total={settingsTotal ?? listed.length} onLoadMore={loadMore} canEdit={canEdit} admin={permissions.isAdmin} tab={editorTab} onTabChange={setEditorTab} onOpen={openSetting} onClose={closeEditor} onToggleFavorite={toggleFavorite} /> : null}
+      {editor.open ? <CharacterSettingDialog editor={editor} folders={folders} items={listed} total={settingsTotal ?? listed.length} onLoadMore={loadMore} canEdit={canEdit} canDelete={canDelete} admin={permissions.isAdmin} tab={editorTab} onTabChange={setEditorTab} onOpen={openSetting} onClose={closeEditor} onToggleFavorite={toggleFavorite} /> : null}
 
       {canEdit ? (
         <SelectionActionBar
@@ -487,7 +488,7 @@ function AppearanceLibraryPage() {
             <SelectionBarAction icon={Star} label={t({ ko: '즐겨찾기', en: 'Favorite' })} disabled={bulkMutation.isPending} onClick={() => bulkMutation.mutate({ action: 'favorite', ids: [...selected.keys()], favorite: true })} />
             <SelectionBarAction icon={StarOff} label={t({ ko: '즐겨찾기 해제', en: 'Unfavorite' })} disabled={bulkMutation.isPending} onClick={() => bulkMutation.mutate({ action: 'favorite', ids: [...selected.keys()], favorite: false })} />
             <SelectionBarAction icon={Download} label={t({ ko: '내보내기', en: 'Export' })} onClick={() => void exportSettings({ ids: [...selected.keys()] }, t({ ko: '선택한 외형', en: 'selected settings' }))} />
-            <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={bulkMutation.isPending} onClick={() => void deleteSelected()} />
+            {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={bulkMutation.isPending} onClick={() => void deleteSelected()} /> : null}
             <SelectionBarAction icon={FolderInput} label={t({ ko: '다른 폴더로 옮기기', en: 'Move to…' })} variant="default" disabled={bulkMutation.isPending} onClick={() => setBulkMoving(true)} />
           </>}
         />

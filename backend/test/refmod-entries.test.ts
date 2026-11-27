@@ -583,35 +583,31 @@ test('refmod entries: roles, sources, guard, build, adoption, bundle, permission
     const anyEntry = (db.prepare('SELECT id FROM refmod_entries ORDER BY id LIMIT 1').get() as { id: number }).id
     const anyFile = (db.prepare('SELECT entry_id, file_id FROM refmod_entry_files ORDER BY entry_id LIMIT 1').get() as { entry_id: number; file_id: string })
     const narrowReads: Array<[string, string]> = [['GET', `/${anyEntry}`], ['GET', '/unregistered'], ['GET', '/presence'], ['GET', '/workflows'], ['POST', '/export']]
-    for (const keys of [['generation.execute'], ['workflows.view'], ['images.view']]) {
-      only(keys)
-      assert.equal((await call('GET', '/')).status, 200, `the list stays open to the Director picker: ${keys}`)
-      for (const [method, route] of narrowReads) {
-        assert.equal((await call(method, route, method === 'POST' ? { ids: [anyEntry] } : undefined)).status, 403, `${method} ${route} needs characters.view (${keys})`)
-      }
+    only([])
+    assert.equal((await call('GET', '/')).status, 200, 'the list stays open to the Director picker')
+    for (const [method, route] of narrowReads) {
+      assert.equal((await call(method, route, method === 'POST' ? { ids: [anyEntry] } : undefined)).status, 403, `${method} ${route} needs the read right`)
     }
-    only(['generation.execute'])
     assert.equal((await call('POST', '/', { name: 'forbidden' })).status, 403)
-    assert.equal((await fetch(`${base}/${anyFile.entry_id}/files/${anyFile.file_id}`)).status, 403, 'media needs images.view')
-    only(['characters.view'])
-    const withMedia = (db.prepare('SELECT entry_id FROM refmod_entry_files ORDER BY entry_id LIMIT 1').get() as { entry_id: number }).entry_id
+    assert.equal((await fetch(`${base}/${anyFile.entry_id}/files/${anyFile.file_id}`)).status, 403, 'media needs the read right')
+    only(['content.read'])
     for (const [method, route] of narrowReads) {
       const response = await fetch(`${base}${route}`, method === 'POST'
-        ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [withMedia] }) } : { method })
-      assert.equal(response.status, 200, `${method} ${route} with characters.view`)
-      const body = Buffer.from(await response.arrayBuffer())
-      if (method === 'POST') {
-        const AdmZip = (await import('adm-zip')).default
-        assert.deepEqual(new AdmZip(body).getEntries().map((entry) => entry.entryName), ['refmods.json'], 'the export carries no sources without images.view')
-      }
+        ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [anyEntry] }) } : { method })
+      assert.equal(response.status, 200, `${method} ${route} with the read right`)
+      await response.arrayBuffer()
     }
-    assert.equal((await fetch(`${base}/${anyFile.entry_id}/files/${anyFile.file_id}`)).status, 403, 'media still needs images.view')
     assert.equal((await call('PATCH', `/${anyEntry}`, { revision: 1 })).status, 403)
-    // A library image needs images.view even for an editor.
-    only(['characters.view', 'characters.edit'])
+    only(['content.read', 'content.edit'])
     const control = db.prepare('SELECT id, revision FROM refmod_entries ORDER BY id LIMIT 1').get() as { id: number; revision: number }
-    const allowed = await call('PATCH', `/${control.id}`, { revision: control.revision, description: 'Editor without images.view' })
+    const allowed = await call('PATCH', `/${control.id}`, { revision: control.revision, description: 'Editor' })
     assert.equal(allowed.status, 200, `an editor passes the route guard: ${JSON.stringify(allowed.body)}`)
+    assert.equal((await call('DELETE', `/${control.id}`)).status, 403, 'removal needs the delete right')
+    for (const action of ['delete', 'unregister']) {
+      assert.equal((await call('POST', '/bulk', { ids: [control.id], action })).status, 403, `bulk ${action} needs the delete right`)
+    }
+    // A library image needs reading, which edit includes when the keys are resolved; without it the source rule refuses.
+    only(['content.edit'])
     const target = db.prepare('SELECT id, revision FROM refmod_entries WHERE id = ?').get(control.id) as { id: number; revision: number }
     const libraryOnly = {
       ...JSON.parse(template.workflow_json)[1].inputs,
@@ -620,12 +616,9 @@ test('refmod entries: roles, sources, guard, build, adoption, bundle, permission
     }
     const hidden = await call('PATCH', `/${target.id}`, { revision: target.revision, values: { director: libraryOnly } })
     assert.equal(hidden.status, 403, JSON.stringify(hidden.body))
-    assert.match(hidden.body.error, /images\.view/, 'refused by the library-source rule, not the route guard')
+    assert.match(hidden.body.error, /content\.read/, 'refused by the library-source rule, not the route guard')
     assert.equal((db.prepare('SELECT revision FROM refmod_entries WHERE id = ?').get(target.id) as { revision: number }).revision, target.revision, 'nothing was saved')
-    only(['characters.edit'])
-    assert.equal((await call('POST', `/${anyEntry}/build`)).status, 403, 'building also needs generation.execute')
     only([])
-    assert.ok([401, 403].includes((await call('GET', '/')).status))
     assert.ok([401, 403].includes((await call('GET', '/presence')).status))
     sub.mock.restoreAll()
   })
@@ -749,21 +742,22 @@ test('refmod entries: roles, sources, guard, build, adoption, bundle, permission
       sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => keys.includes(key)) }))
     }
     const current = () => (db.prepare('SELECT revision FROM refmod_entries WHERE id = ?').get(entry.id) as { revision: number }).revision
-    only(['generation.execute', 'workflows.view'])
-    assert.ok((await tool('list_refmod_entries')).error, 'reads need characters.view')
+    only([])
+    assert.match((await tool('list_refmod_entries')).error ?? '', /content\.read/, 'reads need the read right')
     assert.ok((await tool('get_refmod_entry', { entry_id: entry.id })).error)
-    only(['characters.view'])
+    // A build is generating, as on REST: no right is needed (an unknown entry fails on the entry, not on access).
+    assert.doesNotMatch((await tool('build_refmod', { entry_id: 999999 })).error ?? '', /Permission required/)
+    only(['content.read'])
     assert.ok((await tool('list_refmod_entries')).data)
-    assert.ok((await tool('save_refmod_entry', { entry_id: entry.id, revision: current(), description: 'viewer' })).error, 'saving needs characters.edit')
+    assert.match((await tool('save_refmod_entry', { entry_id: entry.id, revision: current(), description: 'viewer' })).error ?? '', /content\.edit/, 'saving needs the edit right')
     assert.ok((await tool('adopt_refmod', { name: 'server/only' })).error)
-    only(['characters.view', 'characters.edit'])
-    assert.ok((await tool('build_refmod', { entry_id: entry.id })).error, 'building also needs generation.execute')
-    const editorSave = await tool('save_refmod_entry', { entry_id: entry.id, revision: current(), description: 'Editor without images.view' })
+    only(['content.read', 'content.edit'])
+    const editorSave = await tool('save_refmod_entry', { entry_id: entry.id, revision: current(), description: 'Editor' })
     assert.ok(editorSave.data, editorSave.error)
+    only(['content.edit'])
+    assert.ok((await tool('get_refmod_entry', { entry_id: entry.id })).error, 'editing does not grant reads')
     const libraryRefused = await tool('save_refmod_entry', { entry_id: entry.id, revision: current(), inputs: { director: { media: [{ type: 'image', composite_hash: 'd'.repeat(48) }] } } })
-    assert.match(libraryRefused.error ?? '', /images\.view/, 'a library image needs images.view')
-    only(['characters.edit', 'generation.execute'])
-    assert.ok((await tool('get_refmod_entry', { entry_id: entry.id })).error, 'the build keys do not grant reads')
+    assert.match(libraryRefused.error ?? '', /content\.read/, 'a library image needs the read right')
     sub.mock.restoreAll()
   })
   await t.test('names are plain file names: the DaSiWa rule, create, rename, MCP save; a registered sub-folder name blocks the build', async () => {

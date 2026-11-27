@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY } from '@conai/shared';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireEdit } from '../../middleware/authMiddleware';
 import { WorkflowModel } from '../../models/Workflow';
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer';
 import { CustomDropdownListModel } from '../../models/CustomDropdownList';
@@ -11,7 +11,7 @@ import { createComfyUIService } from '../../services/comfyuiService';
 import { buildRefModExportTemplate } from '../../services/comfyui/refmodExportTemplate';
 
 const router = Router();
-router.post(`/templates/${MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY}`, requirePermission('workflows.edit'), asyncHandler(async (req, res) => {
+router.post(`/templates/${MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY}`, requireEdit, asyncHandler(async (req, res) => {
   const serverId = req.body?.server_id;
   if (serverId !== undefined && (!Number.isSafeInteger(serverId) || serverId <= 0)) {
     return res.status(400).json({ success: false, error: 'server_id must be a positive integer' });

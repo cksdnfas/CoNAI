@@ -122,29 +122,7 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
     assert.deepEqual(library.ensureCharacterGroups(value.id), groups)
   })
 
-  await t.test('REST hash writes need images.view before looking up an image', async (sub) => {
-    const access = AuthAccessControlService.resolveBootstrapAccess()
-    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => key !== 'images.view') }))
-    const current = library.getCharacterSetting(setting.id)
-    const created = await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'Forbidden hash', referenceHash: 'not-an-image' })
-    assert.equal(created.status, 403)
-    assert.match(created.body.error, /images.view/)
-    const patched = await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(setting.id) }, { revision: current.revision, avatarHash: 'not-an-image' })
-    assert.equal(patched.status, 403)
-    assert.equal(library.getCharacterSetting(setting.id).revision, current.revision)
-    for (const key of ['referenceHash', 'avatarHash', 'avatarCrop']) {
-      assert.equal((await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'No image', [key]: null })).status, 403)
-      assert.equal((await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(setting.id) }, { revision: current.revision, [key]: null })).status, 403)
-    }
-    assert.equal((await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(setting.id) }, { revision: current.revision, references: [] })).status, 403)
-    assert.equal((await call(libraryRouter, '/settings/:settingId/references/catalog', 'post', { settingId: String(setting.id) }, { character: 'Miku', revision: current.revision })).status, 403)
-    const categoryOnly = await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'Categories only', referenceCategories: ['Official'] })
-    assert.equal(categoryOnly.status, 201)
-    assert.deepEqual(categoryOnly.body.data.referenceCategories, ['Official'])
-    assert.equal((await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'No image' })).status, 201)
-  })
-
-  await t.test('setting uploads require characters.edit, validate IDs and do not create groups on invalid URL', async (sub) => {
+  await t.test('setting uploads need the read right, validate IDs and do not create groups on invalid URL', async (sub) => {
     for (const endpoint of ['upload', 'url', 'from-file-store']) {
       const response = await call(chatRouter, `/admin/chat-assets/${endpoint}`, 'post', {}, { settingId: 999999, url: 'invalid' })
       assert.equal(response.status, 404, endpoint)
@@ -154,11 +132,11 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
     assert.equal((await call(chatRouter, '/admin/chat-assets/url', 'post', {}, { settingId: setting.id, url: 'invalid' })).status, 400)
     assert.deepEqual(library.characterSettingRow(setting.id), before)
     const access = AuthAccessControlService.resolveBootstrapAccess()
-    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => key !== 'characters.edit') }))
+    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => key !== 'content.read') }))
     for (const endpoint of ['upload', 'url', 'from-file-store']) {
       const response = await call(chatRouter, `/admin/chat-assets/${endpoint}`, 'post', {}, { settingId: setting.id })
       assert.equal(response.status, 403, endpoint)
-      assert.match(response.body.error, /characters.edit/)
+      assert.equal(response.body.error, 'Forbidden')
     }
   })
 
@@ -323,14 +301,14 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
       assert.equal(latest.id, batches.latestChatAssetBatchId({ kind: 'setting', id: setting.id }))
       ChatProfileStore.update(profile.id, { characterLink: null })
       const access = AuthAccessControlService.resolveBootstrapAccess()
-      sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => key !== 'images.view') }))
+      sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...access, permissionKeys: access.permissionKeys.filter((key) => key !== 'content.read') }))
       const denied = await bridge.call('propose_character_library', { action: 'save_setting', setting_id: setting.id, revision: current.revision, input: { referenceHash: 'not-an-image' } })
       assert.equal(denied.isError, true)
-      assert.match(JSON.stringify(denied), /images.view/)
+      assert.match(JSON.stringify(denied), /content\.read/)
       for (const key of ['referenceHash', 'avatarHash', 'avatarCrop']) {
         const clear = await bridge.call('propose_character_library', { action: 'save_setting', setting_id: setting.id, revision: current.revision, input: { [key]: null } })
         assert.equal(clear.isError, true)
-        assert.match(JSON.stringify(clear), /images.view/)
+        assert.match(JSON.stringify(clear), /content\.read/)
       }
     } finally { close(); await bridge.close() }
   })

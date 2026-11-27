@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import type { McpRequester } from '../../mcp/context'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { GroupPathService } from '../groupPathService'
 import { EmoticonService, normalizeKeyword } from '../emoticonService'
 import { ChatAssetError, requireChatAssetAdmin } from './chatAssetAccess'
@@ -76,7 +76,7 @@ function emotionName(value: unknown) {
 
 function writableProfile(requester: McpRequester, profileId: number) {
   requireChatAssetAdmin(requester)
-  requireRequesterPermission(requester, 'images.edit')
+  requireRequesterRight(requester, 'edit')
   const profile = ChatProfileStore.find(profileId)
   if (!profile) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
   if (profile.characterLink?.synced) throw new ChatAssetError('라이브러리와 동기화된 프로필이야. 연결된 외형 설정의 표정을 수정하거나 연결을 분리해줘.', 409)
@@ -141,8 +141,8 @@ export function clearProfileExpression(requester: McpRequester, profileId: ChatA
 
 function changeSettingExpression(requester: McpRequester, settingId: number, name: unknown, hash: string | null) {
   requireChatAssetAdmin(requester)
-  requireRequesterPermission(requester, 'characters.edit')
-  requireRequesterPermission(requester, 'images.edit')
+  requireRequesterRight(requester, 'edit')
+  requireRequesterRight(requester, 'edit')
   const emotion = emotionName(name)
   const compositeHash = normalizeProfileAssetHash(hash)
   if (hash !== null && !compositeHash) throw new ChatAssetError('이미지를 골라줘.')

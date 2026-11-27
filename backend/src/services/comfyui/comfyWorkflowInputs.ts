@@ -9,7 +9,7 @@ import { isComfySeedJsonPath } from './seedControl'
 import { isHiddenWorkflowField, visibleWorkflowFields } from '../workflowHiddenFieldPolicy'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
-import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireContextPermission, requireRequesterRight } from '../../middleware/featureAccess'
 import {
   findUnresolvedMiniMaxH3RefModSlots,
   isProtectedWorkflowKey,
@@ -510,11 +510,11 @@ export async function prepareMcpComfyWorkflow(params: {
   const markedFields = parseMcpMarkedFields(params.workflow)
   if (isChatMcpSource(params.context?.source)) {
     requireChatWorkflowInputs(params.context!, markedFields, params.suppliedInputs)
-    validateMcpToolArguments([params.suppliedInputs, ...markedFields.map((field) => field.default_value)], () => requireRequesterPermission(params.context?.requester, 'images.view'))
+    validateMcpToolArguments([params.suppliedInputs, ...markedFields.map((field) => field.default_value)], () => requireRequesterRight(params.context?.requester, 'read'))
   }
   const promptData = normalizeMcpWorkflowInputs(markedFields, params.suppliedInputs)
   if (validateComfyPromptData(markedFields, promptData) && params.context) {
-    requireContextPermission(params.context, 'images.view')
+    requireContextPermission(params.context, 'content.read')
   }
   const comfyService = createMcpComfyService(params.server)
   const { captureRefModRecords, failRefModRecords, linkRefModRecords } = await import('./refmodRecords')

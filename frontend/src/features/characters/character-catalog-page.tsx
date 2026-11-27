@@ -78,9 +78,9 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
-  const canImport = permissions.has('characters.edit')
+  const canImport = permissions.canEdit
   // Sample images join the library as the new setting's reference images.
-  const canImportImages = canImport && canViewImages && permissions.has('images.upload')
+  const canImportImages = canImport && canViewImages
   const [params, setParams] = useSearchParams()
   const query = params.get('q')?.trim() ?? ''
   const copyrightTagId = Number(params.get('copyright')) || null
@@ -175,7 +175,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
   // Failures are reported by the mutation's snackbar; screen imports only need to not double-run.
   const importFromScreen = (input: CatalogImport) => { if (!importLock.current) void runImport(input).catch(() => undefined) }
 
-  // The library's look for a card's quick copy (it needs characters.edit, like the import); else the character tag.
+  // The library's look for a card's quick copy (it needs the edit right, like the import); else the character tag.
   const copyLook = async (character: DanbooruBrowserCharacterRecord) => {
     try {
       const fill = canImport ? await queryClient.fetchQuery({ queryKey: catalogFillKey(character), queryFn: ({ signal }) => fillCharacterAppearance({ source: 'danbooru', character: character.name }, signal) }) : null
@@ -228,7 +228,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       if (id !== 'character.catalog_import') throw new Error('캐릭터 카탈로그에 없는 작업이야.')
       const character = items.find((item) => item.tagId === Number(args.tagId))
       if (!character) throw new Error('지금 목록에 없는 캐릭터야. character.catalog_search로 다시 찾아줘.')
-      if (args.includeSampleImages === true && !withSamples(character)) throw new Error(canImportImages ? '이 캐릭터는 사전에 샘플 이미지가 없어. includeSampleImages 없이 다시 가져와줘.' : '샘플 이미지를 넣으려면 images.view와 images.upload 권한이 필요해. includeSampleImages 없이 가져와줘.')
+      if (args.includeSampleImages === true && !withSamples(character)) throw new Error(canImportImages ? '이 캐릭터는 사전에 샘플 이미지가 없어. includeSampleImages 없이 다시 가져와줘.' : '샘플 이미지를 넣으려면 수정 권한이 필요해. includeSampleImages 없이 가져와줘.')
       const { setting, images } = await runImport({
         character,
         folderId: Number(args.folderId) > 0 ? Number(args.folderId) : null,
@@ -388,7 +388,7 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
   const foldersQuery = useCharacterFolders()
   const folders = foldersQuery.data ?? []
   const folderLabel = [t({ ko: '최상위', en: 'Top level' }), ...folderPath(new Map(folders.map((folder) => [folder.id, folder])), folderId).map((folder) => folder.name)].join(' / ')
-  // The preview uses the library's fill (it needs characters.edit, like the import).
+  // The preview uses the library's fill (it needs the edit right, like the import).
   const preview = useQuery({ queryKey: catalogFillKey(character), queryFn: ({ signal }) => fillCharacterAppearance({ source: 'danbooru', character: character.name }, signal), enabled: canImport })
   const images = canViewImages ? character.images : []
   const shownImage = images[Math.min(imageIndex, images.length - 1)]

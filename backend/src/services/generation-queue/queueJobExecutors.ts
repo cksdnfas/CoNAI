@@ -32,14 +32,12 @@ import { classifySubmitFailure } from './queueSubmitFailureClassifier'
 import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from './queueProgressRegistry'
 import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requesterHasRight, requireRequesterRight } from '../../middleware/featureAccess'
 import { isPluginPublicQueueImageGrant, requireMcpQueueImageGrant } from './queueMcpImageGrant'
-import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { isChatMcpSource, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { requireChatAssetGeneration, requireLocalProfileAssets } from '../codex-chat/chatAssetAccess'
-import { audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import {
   handleComfySubmitFailure,
   markNaiSubmitAmbiguous,
@@ -111,17 +109,6 @@ function isQueueCancelRequested(jobId: number) {
   return GenerationQueueModel.readCancelState(jobId)?.cancelRequested === true
 }
 
-/** Chat tools that queue audio-order jobs (see audioOrders `__conaiChatGrant`). */
-const AUDIO_ORDER_CHAT_TOOLS = new Set(['order_audio', 'retry_audio_order_job'])
-
-/**
- * A chat-granted job queued by an audio order tool for a real audio order. Such jobs run the workflow bound in the
- * audio settings, and their tools already need audio.edit + generation.execute, so they skip the workflows.view check.
- */
-export function isAudioOrderChatJob(jobId: number, toolName: string) {
-  return AUDIO_ORDER_CHAT_TOOLS.has(toolName) && audioOrderGroupsByQueueJob([jobId]).has(jobId)
-}
-
 export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(job)
   const assetGrant = payload.__conaiAssetGrant as { profileId?: number; settingId?: number } | undefined
@@ -150,8 +137,7 @@ export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord)
     if (!link || !chat || (link.thread_id !== chat.threadId && !forwarded)) throw new Error('Invalid chat generation job binding.')
     const authority = { ...grant.context, requester: { accountId: job.requested_by_account_id ?? null, accountType: null } }
     requireMcpToolAccess(authority, grant.toolName, { group_id: job.requested_group_id }, 'queued')
-    if (job.service_type === 'comfyui' && !isAudioOrderChatJob(job.id, grant.toolName)) requireRequesterPermission(authority.requester, 'workflows.view')
-    if (grant.usesImages) requireRequesterPermission(authority.requester, 'images.view')
+    if (grant.usesImages) requireRequesterRight(authority.requester, 'read')
     return authority.requester
   }
   return undefined
@@ -208,11 +194,11 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   if (validateComfyPromptData(markedFields, payload.promptData)) {
     if (job.requested_by_account_id == null && payload.mcpImageGrant !== undefined && !isPluginPublicQueueImageGrant(payload.mcpImageGrant)) {
       requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData)
-    } else if (isPluginPublicQueueImageGrant(payload.mcpImageGrant) && !(requester && canRequesterViewImages(requester))) {
-      // Submitted from a shared plugin page that lent images.view: valid while that page still lends it.
+    } else if (isPluginPublicQueueImageGrant(payload.mcpImageGrant) && !(requester && requesterHasRight(requester, 'read'))) {
+      // Submitted from a shared plugin page that lent reading: valid while that page still lends it.
       requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData, job.requested_by_account_id ?? null)
     } else {
-      requireRequesterPermission(requester, 'images.view')
+      requireRequesterRight(requester, 'read')
     }
   }
   const refmodRecords = await captureRefModRecords({

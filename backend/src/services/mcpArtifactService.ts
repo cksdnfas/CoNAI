@@ -7,13 +7,12 @@ import { FileDiscoveryService } from './folderScan/fileDiscoveryService';
 import { ImageUploadService } from './imageUploadService';
 import { mcpHttpSettingsService } from './mcpHttpSettingsService';
 import type { McpRequester } from '../mcp/context';
-import { requireRequesterImagePermission } from '../middleware/imageAccess';
 import { requireMcpResourceOwner } from '../mcp/toolAccess';
 import { canAccessSpriteWorkspace, getSpriteWorkspace } from './sprite/spriteCache';
 import { audioCandidateFile } from './audio/audioService';
 import { AUDIO_MIME_BY_EXTENSION, audioBlobPath } from './audio/audioStore';
 import { audioExportMimeType, audioExportResultFile, canAccessAudioExport, getAudioExportWorkspace } from './audio/audioExport';
-import { requireRequesterPermission } from '../middleware/featureAccess';
+import { requireRequesterRight } from '../middleware/featureAccess';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageSafetyService } from './imageSafetyService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
@@ -253,7 +252,7 @@ export class McpArtifactService {
 
   static async createHistoryDescriptor(historyId: number, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
     if (requester) {
-      requireRequesterImagePermission(requester);
+      requireRequesterRight(requester, 'read');
       requireMcpResourceOwner({ scopes: [], requester }, HistoryQueryRepository.findAllWithMetadata({ ids: [historyId], limit: 1 })[0], true);
     }
     const artifact = resolveHistoryArtifact(historyId);
@@ -285,11 +284,11 @@ export class McpArtifactService {
   }
 
   /**
-   * One audio candidate's file. Account-bound callers need audio.view and get the session file route; key callers get
+   * One audio candidate's file. Account-bound callers need the read right and get the session file route; key callers get
    * the signed `/mcp/artifacts` URL.
    */
   static async createAudioDescriptor(candidateId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
-    if (requester) requireRequesterPermission(requester, 'audio.view');
+    if (requester) requireRequesterRight(requester, 'read');
     const artifact = resolveAudioArtifact(candidateId);
     if (!artifact) return null;
     const descriptor = await this.createDescriptor(artifact, baseUrl);
@@ -301,7 +300,7 @@ export class McpArtifactService {
     const artifact = resolveAudioExportArtifact(exportId);
     if (!artifact) return null;
     if (requester) {
-      requireRequesterPermission(requester, 'audio.view');
+      requireRequesterRight(requester, 'read');
       const owner = getAudioExportWorkspace(exportId)?.owner;
       if (!owner || !canAccessAudioExport(owner, requester)) throw new Error('Resource is not accessible to this account.');
     }
@@ -310,11 +309,11 @@ export class McpArtifactService {
   }
 
   /**
-   * A library media item's original file (a saved sprite sheet, say). Account-bound callers need images.view and get
+   * A library media item's original file (a saved sprite sheet, say). Account-bound callers need the read right and get
    * the session original-download route; key callers get the signed `/mcp/artifacts` URL.
    */
   static async createMediaDescriptor(compositeHash: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
-    if (requester) requireRequesterImagePermission(requester);
+    if (requester) requireRequesterRight(requester, 'read');
     const artifact = resolveMediaArtifact(compositeHash);
     if (!artifact) return null;
     const descriptor = await this.createDescriptor(artifact, baseUrl);

@@ -59,19 +59,19 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'characters',
 ]
 
-/** Topic rights match the corresponding REST surface; null means an owner-filtered authenticated session. */
+/** Topic rights match the corresponding REST surface (the read right); null means an owner-filtered authenticated session. */
 export const RUNTIME_EVENT_TOPIC_PERMISSIONS: Record<RuntimeEventTopic, string | null> = {
   'generation-queue': null,
   'runtime-job': null,
-  'generation-history': 'images.view',
-  'graph-schedule': 'workflows.view',
-  'graph-execution': 'workflows.view',
-  posts: 'posts.view',
-  workspaces: 'files.view',
+  'generation-history': 'content.read',
+  'graph-schedule': 'content.read',
+  'graph-execution': 'content.read',
+  posts: 'content.read',
+  workspaces: 'content.read',
   plugins: null,
-  files: 'files.view',
-  audio: 'audio.view',
-  characters: 'characters.view',
+  files: 'content.read',
+  audio: 'content.read',
+  characters: 'content.read',
 }
 
 

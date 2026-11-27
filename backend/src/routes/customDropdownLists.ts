@@ -1,5 +1,4 @@
-import { requireImagesView } from '../middleware/imageAccess';
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
+import { requireAdmin, requireRead, requireEdit, requireDelete } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { CustomDropdownListModel } from '../models/CustomDropdownList';
@@ -93,7 +92,7 @@ router.get('/by-name/:name', asyncHandler(async (req: Request, res: Response) =>
  * ComfyUI 자동수집 모델 썸네일 조회
  * GET /api/custom-dropdown-lists/comfy-model-thumbnail?folder=loras&value=...
  */
-router.get('/comfy-model-thumbnail', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/comfy-model-thumbnail', requireRead, asyncHandler(async (req: Request, res: Response) => {
   const result = await resolveComfyModelThumbnail({
     folder: req.query.folder,
     value: req.query.value,
@@ -161,7 +160,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 커스텀 드롭다운 목록 생성
  * POST /api/custom-dropdown-lists
  */
-router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const { name, description, items } = req.body;
 
   if (!name) {
@@ -219,7 +218,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
  * 커스텀 드롭다운 목록 업데이트
  * PUT /api/custom-dropdown-lists/:id
  */
-router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const { name, description, items } = req.body;
 
@@ -302,7 +301,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
  * 커스텀 드롭다운 목록 삭제
  * DELETE /api/custom-dropdown-lists/:id
  */
-router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {

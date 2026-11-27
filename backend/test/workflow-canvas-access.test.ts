@@ -14,7 +14,7 @@ import { AuthPermissionGroup } from '../src/models/AuthPermissionGroup'
 import { invalidateConfiguredAuthCache } from '../src/services/auth/sessionAccess'
 import { workflowRoutes } from '../src/routes/workflows'
 
-test('the integrated canvas listing requires an administrator and image access', async (t) => {
+test('the integrated canvas listing requires an administrator', async (t) => {
   initializeAuthDb()
   await initializeDatabase()
   initializeUserSettingsDb()
@@ -25,7 +25,7 @@ test('the integrated canvas listing requires an administrator and image access',
   const admin = addAccount('canvas-admin', 'admin')
   const guest = addAccount('canvas-guest', 'guest')
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(admin)
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'canvas-viewer', permissionKeys: ['workflows.view', 'images.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'canvas-viewer', permissionKeys: ['content.read'] })
   AuthPermissionGroup.addAccountMembership(group.id, guest)
   invalidateConfiguredAuthCache()
 

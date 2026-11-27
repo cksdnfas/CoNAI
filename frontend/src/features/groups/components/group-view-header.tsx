@@ -19,7 +19,7 @@ interface GroupViewHeaderProps {
   rootLabel: string
   countState: CountState
   isCustomSource: boolean
-  /** The account may delete groups (images.delete). */
+  /** The account may delete groups (the delete right). */
   canDelete?: boolean
   autoCollect?: { enabled: boolean; conditionCount: number }
   compact?: boolean

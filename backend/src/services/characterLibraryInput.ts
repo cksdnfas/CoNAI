@@ -25,8 +25,8 @@ export const characterSettingFields = {
   referenceHash: z.string().nullable().optional(),
   avatarHash: z.string().nullable().optional(),
   avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
-  references: characterReferencesSchema.optional().describe('Replaces ordered gallery; unique library hashes, needs images.view; category must be null or in the resulting referenceCategories'),
-  referenceCategories: characterReferenceCategoriesSchema.optional().describe('Replaces ordered person-named categories; names unique case-insensitively. Removing a category uncategorizes existing images; categories alone need no images.view.'),
+  references: characterReferencesSchema.optional().describe('Replaces ordered gallery; unique library hashes, needs the read right; category must be null or in the resulting referenceCategories'),
+  referenceCategories: characterReferenceCategoriesSchema.optional().describe('Replaces ordered person-named categories; names unique case-insensitively. Removing a category uncategorizes existing images; categories alone need no read right.'),
 }
 export const characterSettingCreateSchema = z.object(characterSettingFields).strict()
 export const characterSettingPatchSchema = characterSettingCreateSchema.partial().extend({ revision: characterLibraryId }).strict()

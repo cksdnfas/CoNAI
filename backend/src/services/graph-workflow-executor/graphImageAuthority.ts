@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
-import { requireRequesterImagePermission } from '../../middleware/imageAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import type { McpRequestContext } from '../../mcp/context'
 import { requireCurrentMcpKeyImagePermission } from '../generation-queue/queueMcpImageGrant'
 import type { ExecutionContext } from './shared'
@@ -29,7 +29,7 @@ export function withMcpGraphImageAuthority<T>(context: McpRequestContext, run: (
 /** Recheck the actual caller, or a server-recorded legacy schedule, before each library access. */
 export function requireGraphImageAuthority(context: ExecutionContext): GraphImageAuthority {
   if (context.requestedByAccountId != null) {
-    requireRequesterImagePermission({ accountId: context.requestedByAccountId, accountType: null })
+    requireRequesterRight({ accountId: context.requestedByAccountId, accountType: null }, 'read')
     return { kind: 'account' }
   }
 
@@ -49,6 +49,6 @@ export function requireGraphImageAuthority(context: ExecutionContext): GraphImag
     }
   }
 
-  requireRequesterImagePermission({ accountId: null, accountType: null })
+  requireRequesterRight({ accountId: null, accountType: null }, 'read')
   return { kind: 'bootstrap' }
 }

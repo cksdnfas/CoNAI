@@ -47,7 +47,7 @@ function useSourceImages(keys: string[], source: (key: string) => GalleryImageSo
  * menu per image and the full-size viewer. The owner keeps the list: `onAdd` / `onReorder` edit its draft. `items`
  * are library hashes unless `source` resolves each key (then `adder` brings the owner's own add key and uploads).
  * `heading` adds the title row with the count and the add key; without it `toolbar` places the add key. Without
- * `images.view` it only says so.
+ * the read right it only says so.
  */
 export function ReferenceImageGallery({ items, shown = items, source, adder, editable, busy, onBusyChange, uploadTarget, libraryGroupId = null, isCurrent, onAdd, onReorder, imageLabel, imageTitle, imageBadges, imageMenu, heading, count, toolbar, pasteAnywhere = false, full = false, emptyLabel, ariaLabel }: {
   /** Every image's key, in order (loaded together; the viewer steps through them). */
@@ -58,7 +58,7 @@ export function ReferenceImageGallery({ items, shown = items, source, adder, edi
   source?: (key: string) => GalleryImage | null
   /** The owner's add key and upload path, in place of the library import (`uploadTarget` is then unused). */
   adder?: GalleryAdder
-  /** The owner may change its images (images.view is checked here). */
+  /** The owner may change its images (the read right is checked here). */
   editable: boolean
   busy: boolean
   onBusyChange: (busy: boolean) => void

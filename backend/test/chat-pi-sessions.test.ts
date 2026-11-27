@@ -685,7 +685,7 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
       callTool: async () => {
         calls += 1
         if (calls === 1) return { content: [{ type: 'text', text: `done${' apple fact'.repeat(600)}` }] }
-        shown = pageOperationView(admin, screen('C'), screen('D'), limit, takePageViewFolded(threadId)).page
+        shown = pageOperationView(admin, screen('C'), screen('D'), limit, null, takePageViewFolded(threadId)).page
         return { content: [{ type: 'text', text: JSON.stringify({ status: 'done', page: shown }) }] }
       },
     })

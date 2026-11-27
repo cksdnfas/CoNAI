@@ -41,7 +41,7 @@ function canManage(actor:PostActor,row:EvaluationRow) {
 }
 function publicRequest(actor:PostActor,row:EvaluationRow):PostEvaluationRequest {
   let taskContext:PostKnowledgeTaskContext|undefined;
-  if(row.use_id&&row.requester_account_key===knowledgeAccountKey(actor.accountId)&&(actor.isAdmin||actor.keys.has('posts.evaluate'))) {
+  if(row.use_id&&row.requester_account_key===knowledgeAccountKey(actor.accountId)) {
     const executions=db().prepare(`SELECT DISTINCT e.* FROM post_evaluation_request_uses r JOIN post_knowledge_uses u ON u.id=r.use_id
       JOIN post_knowledge_executions e ON e.execution_id=u.execution_id WHERE r.request_id=? AND e.account_key=? AND e.root_execution_id=?
       AND e.status='completed' AND e.trust='observed_execution' AND u.scope='body' AND u.post_id=? AND u.content_version=? AND u.content_hash=?
@@ -57,7 +57,7 @@ function publicRequest(actor:PostActor,row:EvaluationRow):PostEvaluationRequest 
 
 export const KnowledgeEvaluationStore = {
   request(actor:PostActor,postId:number,input:{contentVersion?:unknown;idempotencyKey?:unknown}):PostEvaluationRequest {
-    requireHumanPostActor(actor);requireKey(actor,'posts.knowledge.review');
+    requireHumanPostActor(actor);requireKey(actor,'content.edit');
     const knowledge=requireKnowledgeRow(actor,postId);
     if(typeof input.contentVersion !== 'number'||!Number.isSafeInteger(input.contentVersion)||input.contentVersion !== knowledge.content_version) throw new PostError('검토 요청 내용 판이 현재 문서와 달라.',409);
     if(typeof input.idempotencyKey !== 'string'||!input.idempotencyKey.trim()||input.idempotencyKey.length>160) throw new PostError('검토 요청 멱등 키가 필요해.');
@@ -110,7 +110,7 @@ export const KnowledgeEvaluationStore = {
     return publicRequest(actor,rowById(id)!);
   },
   status(actor:PostActor):PostKnowledgeEvaluationStatus {
-    requireKey(actor,'posts.view');
+    requireKey(actor,'content.read');
     const key=knowledgeAccountKey(actor.accountId);
     const states=db().prepare('SELECT status,COUNT(*) AS count FROM post_evaluation_requests WHERE requester_account_key=? GROUP BY status').all(key) as Array<{status:PostEvaluationStatus;count:number}>;
     const usage=db().prepare(`SELECT COUNT(*) AS calls,SUM(actual_tokens) AS tokens,SUM(CASE WHEN actual_tokens IS NULL THEN reserved_tokens ELSE 0 END) AS reserved,
@@ -216,8 +216,8 @@ async function evaluateRequest(ctx:RuntimeJobContext<{requestId:string;lease:str
   if(!settings.enabled||!settings.autoEvaluationEnabled) {transition(requestId,lease,'skipped','evaluation_disabled');return {status:'skipped'};}
   let actor:PostActor,knowledge:ReturnType<typeof requireKnowledgeRow>;
   try {
-    actor=currentKnowledgeActor(row.requester_account_id);requireKey(actor,'posts.evaluate');
-    if(row.purpose==='document_review') requireKey(actor,'posts.knowledge.review');
+    actor=currentKnowledgeActor(row.requester_account_id);
+    if(row.purpose==='document_review') requireKey(actor,'content.edit');
     knowledge=requireKnowledgeRow(actor,row.post_id);
     if(knowledge.post.status==='hidden'||knowledge.deleted_at||!knowledge.enabled) throw new PostError('검토할 문서가 현재 열람 가능하지 않아.',404);
   } catch(error) {
@@ -292,8 +292,8 @@ async function evaluateRequest(ctx:RuntimeJobContext<{requestId:string;lease:str
     const committed=db().transaction(()=>{
       const current=rowById(requestId);
       if(!current||current.status!=='running'||current.lease_token!==lease) return false;
-      const latestActor=currentKnowledgeActor(row!.requester_account_id);requireKey(latestActor,'posts.evaluate');
-      if(row!.purpose==='document_review') requireKey(latestActor,'posts.knowledge.review');
+      const latestActor=currentKnowledgeActor(row!.requester_account_id);
+      if(row!.purpose==='document_review') requireKey(latestActor,'content.edit');
       const latest=requireKnowledgeRow(latestActor,row!.post_id);
       if(latest.post.status==='hidden'||latest.deleted_at||!latest.enabled) throw new PostError('평가 저장 권한이 회수됐어.',403);
       try {assertKnowledgeSourceVisibility(latestActor,latest.post.status,normalizeKnowledgeSources(latestActor,JSON.parse(version.sources_json)));}

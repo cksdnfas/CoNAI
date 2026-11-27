@@ -22,8 +22,7 @@ import {
   normalizeWorkflowNumericPromptValues,
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy';
-import { requirePermission } from '../../middleware/authMiddleware';
-import { requireImagesView } from '../../middleware/imageAccess';
+import { requireAuth, requireRead } from '../../middleware/authMiddleware';
 import { assignGeneratedMediaToGroup, GenerationTargetGroupService } from '../../services/generationTargetGroupService';
 import { getRequesterAccountId } from '../requester-session-helpers';
 
@@ -33,7 +32,7 @@ const router = Router();
  * 이미지 생성 요청
  * POST /api/workflows/:id/generate
  */
-router.post('/:id/generate', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/generate', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const { prompt_data, server_id, groupId, group_path, source_image, imageSaveOptions } = req.body as {
     prompt_data?: Record<string, any>;
@@ -97,7 +96,7 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
     }
     if (validateComfyPromptData(markedFields, normalizedPromptData)) {
       let allowed = false;
-      requireImagesView(req, res, () => { allowed = true; });
+      requireRead(req, res, () => { allowed = true; });
       if (!allowed) return;
     }
     const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, normalizedPromptData);

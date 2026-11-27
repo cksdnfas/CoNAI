@@ -1,17 +1,18 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import type { McpRequestContext } from '../context'
 import { errorResult, runToolResult, textResult } from '../toolResults'
-import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission } from '../../middleware/featureAccess'
+import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextRight } from '../../middleware/featureAccess'
 import type { CharacterFacetKey } from '@conai/shared'
 import { characterFolderPath, characterLibraryFacets, createCharacterFolder, getCharacterSetting, listCharacterFolders, listCharacterSettings, patchCharacterFolder } from '../../services/characterLibrary'
 import { CHARACTER_FACET_KEYS, fillCharacterAppearance } from '../../services/characterAppearanceTags'
 import { EmoticonService } from '../../services/emoticonService'
 import { characterLibraryProposalSchema, proposeCharacterLibrary } from '../../services/codex-chat/characterLibraryProposals'
 
-/** Library image hashes are shown and accepted only with the caller's images.view (unbound local callers see them). */
+/** Library image hashes are shown and accepted only with the caller's content.read (unbound local callers see them). */
 export function mcpCanViewImages(context: McpRequestContext) {
-  return context.requester ? requesterPermissionKeys(context.requester).includes('images.view') : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes('images.view') : true
+  return context.requester ? requesterPermissionKeys(context.requester).includes(CONTENT_PERMISSIONS.read) : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes(CONTENT_PERMISSIONS.read) : true
 }
 
 export function registerCharacterLibraryTools(server: McpServer, context: McpRequestContext) {
@@ -26,7 +27,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
       limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().nonnegative().optional(),
     }).strict(),
   }, async ({ folder_id, include_facets, limit, offset, sort, ...scope }) => runToolResult(() => {
-    requireContextPermission(context, 'characters.view')
+    requireContextRight(context, 'read')
     const listed = { ...scope, ...(folder_id !== undefined ? { folderId: folder_id } : {}) }
     return {
       path: characterFolderPath(folder_id ?? null).map(({ id, name }) => ({ id, name })),
@@ -40,20 +41,20 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     inputSchema: z.object({
       source: z.enum(['danbooru', 'image', 'text']).describe('danbooru/image need the Danbooru dictionary to sort appearance/outfit tags; text sorts supplied tags'),
       character: z.string().optional().describe('Required for danbooru: character tag or exact Korean name; uses frequent appearance/outfit tags'),
-      image_hash: z.string().optional().describe('Required for image: library composite hash; uses auto tags and tags an untagged image now; needs images.view'),
+      image_hash: z.string().optional().describe('Required for image: library composite hash; uses auto tags and tags an untagged image now; needs content.read'),
       text: z.string().optional().describe('Required for text: tags to sort'),
     }).strict(),
   }, async ({ source, character, image_hash, text }) => {
     try {
-      requireContextPermission(context, 'characters.view')
+      requireContextRight(context, 'read')
       return textResult(await fillCharacterAppearance(source === 'danbooru' ? { source, character } : source === 'image' ? { source, imageHash: image_hash } : { source, text }, canViewImages()))
     } catch (error) { return errorResult(error) }
   })
   server.registerTool('get_character_setting', {
-    description: 'Read a setting\'s appearance, outfits, ordered references/categories, expressions, groups and revision. Images/references need images.view. Use the revision in propose_character_library; if missing, list_character_library again.',
+    description: 'Read a setting\'s appearance, outfits, ordered references/categories, expressions, groups and revision. Images/references need content.read. Use the revision in propose_character_library; if missing, list_character_library again.',
     inputSchema: z.object({ setting_id: id }).strict(),
   }, async ({ setting_id }) => runToolResult(() => {
-    requireContextPermission(context, 'characters.view')
+    requireContextRight(context, 'read')
     const images = canViewImages()
     const setting = getCharacterSetting(setting_id, images)
     if (!context.requester || !isRequesterAdmin(context.requester)) setting.linkedProfiles = []
@@ -67,7 +68,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
       z.object({ action: z.literal('move'), folder_id: id, parent_id: id.nullable().describe('null: root') }).strict(),
     ]),
   }, async (value) => runToolResult(() => {
-    requireContextPermission(context, 'characters.edit')
+    requireContextRight(context, 'edit')
     if (value.action === 'create') return createCharacterFolder({ parentId: value.parent_id ?? null, name: value.name })
     return patchCharacterFolder(value.folder_id, value.action === 'move' ? { parentId: value.parent_id } : { name: value.name })
   }))
@@ -76,7 +77,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     inputSchema: characterLibraryProposalSchema,
   }, async (input) => {
     try {
-      requireContextPermission(context, 'characters.edit')
+      requireContextRight(context, 'edit')
       if (!context.chatContext) throw new Error('This proposal needs an active chat reply.')
       const proposal = proposeCharacterLibrary(context.chatContext, input, canViewImages())
       return textResult({ proposalId: proposal.id, note: 'Review and save the card to apply this change.' }, { structuredContent: { proposal } })

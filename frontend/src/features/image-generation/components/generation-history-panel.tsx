@@ -1,4 +1,3 @@
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -55,7 +54,6 @@ type GenerationHistoryPanelViewProps = GenerationHistoryPanelProps & {
 export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading, hideScopeActions = false }: GenerationHistoryPanelViewProps) {
   const { canOpenDetailPage } = useImagePermissions()
   const { t, formatNumber } = useI18n()
-  const { canExecuteGeneration } = useFeaturePermissions()
   const {
     columnCount: historyColumnCount,
     setColumnCount: setHistoryColumnCount,
@@ -358,10 +356,8 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
               size="icon-sm"
               variant="secondary"
               onClick={() => void handleRetrySelectedHistoryRecords()}
-              disabled={!canExecuteGeneration || isRetryingRunRecovery || selectedRetryableHistoryRecords.length === 0}
-              label={!canExecuteGeneration
-                ? t({ ko: '생성 권한이 필요해', en: 'Generation permission is required' })
-                : isRetryingRunRecovery
+              disabled={isRetryingRunRecovery || selectedRetryableHistoryRecords.length === 0}
+              label={isRetryingRunRecovery
                   ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' })
                   : selectedRetryableHistoryRecords.length === 0
                     ? t({ ko: '다시 실행할 수 있는 선택 항목이 없어', en: 'No selected items can be rerun' })

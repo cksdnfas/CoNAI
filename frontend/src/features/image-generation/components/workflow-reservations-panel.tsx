@@ -346,6 +346,6 @@ function WorkflowReservationsPanelContent() {
 }
 
 export function WorkflowReservationsPanel() {
-  const { canViewWorkflows } = useFeaturePermissions()
-  return canViewWorkflows ? <WorkflowReservationsPanelContent /> : <FeaturePermissionNotice permission="workflows.view" />
+  const { canRead } = useFeaturePermissions()
+  return canRead ? <WorkflowReservationsPanelContent /> : <FeaturePermissionNotice />
 }

@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useRef, useState } from 'react'
@@ -155,10 +156,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const permissions = useMemo(() => auth.data?.permissionKeys ?? [], [auth.data?.permissionKeys])
   const isPicker = onPick !== undefined
   const chatCanReadFiles = useChatPageDataPermissions().canReadFiles
-  const canViewFiles = permissions.includes('files.view')
-  const canUpload = canViewFiles && permissions.includes('files.edit')
-  const canOrganize = permissions.includes('files.edit')
-  const canDelete = permissions.includes('files.delete')
+  const canViewFiles = permissions.includes(CONTENT_PERMISSIONS.read)
+  const canUpload = permissions.includes(CONTENT_PERMISSIONS.edit)
+  const canOrganize = canUpload
+  const canDelete = permissions.includes(CONTENT_PERMISSIONS.delete)
   // Restricted file types require administrator access.
   const canUploadAny = auth.data?.isAdmin === true || auth.data?.hasCredentials === false
   const canBrowseSystem = !isPicker && onSystemNavigate !== undefined && auth.data?.isAdmin === true

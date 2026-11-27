@@ -13,7 +13,7 @@ export interface PromptPageToolbarProps {
   view: PromptPageView
   /** Prompt type to go back to when the preset toggle is switched off. */
   promptType: PromptTypeFilter
-  canViewWildcards: boolean
+  canRead: boolean
   onChangeView: (view: PromptPageView) => void
   /** Flexible middle (search). */
   children?: ReactNode
@@ -25,7 +25,7 @@ export interface PromptPageToolbarProps {
 export type PromptPageToolbarBaseProps = Omit<PromptPageToolbarProps, 'children' | 'actions'>
 
 /** The one toolbar row of /prompts: type switch · search · view actions · wildcard and preset keys. */
-export function PromptPageToolbar({ view, promptType, canViewWildcards, onChangeView, children, actions }: PromptPageToolbarProps) {
+export function PromptPageToolbar({ view, promptType, canRead, onChangeView, children, actions }: PromptPageToolbarProps) {
   const { t } = useI18n()
   const items = [
     ...Object.entries(PROMPT_TYPE_LABELS).map(([value, label]) => ({ value, label: t(label) })),
@@ -49,7 +49,7 @@ export function PromptPageToolbar({ view, promptType, canViewWildcards, onChange
       actions={(
         <>
           {actions}
-          {canViewWildcards ? (
+          {canRead ? (
             <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '와일드카드', en: 'Wildcards' })}>
               <Link to="/wildcards"><Shuffle /></Link>
             </IconButton>

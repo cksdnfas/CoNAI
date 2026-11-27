@@ -59,10 +59,9 @@ export const PostBotRuns = {
   },
 
   mentionable(actor: PostActor): PostMentionableProfile[] {
-    const canSeeImages = actor.isAdmin || actor.keys.has('images.view');
     return summonableProfiles(actor.accountId).map((profile) => ({
       id: profile.id, name: profile.name, tagline: profile.tagline,
-      avatarUrl: canSeeImages && profile.avatarHash && !isProfileAssetHidden(profile.avatarHash) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
+      avatarUrl: profile.avatarHash && !isProfileAssetHidden(profile.avatarHash) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
       avatarCrop: profile.avatarCrop ?? null,
     }));
   },

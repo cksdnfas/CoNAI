@@ -8,7 +8,7 @@ import { pluginTokenSchema, type PluginCaller } from './pluginHost'
 import { requirePluginWorkspace, mediaTarget } from './pluginWorkspace'
 import { workspaceTarget } from '../workspaceService'
 import { PluginFolder } from './pluginFolder'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobConflictError } from '../runtimeJobs/runtimeJobStore'
 import { runtimePaths } from '../../config/runtimePaths'
@@ -28,10 +28,11 @@ const schema = z.object({
     z.object({ kind: z.literal('extract_audio'), quality: z.number().int().min(0).max(10) }).strict(),
   ]),
 }).strict()
-function access(id: string, caller: PluginCaller, kind: string) {
+function access(id: string, caller: PluginCaller, _kind: string) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.write')
   const requester = publicScopeRequester(caller.requester, instance.publicScope, 'media.process')
-  for (const permission of kind === 'crop' ? ['images.view', 'images.edit', 'images.upload'] : ['images.view', 'audio.view', 'audio.edit']) requireRequesterPermission(requester, permission)
+  // The output is a new file in the plugin's folder (a copy, like generating): reading the source is all it needs.
+  requireRequesterRight(requester, 'read')
   return instance
 }
 async function outputRevision(id: string, target: string, caller: PluginCaller) {

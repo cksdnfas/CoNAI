@@ -4,9 +4,8 @@ import multer from 'multer';
 import { ZipArchive } from 'archiver';
 import { REFMOD_BUNDLE_DOCUMENT } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { allowAnonymousAnyPermission, requirePermission } from '../middleware/authMiddleware';
-import { canRequesterViewImages, requireImagesView } from '../middleware/imageAccess';
-import { orPublicWorkflow } from '../middleware/publicWorkflowScope';
+import { requireDelete, requireEdit, requireRead } from '../middleware/authMiddleware';
+import { requesterHasRight } from '../middleware/featureAccess';
 import { createUploadStorage, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { fileOwnerKey, FileStoreError } from '../services/fileStoreService';
 import { getFileThumbnail } from '../services/fileStorePreview';
@@ -34,20 +33,16 @@ import { getRequester } from './requester-session-helpers';
 import { routeParam } from './routeParam';
 
 /**
- * RefMod entries (/api/refmod-entries). The list follows GET /api/refmods: characters.view, or what the Director
- * picker needs (generation-only accounts and published-workflow pages). Every other read (one entry, unregistered
- * records, presence, workflow candidates, export) needs characters.view. Writes need characters.edit, a build also
- * generation.execute, media images.view (export too, for the sources it includes). Entry media is served here, never
- * through /api/files.
+ * RefMod entries (/api/refmod-entries). The list and builds only need sign-in (the mount), as the Director picker and
+ * generation do. Every other read needs the read right, writes edit, removals delete. Entry media is served here,
+ * never through /api/files.
  */
 const router = Router();
-const listRead = orPublicWorkflow(allowAnonymousAnyPermission(['characters.view', 'generation.execute', 'workflows.view', 'images.view']));
-const read = requirePermission('characters.view');
-const edit = requirePermission('characters.edit');
-const execute = requirePermission('generation.execute');
+const read = requireRead;
+const edit = requireEdit;
 const actor = (req: Request) => {
   const requester = getRequester(req);
-  return { owner: fileOwnerKey(requester.accountId), canViewImages: canRequesterViewImages(requester) };
+  return { owner: fileOwnerKey(requester.accountId), canViewImages: requesterHasRight(requester, 'read') };
 };
 const entryId = (req: Request) => refModEntryId(routeParam(req.params.id));
 
@@ -76,7 +71,7 @@ function handle(run: (req: Request, res: Response) => unknown | Promise<unknown>
 
 const query = (value: unknown) => typeof value === 'string' ? value : undefined;
 
-router.get('/', listRead, handle((req) => {
+router.get('/', handle((req) => {
   const rawRegistered = query(req.query.registered);
   const registered = rawRegistered === 'all' ? 'all' : rawRegistered === '0' || rawRegistered === 'false' ? false : true;
   return listRefModEntries({
@@ -96,16 +91,17 @@ router.get('/template', read, handle((req) => {
   return getRefModDraftTemplate(refModEntryId(raw));
 }));
 router.get('/unregistered', read, handle(() => listUnregisteredRefModRecords()));
-router.delete('/unregistered/:recordId', edit, handle(async (req) => {
+router.delete('/unregistered/:recordId', requireDelete, handle(async (req) => {
   await deleteUnregisteredRefModRecord(refModEntryId(routeParam(req.params.recordId)));
   return { deleted: true };
 }));
 router.get('/presence', read, handle(() => getRefModPresence()));
 router.get('/workflows', read, handle(() => listRefModWorkflowCandidates()));
 router.post('/adopt', edit, handle((req) => adoptRefMods(req.body, actor(req))));
-router.post('/bulk', edit, handle((req) => bulkRefModEntries(req.body, actor(req))));
+// Moving to Unregistered is the RefMod trash, like DELETE on one entry.
+router.post('/bulk', (req, res, next) => (['delete', 'unregister'].includes(req.body?.action) ? requireDelete : edit)(req, res, next), handle((req) => bulkRefModEntries(req.body, actor(req))));
 
-/** A ZIP of refmods.json and the sources; media are already compressed, so entries are stored. Sources need images.view. */
+/** A ZIP of refmods.json and the sources; media are already compressed, so entries are stored. Sources need content.read. */
 router.post('/export', read, asyncHandler(async (req, res) => {
   let bundle: ReturnType<typeof exportRefModEntries>;
   try { bundle = exportRefModEntries(req.body, actor(req).canViewImages); }
@@ -146,13 +142,13 @@ router.post('/import', edit, (req, res, next) => {
 router.post('/', edit, handle((req) => createRefModEntry(req.body, actor(req)), 201));
 router.get('/:id', read, handle((req) => getRefModEntry(entryId(req))));
 router.patch('/:id', edit, handle((req) => patchRefModEntry(entryId(req), req.body, actor(req))));
-router.delete('/:id', edit, handle(async (req) => {
+router.delete('/:id', requireDelete, handle(async (req) => {
   const revision = req.query.revision === undefined ? undefined : Number(req.query.revision);
   if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw new RefModEntryError('잘못된 revision이야.');
   await deleteRefModEntry(entryId(req), actor(req), revision);
   return { deleted: true };
 }));
-router.post('/:id/build', edit, execute, handle((req) => buildRefModEntry(entryId(req), getRequester(req)), 201));
+router.post('/:id/build', handle((req) => buildRefModEntry(entryId(req), getRequester(req)), 201));
 
 function entryFile(req: Request, res: Response) {
   const id = Number(routeParam(req.params.id));
@@ -166,7 +162,7 @@ function entryFile(req: Request, res: Response) {
   return file;
 }
 
-router.get('/:id/files/:fileId', requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:id/files/:fileId', requireRead, asyncHandler(async (req, res) => {
   const file = entryFile(req, res);
   if (!file) return;
   res.setHeader('Content-Security-Policy', 'sandbox');
@@ -180,7 +176,7 @@ router.get('/:id/files/:fileId', requireImagesView, asyncHandler(async (req, res
   }
 }));
 
-router.get('/:id/files/:fileId/thumbnail', requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:id/files/:fileId/thumbnail', requireRead, asyncHandler(async (req, res) => {
   const file = entryFile(req, res);
   if (!file) return;
   let cached: string;

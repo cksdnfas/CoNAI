@@ -10,7 +10,6 @@ import { workspaceListSchema, workspaceReadSchema, workspaceApplySchema } from '
 import type { WorkspaceOperation } from '@conai/shared'
 import { requireFileStoreAction, requireFileStoreOwner } from '../fileStoreAccess'
 import { FileStoreService } from '../fileStoreService'
-import { requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { db } from '../../database/init'
 import { ImageFileModel } from '../../models/Image/ImageFileModel'
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries'
@@ -18,7 +17,7 @@ import { ImageSafetyService } from '../imageSafetyService'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { MEDIA_HASH_PATTERN } from '../codex-chat/chatMediaLinks'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { audioCandidateFile } from '../audio/audioService'
 import { audioBlobPath, AUDIO_MIME_BY_EXTENSION } from '../audio/audioStore'
 import type { McpRequester } from '../../mcp/context'
@@ -184,12 +183,12 @@ export async function resolvePluginMediaReference(value: unknown, requester: Mcp
   if (reference.source === 'files') {
     resolved = FileStoreService.resolveFile(requireFileStoreOwner(actor), reference.fileId)
   } else if (reference.source === 'audio') {
-    requireRequesterPermission(publicScope ? actor : requester, 'audio.view')
+    requireRequesterRight(publicScope ? actor : requester, 'read')
     const { candidate, file } = audioCandidateFile(reference.candidateId)
     if (candidate.deleted_at) throw new PluginError('지운 오디오는 열 수 없어.', 404)
     resolved = { filePath: audioBlobPath(file.hash, file.ext), entry: { id: candidate.id, parentId: null, kind: 'file', name: `${candidate.name}.${file.ext}`, mimeType: AUDIO_MIME_BY_EXTENSION[file.ext], size: file.size, createdAt: '', updatedAt: '' } }
   } else {
-    requireRequesterImagePermission(publicScope ? actor : requester)
+    requireRequesterRight(publicScope ? actor : requester, 'read')
     if (reference.groupId !== undefined && !db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(reference.groupId, reference.compositeHash)) throw new PluginError('그룹에서 미디어 참조를 찾을 수 없어.', 404)
     const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(reference.compositeHash)
     if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) throw new PluginError('아직 사용할 수 없는 미디어야.', 404)

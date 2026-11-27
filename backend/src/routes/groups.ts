@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import { allowImagesView } from '../middleware/imageAccess';
-import { requirePermission } from '../middleware/authMiddleware';
+import { allowRead, requireDelete, requireEdit } from '../middleware/authMiddleware';
 import { groupEmoticonRoutes } from './groups.emoticon.routes';
 import { groupHierarchyRoutes } from './groups.hierarchy.routes';
 import { groupMutationRoutes } from './groups.mutation.routes';
@@ -10,21 +9,20 @@ import { groupResourceRoutes } from './groups.resources.routes';
 const router = Router();
 router.use((req, res, next) => {
   if (req.method === 'POST' && req.path === '/resolve-path') {
-    if (req.body?.create === true) requirePermission('images.edit')(req, res, next);
-    else allowImagesView(req, res, next);
+    if (req.body?.create === true) requireEdit(req, res, next);
+    else allowRead(req, res, next);
     return;
   }
   if (req.method === 'GET' || req.method === 'HEAD') {
-    allowImagesView(req, res, next);
+    allowRead(req, res, next);
   } else {
     const deletesGroups = (req.method === 'DELETE' && /^\/[^/]+$/.test(req.path)) || (req.method === 'POST' && req.path === '/bulk-delete');
     const mergesGroups = req.method === 'POST' && (req.path === '/bulk-move' || /^\/[^/]+\/move$/.test(req.path)) && req.body?.preview !== true && Boolean(req.body?.merge_token);
     if (mergesGroups) {
-      requirePermission('images.edit')(req, res, () => requirePermission('images.delete')(req, res, next));
+      requireEdit(req, res, () => requireDelete(req, res, next));
       return;
     }
-    const permission = deletesGroups ? 'images.delete' : 'images.edit';
-    requirePermission(permission)(req, res, next);
+    (deletesGroups ? requireDelete : requireEdit)(req, res, next);
   }
 });
 

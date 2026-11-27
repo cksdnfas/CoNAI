@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, Controls, MiniMap, ReactFlow, useNodesInitialized, type Connection, type OnConnectEnd, type OnConnectStart, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { hasOpenDialog, isTypingTarget } from '@/lib/keyboard-shortcut'
@@ -281,7 +280,6 @@ export function ModuleGraphCanvas({
   onRedo: () => void
   onAutoLayout: () => void
 }) {
-  const { canExecuteGeneration } = useFeaturePermissions()
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ModuleGraphNode, ModuleGraphEdge> | null>(null)
   const [quickCreateState, setQuickCreateState] = useState<QuickCreateState | null>(null)
   const isCoarsePointer = useIsCoarsePointer()
@@ -795,7 +793,7 @@ export function ModuleGraphCanvas({
             {actionMenuState ? (
               <ModuleGraphActionMenu
                 state={actionMenuState}
-                canRun={canExecuteGeneration && !executionLocked}
+                canRun={!executionLocked}
                 onRunNode={() => {
                   const nodeId = actionMenuState.nodeId
                   closeActionMenu()

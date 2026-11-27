@@ -1,8 +1,7 @@
 import fs from 'fs'
 import { z } from 'zod'
 import { McpArtifactService } from '../mcpArtifactService'
-import { requireRequesterImagePermission } from '../../middleware/imageAccess'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { requireMcpResourceOwner } from '../../mcp/toolAccess'
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { canAccessSpriteWorkspace, getSpriteWorkspace } from '../sprite/spriteCache'
@@ -18,8 +17,8 @@ function resolve(instanceId: string, artifactId: string, caller: PluginCaller) {
   if (!identity || identity.kind === 'graph') throw new PluginError('이 미디어 결과를 열 수 없어.', 404)
   // A shared page that declares media.read lends viewing; ownership checks below still apply to the viewer.
   const requester = publicScopeRequester(caller.requester, instance.publicScope, 'media.read')
-  if (identity.kind === 'audio' || identity.kind === 'audio-export') requireRequesterPermission(requester, 'audio.view')
-  else requireRequesterImagePermission(requester)
+  if (identity.kind === 'audio' || identity.kind === 'audio-export') requireRequesterRight(requester, 'read')
+  else requireRequesterRight(requester, 'read')
   if (identity.kind === 'history') requireMcpResourceOwner({ scopes: [], requester }, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true)
   if (identity.kind === 'sprite-frames') {
     const owner = getSpriteWorkspace(identity.id)?.owner

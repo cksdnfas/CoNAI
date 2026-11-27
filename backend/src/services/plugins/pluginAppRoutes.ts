@@ -1,8 +1,8 @@
 /**
  * Native REST routes a plugin page may borrow on a page an administrator shared (manifest `appRoutes`). The core
- * keeps this table: each id names exact methods and paths and the permission keys lent for them, chosen so the
- * route's own guard and handler checks pass while ownership, rating and role rules still apply to the viewer.
- * Deleting keys and administrator routes are never listed.
+ * keeps this table: each id names exact methods and paths and the basic rights lent for them (reading at most; most
+ * of these routes need only sign-in), so the route's guard passes while ownership, rating and role rules still apply to
+ * the viewer. Deleting and administrator routes are never listed.
  */
 /** `body`: the parsed request body must pass too (checked when the route's guard asks, after body parsing). */
 type RouteRule = readonly [methods: readonly string[], path: RegExp, body?: (body: unknown) => boolean]
@@ -17,25 +17,25 @@ const IMAGE_READ: RouteRule = [READ, new RegExp(`^/api/images/${HASH}(?:/(?:file
 
 export const PLUGIN_APP_ROUTES = {
   /** Library media reads: record, original file, thumbnail. */
-  'images.read': { keys: ['images.view'], rules: [IMAGE_READ] },
+  'images.read': { keys: ['content.read'], rules: [IMAGE_READ] },
   /** Reads the prompt metadata of a picked file; nothing is stored. */
-  'images.extract-metadata': { keys: ['images.view', 'images.upload'], rules: [[['POST'], /^\/api\/images\/extract-metadata$/]] },
-  'audio.candidate-file': { keys: ['audio.view'], rules: [[READ, /^\/api\/audio\/candidates\/[^/]+\/file$/]] },
-  'files.thumbnail': { keys: ['files.view', 'images.view'], rules: [[READ, /^\/api\/files\/[^/]+\/thumbnail$/]] },
-  'refmods.read': { keys: ['workflows.view'], rules: [[READ, /^\/api\/refmods$/]] },
-  'workflows.read': { keys: ['workflows.view'], rules: [[READ, /^\/api\/workflows(?:\/\d+(?:\/servers)?)?$/]] },
-  'custom-dropdown-lists.read': { keys: ['workflows.view'], rules: [[READ, /^\/api\/custom-dropdown-lists(?:\/by-name\/[^/]+|\/\d+)?$/]] },
+  'images.extract-metadata': { keys: ['content.read'], rules: [[['POST'], /^\/api\/images\/extract-metadata$/]] },
+  'audio.candidate-file': { keys: ['content.read'], rules: [[READ, /^\/api\/audio\/candidates\/[^/]+\/file$/]] },
+  'files.thumbnail': { keys: ['content.read'], rules: [[READ, /^\/api\/files\/[^/]+\/thumbnail$/]] },
+  'refmods.read': { keys: ['content.read'], rules: [[READ, /^\/api\/refmods$/]] },
+  'workflows.read': { keys: ['content.read'], rules: [[READ, /^\/api\/workflows(?:\/\d+(?:\/servers)?)?$/]] },
+  'custom-dropdown-lists.read': { keys: ['content.read'], rules: [[READ, /^\/api\/custom-dropdown-lists(?:\/by-name\/[^/]+|\/\d+)?$/]] },
   /** Upload, read and release the viewer's own workflow input files. */
-  'workflow-input-assets': { keys: ['generation.execute', 'images.view'], rules: [[['POST'], /^\/api\/workflow-input-assets$/], [['GET', 'HEAD', 'DELETE'], /^\/api\/workflow-input-assets\/[a-f0-9]{32}$/]] },
+  'workflow-input-assets': { keys: ['content.read'], rules: [[['POST'], /^\/api\/workflow-input-assets$/], [['GET', 'HEAD', 'DELETE'], /^\/api\/workflow-input-assets\/[a-f0-9]{32}$/]] },
   /** The viewer's own generation records (the route scopes non-administrators to their account). */
-  'generation-history.read': { keys: ['images.view'], rules: [[READ, /^\/api\/generation-history(?:\/\d+(?:\/[a-z]+)?)?$/]] },
+  'generation-history.read': { keys: ['content.read'], rules: [[READ, /^\/api\/generation-history(?:\/\d+(?:\/[a-z]+)?)?$/]] },
   /** Queue a ComfyUI workflow run, follow it and cancel it (own jobs only; the workflow's role limits still apply). */
-  'generation-queue': { keys: ['generation.execute', 'images.view'], rules: [[['POST'], /^\/api\/generation-queue$/, comfyuiOnly], [READ, /^\/api\/generation-queue\/\d+$/], [['POST'], /^\/api\/generation-queue\/\d+\/cancel$/]] },
+  'generation-queue': { keys: ['content.read'], rules: [[['POST'], /^\/api\/generation-queue$/, comfyuiOnly], [READ, /^\/api\/generation-queue\/\d+$/], [['POST'], /^\/api\/generation-queue\/\d+\/cancel$/]] },
   /**
    * The host's media picker (`api.pickMedia`) opened from the window: browse the library and its groups, search, and
    * read the picked records. The host names the window on these requests only while that picker is open.
    */
-  'media.pick': { capability: 'media.pick', keys: ['images.view'], rules: [
+  'media.pick': { capability: 'media.pick', keys: ['content.read'], rules: [
     IMAGE_READ,
     [READ, /^\/api\/images$/],
     [READ, /^\/api\/groups\/hierarchy\/all$/],

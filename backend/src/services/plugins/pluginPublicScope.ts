@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import type { PluginCapability, PluginManifest } from '@conai/shared'
+import { CONTENT_PERMISSIONS, type PluginCapability, type PluginManifest } from '@conai/shared'
 import { getMcpToolScope, type McpRequester } from '../../mcp/context'
-import { isAdminOnlyTool, requiredToolKeys, setPublicPluginToolKeys } from '../../mcp/toolAccess'
+import { isAdminOnlyTool, setPublicPluginToolKeys, toolRequirement } from '../../mcp/toolAccess'
 import { withRequesterPermissionGrant } from '../../middleware/featureAccess'
 import { getPlugin, isPublicPluginPage, pluginLendDigest, publicPageLendDigest } from './pluginRegistry'
 import { setPluginPublicImageLending } from '../generation-queue/queueMcpImageGrant'
@@ -16,26 +16,22 @@ export type PluginPublicScope = { pluginId: string; pageId: string; action?: str
 const idSchema = z.string().regex(/^[a-z][a-z0-9-]{1,47}$/)
 export const pluginPublicScopeSchema = z.object({ pluginId: idSchema, pageId: idSchema, action: z.string().max(110).optional() }).strict()
 
-/** Keys a declared tool's handler rechecks beyond its own classification (its inputs, its results' media). */
-const IMPLIED_TOOL_KEYS: Record<string, readonly string[]> = {
-  submit_generation_job: ['workflows.view', 'images.view'],
-  get_generation_job: ['images.view'], wait_generation_job: ['images.view'],
-  get_media_edit_job: ['images.view'], join_videos: ['images.view'], save_video_frame: ['images.view'],
-}
+const READ = [CONTENT_PERMISSIONS.read]
+const READ_EDIT = [CONTENT_PERMISSIONS.read, CONTENT_PERMISSIONS.edit]
+/** Declared tools whose handlers also read library media (their inputs, their results). */
+const READS_MEDIA = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_media_edit_job', 'join_videos', 'save_video_frame'])
 type LendableFeature = Exclude<PluginCapability, 'server'>
-/** Keys each declared host feature lends on a shared page. */
+/** Rights each declared host feature lends on a shared page (generation jobs need only sign-in). */
 const FEATURE_KEYS: Record<LendableFeature, readonly string[]> = {
-  'files.read': ['files.view'], 'files.media': ['files.view'], 'files.write': ['files.view', 'files.edit'],
-  'workspace.read': ['files.view'], 'workspace.media': ['files.view', 'images.view', 'audio.view'], 'workspace.write': ['files.view', 'files.edit'],
-  'media.process': ['images.view', 'images.edit', 'images.upload', 'audio.view', 'audio.edit'],
-  'media.read': ['images.view', 'audio.view', 'files.view'],
-  'media.save': ['images.view', 'images.upload', 'images.edit'],
-  'jobs': ['generation.execute'],
+  'files.read': READ, 'files.media': READ, 'files.write': READ_EDIT,
+  'workspace.read': READ, 'workspace.media': READ, 'workspace.write': READ_EDIT,
+  'media.process': READ_EDIT, 'media.read': READ, 'media.save': READ_EDIT,
+  'jobs': [],
   // Lent per request to the host's picker routes instead (pluginAppRoutes 'media.pick').
   'media.pick': [],
 }
 /** Deleting is never lent, whatever a package declares. */
-const lendable = (keys: readonly string[]) => [...new Set(keys)].filter((key) => !key.endsWith('.delete'))
+const lendable = (keys: readonly string[]) => [...new Set(keys)].filter((key) => key !== CONTENT_PERMISSIONS.delete)
 
 /** The package's manifest while the page is shared now, the plugin is on, and the share covers its current declarations. */
 function lendingManifest(scope: PluginPublicScope): PluginManifest | null {
@@ -56,7 +52,9 @@ export function publicScopeToolKeys(scope: PluginPublicScope | undefined, tool: 
   // Configure, backup and restore tools are administration, not page features: never lent.
   const toolScope = getMcpToolScope(tool)
   if (!declared || toolScope === 'configure' || toolScope === 'backup' || toolScope === 'restore' || isAdminOnlyTool(tool)) return []
-  return lendable([...requiredToolKeys(tool), ...(IMPLIED_TOOL_KEYS[tool] ?? [])])
+  const requirement = toolRequirement(tool)
+  const right = requirement === 'read' ? READ : requirement === 'edit' ? READ_EDIT : []
+  return lendable([...right, ...(READS_MEDIA.has(tool) ? READ : [])])
 }
 
 /** Keys a shared page lends for host features the package declared (any of `features`). */
@@ -93,5 +91,5 @@ export function scopeForPlugin(scope: PluginPublicScope | undefined, pluginId: s
 
 setPublicPluginToolKeys(publicScopeToolKeys)
 // A queued library input submitted through the lent tool or the lent queue route.
-setPluginPublicImageLending((scope) => publicScopeToolKeys(scope, 'submit_generation_job').includes('images.view')
-  || publicScopeRouteKeys(scope, ['generation-queue']).includes('images.view'))
+setPluginPublicImageLending((scope) => publicScopeToolKeys(scope, 'submit_generation_job').includes(CONTENT_PERMISSIONS.read)
+  || publicScopeRouteKeys(scope, ['generation-queue']).includes(CONTENT_PERMISSIONS.read))

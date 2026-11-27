@@ -5,7 +5,6 @@ import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginLlmPro
 import { profileFolderPaths } from '../codex-chat/chatProfileFolders'
 import { booksForRequest } from '../codex-chat/chatLoreContext'
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
-import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { hiddenProfileAssets, resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { toPublicProfile } from '../codex-chat/chatProfileViews'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
@@ -31,7 +30,7 @@ import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
 import { refreshPluginProfileRun, runPluginProfile, acquirePluginProfileLock, ensurePluginProfileRoom, forgetPluginProfileRooms, discardPluginProfileRun } from './pluginProfileRun'
 import { validatePluginProfileTools } from './pluginServerTools'
 import { requireResearchProfile } from '../codex-chat/chatResearch'
-import { isRequesterAdmin, requireRequesterPermission } from '../../middleware/featureAccess'
+import { isRequesterAdmin, requesterHasRight, requireRequesterRight } from '../../middleware/featureAccess'
 import { usableBlocks } from '../codex-chat/chatBlockState'
 import { callPluginJudge, pluginJudgeSettings } from './pluginJudge'
 import { pluginLlmFailure } from './pluginLlmErrors'
@@ -196,14 +195,14 @@ type PluginProfileViewer = { accountId: number | null; admin: boolean; images: b
 /** `listed`: profiles read together, so their hidden avatars are looked up at once. */
 function profileViewer(actor: McpRequester, listed?: ChatProfile[]): PluginProfileViewer {
   const admin = isRequesterAdmin(actor)
-  return { accountId: actor.accountId, admin, images: canRequesterViewImages(actor), hidden: admin || !listed ? undefined : hiddenProfileAssets(listed) }
+  return { accountId: actor.accountId, admin, images: requesterHasRight(actor, 'read'), hidden: admin || !listed ? undefined : hiddenProfileAssets(listed) }
 }
 
 function pluginProfileOf(profile: ChatProfile, viewer: PluginProfileViewer, loreSelectionLimit: number): PluginLlmProfile {
   const { images } = viewer
   // Image bytes are served by `asset()`. `details` is what the account's own profile API gives: every saved setting for
   // an administrator, the chat user's public view otherwise (image hashes and crop only with image access). The library
-  // link is only its id: setting names and folders are read through the library, which checks `characters.view`.
+  // link is only its id: setting names and folders are read through the library, which checks the read right.
   const { avatar: _avatar, background: _background, characterLink, characterExpressionGroupId: _expressionGroupId, ...settings } = profile
   const details = viewer.admin ? settings : (() => {
     const { characterLink: _link, ...shown } = toPublicProfile(profile, viewer.accountId, false, viewer.hidden)
@@ -260,7 +259,7 @@ let activeAssetReads = 0
 export async function readPluginProfileAsset(pluginId: string, requester: McpRequester | undefined, raw: unknown): Promise<PluginProfileAsset> {
   const input = z.object({ profileId: z.number().int().positive(), kind: z.enum(['avatar','background','reference']).default('avatar'), maxSize: z.number().int().min(64).max(512).default(256) }).strict().parse(raw)
   const { profile } = profileAccess(pluginId, requester, input.profileId)
-  requireRequesterImagePermission(requester)
+  requireRequesterRight(requester, 'read')
   const versionOf = (p: typeof profile) => sha256(JSON.stringify([p.updatedDate, p.avatarHash, p.backgroundHash, p.referenceHash, p.avatarCrop, p.avatar, p.background, p.characterLink?.synced ? [p.characterLink.settingId, p.characterLink.revision] : null]))
   const version = versionOf(profile), asset = resolveProfileAsset(profile, input.kind)
   const base = { profileId: profile.id, kind: input.kind, version, crop: input.kind === 'avatar' ? profile.avatarCrop : null }
@@ -274,7 +273,7 @@ export async function readPluginProfileAsset(pluginId: string, requester: McpReq
       .rotate().resize(input.maxSize, input.maxSize, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).timeout({ seconds: 5 }).toBuffer({ resolveWithObject: true })
     // Conversion is asynchronous: revocation, safety changes and profile replacements must still take effect.
     const current = profileAccess(pluginId, requester, profile.id).profile
-    requireRequesterImagePermission(requester)
+    requireRequesterRight(requester, 'read')
     if (versionOf(current) !== version) throw new PluginError('프로필 이미지가 바뀌었어. 다시 조회해줘.', 409)
     const live = resolveProfileAsset(current, input.kind)
     if (live.state === 'missing' || live.state === 'hidden') return { ...base, state: live.state }
@@ -314,7 +313,7 @@ export function cancelPluginLlmJob(pluginId: string, requester: McpRequester | u
   // A removed/disabled profile must not prevent stopping a previously admitted call.
   RuntimeJobRunner.cancel(row.job_id)
   const result = view(row)
-  if (result.result?.profileRun?.research) requireRequesterPermission(requester, 'posts.view')
+  if (result.result?.profileRun?.research) requireRequesterRight(requester, 'read')
   return result
 }
 
@@ -444,7 +443,7 @@ export function startPluginLlmJob(pluginId: string, requester: McpRequester | un
   const inputBytes = pluginLlmInputBytes(raw)
   const input = inputSchema.parse(raw)
   const { plugin, owner, requester: actor, profile } = profileAccess(pluginId, requester, input.profileId)
-  if (input.research) { requireResearchProfile(profile); requireRequesterPermission(actor, 'posts.view') }
+  if (input.research) { requireResearchProfile(profile); requireRequesterRight(actor, 'read') }
   if (input.model === 'judge') judgeSlotOf(profile) // refuse up front, not as a failed job
   const fingerprint = sha256(JSON.stringify(input))
   const db = pluginDb()

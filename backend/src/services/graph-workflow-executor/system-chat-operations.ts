@@ -16,7 +16,7 @@ import { fillCharacterPlaceholders } from '../codex-chat/chatPlaceholders'
 import { profileAssetFields, resolveProfileAsset, type ChatProfileAssetKind } from '../codex-chat/chatProfileAssets'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
 import { getCharacterSetting } from '../characterLibrary'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { ensureAutomationRoom, wakeChatRoom, wakeFailure, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
 import { resolveAutomationRunAs } from '../automationRunAs'
@@ -126,7 +126,7 @@ async function profileImageArtifact(context: ExecutionContext, node: GraphWorkfl
   if (!hasConnectedOutput(context, node, portKey)) return null
   const asset = resolveProfileAsset(profile, kind)
   if (asset.state === 'missing') return null
-  // Only the avatar thumbnail is open to chat access; the original avatar, background and reference need images.view.
+  // Only the avatar thumbnail is open to chat access; the original avatar, background and reference need content.read.
   requireGraphImageAuthority(context)
   if (asset.state === 'hidden') throw new Error(`안전 등급 때문에 ${PROFILE_IMAGE_LABELS[kind]}를 쓸 수 없어.`)
   const sourcePath = asset.state === 'file' ? asset.file.path : null
@@ -167,7 +167,7 @@ export async function executeLoadChatProfileNode(
     avatar_image: await profileImageArtifact(context, node, profile, 'avatar', 'avatar_image'),
     background_image: await profileImageArtifact(context, node, profile, 'background', 'background_image'),
   }
-  // A library hash opens the image through chat media links, so the hashes follow the profile API's images.view rule.
+  // A library hash opens the image through chat media links, so the hashes follow the profile API's content.read rule.
   const assets = profileAssetFields(profile, runMayViewImages(context, node.id))
   const profileValue = {
     id: profile.id,
@@ -282,7 +282,7 @@ export async function executeGenerateWithChatPresetNode(
   const outfit = optionalText(resolvedInputs.character_outfit)
   if (outfit && !hasSetting) throw new Error('의상 이름은 캐릭터 외형 설정과 함께 써. 프로필은 프로필에 고른 의상을 써.')
   const requester = runRequester(context)
-  if (hasSetting && requester !== null) requireRequesterPermission({ accountId: requester, accountType: null }, 'characters.view')
+  if (hasSetting && requester !== null) requireRequesterRight({ accountId: requester, accountType: null }, 'read')
   const profile = hasProfile ? requireWorkflowProfile(context, resolvedInputs.profile_id) : null
   const explicitReference = await libraryHashOfImageInput(resolvedInputs.reference_image)
   // Connected images have their own input boundary: library refs are read under the run's authority before the node
@@ -507,7 +507,7 @@ export async function executePostToBoardNode(
 ) {
   const title = optionalText(resolvedInputs.title)
   if (!title) throw new Error('게시물 제목을 넣어줘.')
-  const runAs = resolveAutomationRunAs(runRequester(context), ['posts.view', 'posts.write'])
+  const runAs = resolveAutomationRunAs(runRequester(context), ['content.read'])
   if (!runAs.ok) throw new Error(runAs.message)
   const profile = parsePositiveIntegerish(resolvedInputs.profile_id) === null ? null : requireWorkflowProfile(context, resolvedInputs.profile_id)
   const compositeHash = await libraryHashOfImageInput(resolvedInputs.image)

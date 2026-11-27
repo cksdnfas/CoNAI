@@ -20,7 +20,7 @@ type TrustedQueueImageGrant = {
   signature: string
 }
 
-/** A shared plugin page lent `submit_generation_job` (with images.view) to an account that lacks it. */
+/** A shared plugin page lent `submit_generation_job` (with reading) to an account that lacks it. */
 type PluginPublicQueueImageGrant = {
   kind: 'plugin-public'
   pluginId: string
@@ -56,9 +56,9 @@ export function requireCurrentMcpKeyImagePermission(keyId: string): string {
     SELECT 1 FROM inherited g
     JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
     JOIN auth_permissions p ON p.id = gp.permission_id
-    WHERE p.permission_key = 'images.view' LIMIT 1
+    WHERE p.permission_key IN ('content.read', 'content.edit', 'content.delete') LIMIT 1
   `).get(groupKey)
-  if (!allowed) throw new Error('Permission required: images.view')
+  if (!allowed) throw new Error('Permission required: content.read')
   return groupKey
 }
 
@@ -102,7 +102,7 @@ export function createPluginPublicQueueImageGrant(scope: PluginPublicScope, acco
 
 /**
  * Verify the server-issued grant and re-read an HTTP key's current permissions. `accountId`: the job's account, which a
- * shared plugin page's grant must name; that grant also needs the page still shared and lending images.view.
+ * shared plugin page's grant must name; that grant also needs the page still shared and lending reading.
  */
 export function requireMcpQueueImageGrant(value: unknown, workflowId: number, promptData: Record<string, unknown>, accountId?: number | null): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid MCP queue image authorization')
@@ -114,7 +114,7 @@ export function requireMcpQueueImageGrant(value: unknown, workflowId: number, pr
     const scope = { pluginId: grant.pluginId, pageId: grant.pageId, ...(grant.action ? { action: grant.action } : {}) }
     const expected = signPluginPublicGrant(scope, grant.accountId, workflowId, promptData)
     if (!crypto.timingSafeEqual(Buffer.from(grant.signature, 'hex'), Buffer.from(expected, 'hex'))) throw new Error('Invalid MCP queue image authorization')
-    if (!pluginPublicLendsImages?.(scope)) throw new Error('Permission required: images.view')
+    if (!pluginPublicLendsImages?.(scope)) throw new Error('Permission required: content.read')
     return
   }
   if ((grant.kind === 'stdio' || grant.kind === 'legacy-schedule')

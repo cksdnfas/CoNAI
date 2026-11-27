@@ -11,7 +11,7 @@ import { inBackground } from '../llmRequestScheduler';
 import { rawTokenEstimate } from '../llmUsage';
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus';
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner';
-import { PostError, isHumanPostActor, postActorAccountKey, requireKey, type PostActor } from './postActor';
+import { PostError, isHumanPostActor, postActorAccountKey, type PostActor } from './postActor';
 import { markdownToPlainText } from './postMedia';
 import { loadPostsSettings } from './postsSettings';
 
@@ -135,7 +135,6 @@ async function postAuthorizer(row: RequestRow) {
   const requester = { accountId: row.account_id, accountType: null };
   const actor: PostActor = { accountId: row.account_id, profileId: null, origin: row.source === 'manual' ? 'human' : 'automation',
     isAdmin: isRequesterAdmin(requester), keys: new Set(requesterPermissionKeys(requester)) };
-  requireKey(actor,'posts.write');
   const post = requirePostRow(actor,row.post_id);
   if (post.status === 'hidden' || (row.source === 'automatic' && post.status !== 'published')) throw new PostError('평가할 글을 현재 볼 수 없어.',404);
   if (row.source === 'manual' && !canEditPost(actor,post)) throw new PostError('평가 요청 권한이 없어.',403);

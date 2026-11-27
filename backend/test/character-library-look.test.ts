@@ -153,7 +153,7 @@ test('character looks: dictionary sorting, legacy text, tag search and filters, 
     assert.equal(empty.added, 0)
     assert.equal(empty.setting.revision, gallery.revision)
     await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'unknown', revision: gallery.revision }, true, true), (error: unknown) => error instanceof library.CharacterLibraryError && error.status === 404)
-    await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, false), /images.upload/)
+    await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, false), /content\.edit/)
     const samples = path.join(root, 'database', 'character-images', 'hatsune_miku')
     await fs.promises.mkdir(samples, { recursive: true })
     await sharp({ create: { width: 16, height: 16, channels: 3, background: '#41aabc' } }).png().toFile(path.join(samples, '1.png'))

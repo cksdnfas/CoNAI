@@ -1,4 +1,4 @@
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireEdit, requireDelete } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express'
 import { routeParam } from './routeParam'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
@@ -220,15 +220,15 @@ function saveSnapshotModule(req: Request, res: Response, engineType: 'nai' | 'co
   }
 }
 
-router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-nai-snapshot', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   return saveSnapshotModule(req, res, 'nai')
 }))
 
-router.post('/from-codex-snapshot', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-codex-snapshot', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   return saveSnapshotModule(req, res, 'codex')
 }))
 
-router.post('/from-comfy-workflow/:workflowId', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-comfy-workflow/:workflowId', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const workflowId = parseInt(routeParam(req.params.workflowId))
   if (isNaN(workflowId)) {
     return res.status(400).json({ success: false, error: 'Invalid workflow ID' } as ModuleGraphResponse)
@@ -343,7 +343,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 }))
 
-router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
     description,
@@ -399,7 +399,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
   }
 }))
 
-router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)
@@ -437,7 +437,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
   }
 }))
 
-router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)

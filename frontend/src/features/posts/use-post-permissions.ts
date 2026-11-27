@@ -1,23 +1,28 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { hasAuthPermission, resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
-/** What the viewer may do on the posts page. Before accounts exist the local owner may do everything. */
+/**
+ * What the viewer may do on the posts page: reading opens the board and its own writing (the server checks authorship),
+ * reviewing knowledge needs editing. Before accounts exist the local owner may do everything.
+ */
 export function usePostPermissions() {
   const auth = useAuthStatusQuery().data
   const bootstrap = auth?.hasCredentials === false
   const has = (key: string) => bootstrap || hasAuthPermission(auth?.permissionKeys, key)
+  const canRead = has(CONTENT_PERMISSIONS.read)
   return {
     viewerKey: resolveAccountDraftOwner(auth),
     accountId: auth?.accountId ?? null,
     isAdmin: bootstrap || auth?.isAdmin === true,
-    canView: has('posts.view'),
-    canWrite: has('posts.write'),
-    canComment: has('posts.comment'),
-    canSummon: has('posts.summon'),
-    canEvaluate: has('posts.evaluate'),
-    canReview: bootstrap || auth?.isAdmin === true || has('posts.knowledge.review'),
-    canViewImages: has('images.view'),
-    canViewAudio: has('audio.view'),
-    canUseFiles: has('files.view'),
+    canView: canRead,
+    canWrite: canRead,
+    canComment: canRead,
+    canSummon: canRead,
+    canEvaluate: canRead,
+    canReview: bootstrap || auth?.isAdmin === true || has(CONTENT_PERMISSIONS.edit),
+    canViewImages: canRead,
+    canViewAudio: canRead,
+    canUseFiles: canRead,
   }
 }

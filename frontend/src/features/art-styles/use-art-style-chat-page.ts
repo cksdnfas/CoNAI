@@ -31,7 +31,7 @@ const pageImageOf = (image: ArtStyleDraftImage): ChatPageData => isStagedArtStyl
  */
 export function useArtStyleChatPage(library: ArtStyleLibrary) {
   const { t } = useI18n()
-  const { editor, canEdit, canViewImages, loaded, total, loadMore } = library
+  const { editor, canEdit, canDelete, canViewImages, loaded, total, loadMore } = library
   const { base, draft, ready } = editor
   const listed = loaded?.slice(-STYLE_LIMIT) ?? []
   const listedIds = listed.map((style) => style.id)
@@ -100,7 +100,7 @@ export function useArtStyleChatPage(library: ArtStyleLibrary) {
           })),
           ...(canViewImages ? [pageAction('art_style.images', t({ ko: '스타일 이미지 편집', en: 'Edit style images' }), t({ ko: '초안의 이미지를 selected.images의 항목으로 바꿔: remove로 빼고 add({ composite_hash } 라이브러리 이미지, 저장된 { id })로 끝에 넣고, order는 남은 이미지 전체의 새 순서, cover는 맨 앞(대표)으로 옮길 이미지야. 저장할 때 스타일로 복사돼. 저장하지 않아.', en: 'Edit the draft’s images with selected.images items: remove drops, add appends ({ composite_hash } a library image, or a saved { id }), order is the new order of every remaining image, cover moves one to the front. A save copies them into the style. Nothing is saved.' }), pageObject({ remove: pageArray(imageItem, ART_STYLE_LIMITS.images), add: pageArray(addItem, ART_STYLE_LIMITS.images), order: pageArray(imageItem, ART_STYLE_LIMITS.images), cover: imageItem }))] : []),
           pageAction('art_style.save', t({ ko: '스타일 저장', en: 'Save style' }), t({ ko: '열린 스타일의 지금 초안을 selected.revision 기준으로 저장해.', en: 'Save the open style’s draft against selected.revision.' }), pageObject({}), 'save'),
-          ...(base ? [pageAction('art_style.delete', t({ ko: '스타일 삭제', en: 'Delete style' }), t({ ko: '열린 스타일을 지워. 참조 이미지도 함께 지워져.', en: 'Delete the open style with its reference images.' }), pageObject({}), 'save')] : []),
+          ...(base && canDelete ? [pageAction('art_style.delete', t({ ko: '스타일 삭제', en: 'Delete style' }), t({ ko: '열린 스타일을 지워. 참조 이미지도 함께 지워져.', en: 'Delete the open style with its reference images.' }), pageObject({}), 'save')] : []),
         ] : []),
       ] : []),
     ],

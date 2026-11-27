@@ -10,8 +10,7 @@ import {
 import { AuthAccessControlService, getResolvedAuthAccessEpoch, isActiveAdminAccount, isActiveAdminRecord } from '../services/authAccessControlService';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 import { wallpaperRuntimeSessionGrantsImageView } from '../services/wallpaperRuntimeAccess';
-
-const IMAGE_VIEW_PERMISSION_KEY = 'images.view';
+import { CONTENT_PERMISSIONS } from '@conai/shared';
 
 /** Keep trusted bootstrap mode on the local console only. */
 function allowLocalBootstrapOrReject(req: Request, res: Response, next: NextFunction): void {
@@ -162,19 +161,19 @@ function refreshAnonymousSessionAccess(req: Request): string[] {
 }
 
 /**
- * A wallpaper runtime key session (e.g. Lively, not logged in) may read the library images its widgets
- * show; only image reads, and only while the key and its account still allow them.
+ * A wallpaper runtime key session (e.g. Lively, not logged in) may read the library its widgets show;
+ * only reads, and only while the key and its account still allow them.
  */
 function withWallpaperRuntimeImageView(req: Request, permissionKeys: string[]): string[] {
   if (
     req.session?.wallpaperRuntimeTokenId === undefined
     || (req.method !== 'GET' && req.method !== 'HEAD')
-    || permissionKeys.includes(IMAGE_VIEW_PERMISSION_KEY)
+    || permissionKeys.includes(CONTENT_PERMISSIONS.read)
     || !wallpaperRuntimeSessionGrantsImageView(req)
   ) {
     return permissionKeys;
   }
-  return [...permissionKeys, IMAGE_VIEW_PERMISSION_KEY];
+  return [...permissionKeys, CONTENT_PERMISSIONS.read];
 }
 
 /**
@@ -264,30 +263,11 @@ export const allowAnonymousPermission = (permissionKey: string) => (req: Request
   res.status(401).json({ error: 'Unauthorized' });
 };
 
-/**
- * Allow anonymous or bootstrap access when any resolved permission is present.
- * Returns 401 for unauthenticated requests without one of the permissions.
- */
-export const allowAnonymousAnyPermission = (requiredPermissionKeys: readonly string[]) => (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void => {
-  const permissionKeySet = new Set(requiredPermissionKeys);
-  const { permissionKeys, authenticated } = resolveRequestPermissionKeys(req);
-
-  if (permissionKeys.some((permissionKey) => permissionKeySet.has(permissionKey))) {
-    next();
-    return;
-  }
-
-  if (authenticated) {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
-  }
-
-  res.status(401).json({ error: 'Unauthorized' });
-};
+/** The three basic rights. Signed-out visitors can only be given reading (it opens the image routes using allowRead). */
+export const requireRead = requirePermission(CONTENT_PERMISSIONS.read);
+export const requireEdit = requirePermission(CONTENT_PERMISSIONS.edit);
+export const requireDelete = requirePermission(CONTENT_PERMISSIONS.delete);
+export const allowRead = allowAnonymousPermission(CONTENT_PERMISSIONS.read);
 
 /**
  * Optional authentication middleware.

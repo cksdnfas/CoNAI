@@ -20,7 +20,7 @@ type StyleProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind:
 
 /**
  * An art style change the chat proposed (`propose_art_style`): create a style, change some of its fields against its
- * revision, or delete it. A person with `characters.edit` applies it here through the art style REST with their own
+ * revision, or delete it. A person with the edit right (the delete right to delete) applies it here through the art style REST with their own
  * session (a taken title shows on the card); the proposal is then marked saved.
  */
 export function ChatArtStyleProposalCard({ proposal, threadId }: { proposal: StyleProposal; threadId?: number }) {
@@ -28,7 +28,7 @@ export function ChatArtStyleProposalCard({ proposal, threadId }: { proposal: Sty
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
-  const canEdit = permissions.has('characters.edit')
+  const canEdit = permissions.canEdit
   const { canViewImages } = useImagePermissions()
   const [state, setState] = useState<'saved' | 'dismissed' | null>(null)
   const [savedId, setSavedId] = useState<number | null>(proposal.savedId ?? null)
@@ -114,7 +114,7 @@ export function ChatArtStyleProposalCard({ proposal, threadId }: { proposal: Sty
       {saved || dismissed ? (
         <ProposalFooter status>
           <span>{dismissed ? t({ ko: '거절됨', en: 'Dismissed' }) : deleting ? t({ ko: '삭제됨', en: 'Deleted' }) : t({ ko: '저장됨', en: 'Saved' })}</span>
-          {openLink && permissions.has('characters.view') ? <Link to={openLink} className="text-primary-text hover:underline">{t({ ko: '스타일 열기', en: 'Open style' })}</Link> : null}
+          {openLink && permissions.canRead ? <Link to={openLink} className="text-primary-text hover:underline">{t({ ko: '스타일 열기', en: 'Open style' })}</Link> : null}
         </ProposalFooter>
       ) : canEdit ? (
         <ProposalFooter>

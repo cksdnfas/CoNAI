@@ -1,3 +1,4 @@
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -155,7 +156,8 @@ export function ModuleWorkflowSchedulesPanel({
   onDeleteSchedule: (scheduleId: number) => Promise<void> | void
   onRunNow: (scheduleId: number) => Promise<void> | void
 }) {
-  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
+  const accountId = useAuthStatusQuery().data?.accountId
   const { t, formatNumber } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -269,7 +271,7 @@ export function ModuleWorkflowSchedulesPanel({
   }
 
   const draftDirty = editorMode !== null && openedSnapshot !== null && draftSnapshot !== openedSnapshot
-  const canManage = canExecuteGeneration && canUpdateWorkflows
+  const canManage = canEdit
   const canSaveDraft = canManage && !isMutating && !isSaving && reviewedWorkflow !== null && payload !== null && (draftDirty || editorMode === 'create')
 
   return (
@@ -297,18 +299,18 @@ export function ModuleWorkflowSchedulesPanel({
                     <SquarePen />
                   </IconButton>
                   {schedule.status === 'active' ? (
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                       <Pause />
                     </IconButton>
                   ) : (
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                       <Play />
                     </IconButton>
                   )}
-                  <IconButton size="icon-sm" variant="ghost" onClick={() => void onRunNow(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
+                  <IconButton size="icon-sm" variant="ghost" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
                     <Rocket />
                   </IconButton>
-                  <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteSchedule(schedule.id)} disabled={!canUpdateWorkflows || isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
+                  <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteSchedule(schedule.id)} disabled={!(canDelete || (schedule.run_as_account_id != null && schedule.run_as_account_id === accountId)) || isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
                     <Trash2 />
                   </IconButton>
                 </>}

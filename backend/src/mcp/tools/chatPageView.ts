@@ -1,6 +1,6 @@
 import { chatPageActionTier, type ChatPageData, type ChatPageSchema, type ChatPageSnapshot } from '@conai/shared'
 import type { McpRequestContext, McpRequester } from '../context'
-import { boundedPageView, ChatPageContextError, notePageViewShown, PAGE_VIEW_BUDGET, PAGE_VIEW_UNKNOWN, pageViewTextKey, requireChatPageActionAccess, requireChatPageDataAccess, takePageViewFolded, type PageViewShown } from '../../services/codex-chat/chatPageContext'
+import { boundedPageView, ChatPageContextError, type ChatPageScopes, notePageViewShown, PAGE_VIEW_BUDGET, PAGE_VIEW_UNKNOWN, pageViewTextKey, requireChatPageActionAccess, requireChatPageDataAccess, takePageViewFolded, type PageViewShown } from '../../services/codex-chat/chatPageContext'
 import { contextContentLimit, hideRatingRestrictedText, RATING_RESTRICTED_TEXT, ratingRestrictedHashesUnder } from '../../services/codex-chat/chatContentRating'
 import type { ContentRatingLimit } from '../../services/contentRating'
 import { textResult } from '../toolResults'
@@ -108,12 +108,12 @@ function shownSchema(schema: ChatPageSchema, data: Record<string, ChatPageData>)
  * What the model may see of a screen: fields, permitted operations with their tier, small collections whole, larger
  * ones as sizes; the text of media above its content rating `limit` hidden (ratingFilteredPage).
  */
-export function chatPageView(requester: McpRequester, live: ChatPageSnapshot, limit: ContentRatingLimit) {
+export function chatPageView(requester: McpRequester, live: ChatPageSnapshot, limit: ContentRatingLimit, scopes: ChatPageScopes) {
   const page = ratingFilteredPage(live, limit)
   const { data, workflow, ...summary } = page
   const allowedData = Object.entries(data ?? {}).filter(([key]) => { try { requireChatPageDataAccess(requester, key); return true } catch { return false } })
   const readable = Object.fromEntries(allowedData)
-  const actions = (page.actions ?? []).filter((action) => { try { requireChatPageActionAccess(requester, page, action.id); return true } catch { return false } })
+  const actions = (page.actions ?? []).filter((action) => { try { requireChatPageActionAccess(requester, page, action.id, undefined, scopes); return true } catch { return false } })
     .map((action) => ({ ...action, schema: shownSchema(action.schema, readable), tier: chatPageActionTier(action.id, action) }))
   return {
     ...summary,
@@ -149,13 +149,13 @@ export const pageViewRoom = (around: unknown) => PAGE_VIEW_BUDGET - JSON.stringi
  * screen's key after changes it got whole, PAGE_VIEW_UNKNOWN after shortened ones; changes also name the screen they were
  * computed from (`base`: the key of its full view), which the model must hold for them to make up the new one (pageViewAfter).
  */
-export function pageOperationView(requester: McpRequester, before: ChatPageSnapshot, next: ChatPageSnapshot, limit: ContentRatingLimit, whole = false, budget = PAGE_VIEW_BUDGET): PageViewShown & { page: unknown } {
-  const view = chatPageView(requester, next, limit)
+export function pageOperationView(requester: McpRequester, before: ChatPageSnapshot, next: ChatPageSnapshot, limit: ContentRatingLimit, scopes: ChatPageScopes, whole = false, budget = PAGE_VIEW_BUDGET): PageViewShown & { page: unknown } {
+  const view = chatPageView(requester, next, limit, scopes)
   if (whole || before.instanceId !== next.instanceId || before.path !== next.path || before.kind !== next.kind || before.resourceId !== next.resourceId) {
     const text = boundedPageView(view, budget)
     return { page: JSON.parse(text), key: pageViewTextKey(text) }
   }
-  const previous = chatPageView(requester, before, limit)
+  const previous = chatPageView(requester, before, limit, scopes)
   const earlier = new Map(previous.fields.map((field) => [field.id, JSON.stringify(field)]))
   const changedFields = view.fields.filter((field) => earlier.get(field.id) !== JSON.stringify(field))
   const changed = changedFields.map((field) => ({ ...field, value: clipValue(field.value) }))
@@ -242,7 +242,7 @@ export function pageOperationFailure(context: McpRequestContext, before: ChatPag
     const limit = contextContentLimit(context)
     const message = (error as Error).message
     // The two parts reach the model joined by a line break.
-    const view = pageOperationView(requester, before, next, limit, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ page: null }) - message.length - 1)
+    const view = pageOperationView(requester, before, next, limit, context.scopes, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ page: null }) - message.length - 1)
     const viewKey = notePageViewShown(context, next, limit, view)
     return { isError: true, content: [{ type: 'text' as const, text: message }, { type: 'text' as const, text: JSON.stringify({ page: view.page }) }], ...(viewKey ? { structuredContent: viewKey } : {}) }
   } catch { return pageFailure(error) }

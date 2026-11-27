@@ -8,13 +8,12 @@ import type { ChatExecutionContext } from '@conai/shared'
 import type { McpRequestContext } from '../src/mcp/context'
 
 /**
- * Guard: every MCP tool the code registers is classified in BOTH maps, and neither map keeps entries for tools that no
- * longer exist.
+ * Guard: every MCP tool the code registers is classified, and no table keeps entries for tools that no longer exist.
  *
  * - TOOL_SCOPES (src/mcp/context.ts): a tool without a scope is silently filtered out of every non-room context.
- * - TOOL_FEATURE_PERMISSIONS (src/mcp/toolAccess.ts): a tool without an entry is silently HIDDEN from every
- *   account-bound caller (chat bots, bound HTTP keys) and rejected at call time as "Unclassified account-bound tool".
- *   An empty array counts as classified ("no feature key needed"): toolAccess only checks `=== undefined`.
+ * - toolRequirement (src/mcp/toolAccess.ts): what the account needs, from the tool's scope (scopeRequirement) or the
+ *   unscoped chat/project tool table. A tool without one is silently HIDDEN from every account-bound caller (chat
+ *   bots, bound HTTP keys) and rejected at call time as "Unclassified account-bound tool".
  *
  * Because createMcpServer drops filtered tools before they reach the SDK, tools/list alone would never show an
  * unclassified tool. The test therefore records every name handed to `server.registerTool(...)` BEFORE the server.ts filter
@@ -22,13 +21,13 @@ import type { McpRequestContext } from '../src/mcp/context'
  */
 
 /** Names matching isChatGenerationTool (generate_image, generate_image_2, ...) are per-profile and classified by pattern. */
-const PATTERN_CLASSIFIED = 'generate_image(_N): isChatGenerationTool -> scope "generate", permission "generation.execute"'
+const PATTERN_CLASSIFIED = 'generate_image(_N): isChatGenerationTool -> scope "generate", a signed-in account'
 
 /**
  * Known exceptions, each with the reason. Keep these empty unless a tool is intentionally unclassified/dynamic.
  * - UNSCOPED_ALLOWED: registered tools that may lack a TOOL_SCOPES entry (CHAT_ROOM_TOOLS bypass scopes by design).
- * - FEATURE_UNCLASSIFIED_ALLOWED: account-bound tools that may lack a TOOL_FEATURE_PERMISSIONS entry.
- * - STALE_SCOPE_ALLOWED / STALE_FEATURE_ALLOWED: map keys allowed without a registration in the contexts built below.
+ * - FEATURE_UNCLASSIFIED_ALLOWED: account-bound tools that may lack a requirement (toolRequirement undefined).
+ * - STALE_SCOPE_ALLOWED / STALE_FEATURE_ALLOWED: table keys allowed without a registration in the contexts built below.
  */
 const CHAT_ROOM_TOOL_NAMES = ['read_chat_attachment', 'call_agent', 'chat_reply_to','room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_view', 'linked_write', 'linked_edit', 'use_skill', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
 const UNSCOPED_ALLOWED = new Set<string>([
@@ -46,7 +45,7 @@ const STALE_SCOPE_ALLOWED = new Set<string>(['workspace_publish_resources'])
 // contexts above have; isContextToolAllowed scopes them itself.
 const STALE_FEATURE_ALLOWED = new Set<string>(['workspace_list', 'workspace_read', 'workspace_search', 'workspace_apply', 'workspace_publish_resources'])
 
-test('mcp tool classification: every registered tool has a scope and a feature permission, no stale entries', { timeout: 60000 }, async (t) => {
+test('mcp tool classification: every registered tool has a scope and an account requirement, no stale entries', { timeout: 60000 }, async (t) => {
   // Isolate all runtime paths before importing modules that open databases or settings.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-mcp-classification-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -84,7 +83,7 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   })
 
   const { ALL_MCP_HTTP_SCOPES, CHAT_ROOM_TOOLS, CHAT_PAGE_TOOLS, getMcpToolScope, isChatGenerationTool } = await import('../src/mcp/context')
-  const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
+  const { nativeToolNames, toolRequirement } = await import('../src/mcp/toolAccess')
   const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
@@ -211,36 +210,40 @@ test('mcp tool classification: every registered tool has a scope and a feature p
     assert.deepEqual(missing, [], `Registered MCP tools without a scope; add them to TOOL_SCOPES in src/mcp/context.ts: ${missing.join(', ')}`)
   })
 
-  await t.test('every account-bound tool has a TOOL_FEATURE_PERMISSIONS entry', () => {
-    const missing = [...attemptedAccountBound].filter((tool) => classifiable(tool) && TOOL_FEATURE_PERMISSIONS[tool] === undefined && !FEATURE_UNCLASSIFIED_ALLOWED.has(tool)).sort()
-    assert.deepEqual(missing, [], `Account-bound MCP tools without a feature permission (they are silently hidden from chat bots and bound keys); add them to TOOL_FEATURE_PERMISSIONS in src/mcp/toolAccess.ts ([] = no feature key): ${missing.join(', ')}`)
+  await t.test('every account-bound tool has an account requirement', () => {
+    const missing = [...attemptedAccountBound].filter((tool) => classifiable(tool) && toolRequirement(tool) === undefined && !FEATURE_UNCLASSIFIED_ALLOWED.has(tool)).sort()
+    assert.deepEqual(missing, [], `Account-bound MCP tools without a requirement (they are silently hidden from chat bots and bound keys); give them a TOOL_SCOPES entry or an UNSCOPED_TOOL_RIGHTS entry in src/mcp/toolAccess.ts: ${missing.join(', ')}`)
   })
 
-  await t.test('no stale TOOL_SCOPES or TOOL_FEATURE_PERMISSIONS entries', () => {
+  await t.test('no stale TOOL_SCOPES or UNSCOPED_TOOL_RIGHTS entries', () => {
     const staleScopes = scopeKeys.filter((tool) => !attemptedAll.has(tool) && !STALE_SCOPE_ALLOWED.has(tool)).sort()
     assert.deepEqual(staleScopes, [], `TOOL_SCOPES entries for tools that are never registered; remove them from src/mcp/context.ts: ${staleScopes.join(', ')}`)
-    const staleFeatures = Object.keys(TOOL_FEATURE_PERMISSIONS).filter((tool) => !attemptedAll.has(tool) && !STALE_FEATURE_ALLOWED.has(tool)).sort()
-    assert.deepEqual(staleFeatures, [], `TOOL_FEATURE_PERMISSIONS entries for tools that are never registered; remove them from src/mcp/toolAccess.ts: ${staleFeatures.join(', ')}`)
+    const staleFeatures = nativeToolNames().filter((tool) => !scopeKeySet.has(tool) && !attemptedAll.has(tool) && !STALE_FEATURE_ALLOWED.has(tool)).sort()
+    assert.deepEqual(staleFeatures, [], `UNSCOPED_TOOL_RIGHTS entries for tools that are never registered; remove them from src/mcp/toolAccess.ts: ${staleFeatures.join(', ')}`)
   })
 
-  await t.test('art style tools follow the character library classification', () => {
-    for (const [tool, scope, permission] of [['list_art_styles', 'read', 'characters.view'], ['get_art_style', 'read', 'characters.view'], ['propose_art_style', 'organize', 'characters.edit']] as const) {
-      assert.deepEqual([getMcpToolScope(tool), TOOL_FEATURE_PERMISSIONS[tool]], [scope, permission], tool)
-    }
-  })
-
-  await t.test('RefMod entry tools: reads and saves follow the character library, a build also needs generation', () => {
+  await t.test('the scope decides what the account needs', () => {
     const tools = [
-      ['list_refmod_entries', 'read', 'characters.view'], ['get_refmod_entry', 'read', 'characters.view'],
-      ['save_refmod_entry', 'organize', 'characters.edit'], ['adopt_refmod', 'organize', 'characters.edit'],
-      ['build_refmod', 'generate', ['characters.edit', 'generation.execute']],
+      ['list_art_styles', 'read', 'read'], ['get_art_style', 'read', 'read'], ['propose_art_style', 'organize', 'edit'],
+      ['list_refmod_entries', 'read', 'read'], ['save_refmod_entry', 'organize', 'edit'], ['build_refmod', 'generate', 'signedIn'],
+      ['submit_generation_job', 'generate', 'signedIn'],
+      // Deleting has its own scope and right; organize no longer includes it.
+      ...['delete_images', 'restore_deleted_images', 'delete_image_groups', 'delete_files', 'delete_audio_candidate', 'delete_unselected_audio_candidates',
+        'delete_audio_group', 'delete_audio_folder', 'delete_audio_project', 'delete_audio_group_comment'].map((tool) => [tool, 'delete', 'delete']),
+      // Posts and comments the writer owns: only sign-in (the store checks ownership); categories and hiding are the administrator's.
+      ['posts_create', 'organize', 'signedIn'], ['posts_delete', 'organize', 'signedIn'], ['post_comment_delete', 'organize', 'signedIn'],
+      ['posts_category_delete', 'organize', 'admin'], ['post_comment_hide', 'organize', 'admin'],
     ] as const
-    for (const [tool, scope, permission] of tools) assert.deepEqual([getMcpToolScope(tool), TOOL_FEATURE_PERMISSIONS[tool]], [scope, permission], tool)
+    for (const [tool, scope, requirement] of tools) assert.deepEqual([getMcpToolScope(tool), toolRequirement(tool)], [scope, requirement], tool)
+    // The chat's own tools need nothing; its linked files and project read or edit.
+    assert.deepEqual(['call_agent', 'save_lore', 'linked_read', 'linked_write', 'workspace_apply'].map((tool) => toolRequirement(tool)), ['signedIn', 'signedIn', 'read', 'edit', 'edit'])
+    // Every configure tool is the administrator's.
+    for (const tool of scopeKeys.filter((key) => getMcpToolScope(key) === 'configure')) assert.equal(toolRequirement(tool), 'admin', tool)
   })
 
   await t.test('allowlisted exceptions are still needed', () => {
     const unneeded = [
-      ...[...FEATURE_UNCLASSIFIED_ALLOWED].filter((tool) => TOOL_FEATURE_PERMISSIONS[tool] !== undefined),
+      ...[...FEATURE_UNCLASSIFIED_ALLOWED].filter((tool) => toolRequirement(tool) !== undefined),
       ...[...STALE_SCOPE_ALLOWED].filter((tool) => attemptedAll.has(tool)),
       ...[...STALE_FEATURE_ALLOWED].filter((tool) => attemptedAll.has(tool)),
     ]

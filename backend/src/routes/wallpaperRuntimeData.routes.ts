@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared';
 import type { NextFunction, Request, Response, Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
@@ -23,7 +24,7 @@ import { WildcardService } from '../services/wildcardService';
 import {
   getWallpaperRuntimeAccess,
   requireWallpaperRuntimeAdmin as requireAdminReader,
-  requireWallpaperRuntimePermission,
+  requireWallpaperRuntimeRight,
   sendWallpaperRuntimeForbidden,
   type WallpaperRuntimeAccess,
 } from '../services/wallpaperRuntimeAccess';
@@ -105,7 +106,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
    * Workflow run counts for the queue/activity widgets: a few aggregates instead of the browse snapshot (hundreds of
    * executions plus their outputs) those widgets used to poll every few seconds.
    */
-  router.get('/workflow-activity', requireWallpaperRuntimePermission('images.view'), requireSignedReader, (_req: Request, res: Response) => {
+  router.get('/workflow-activity', requireWallpaperRuntimeRight('read'), requireSignedReader, (_req: Request, res: Response) => {
     const activity = GraphExecutionModel.summarizeRecentActivity(24);
     res.json(successResponse({
       windowHours: 24,
@@ -119,7 +120,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   });
 
   /** Latest finished generations (NAI, ComfyUI, Codex, workflow results) that are safe to show. */
-  router.get('/generation/history', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/generation/history', requireWallpaperRuntimeRight('read'), asyncHandler(async (req: Request, res: Response) => {
     const scope = historyRequesterScope(getWallpaperRuntimeAccess(res));
     // A logged-out viewer has no generations of its own; say so instead of an empty feed that looks like "none yet".
     if (!scope) {
@@ -157,7 +158,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   }));
 
   /** Generation counts per local day and service over the last `days`. */
-  router.get('/generation/stats', requireWallpaperRuntimePermission('images.view'), (req: Request, res: Response) => {
+  router.get('/generation/stats', requireWallpaperRuntimeRight('read'), (req: Request, res: Response) => {
     const scope = historyRequesterScope(getWallpaperRuntimeAccess(res));
     if (!scope) {
       return sendWallpaperRuntimeForbidden(res);
@@ -199,7 +200,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
    * Library size and tag overview over the media a feed shows (hidden tiers excluded, so their tags never reach a
    * public wallpaper); cached because the tag scan is not cheap.
    */
-  router.get('/library/stats', requireWallpaperRuntimePermission('images.view'), (_req: Request, res: Response) => {
+  router.get('/library/stats', requireWallpaperRuntimeRight('read'), (_req: Request, res: Response) => {
     const now = Date.now();
     if (!libraryStatsCache || now - libraryStatsCache.at > LIBRARY_STATS_TTL_MS) {
       const stats = ImageStatsModel.getVisibleLibraryStats(20);
@@ -220,10 +221,10 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
 
   router.get('/chat/profiles', requireChatReader, (_req: Request, res: Response) => {
     const reader = getWallpaperRuntimeAccess(res);
-    const canViewImages = reader.permissionKeys.includes('images.view');
+    const canViewImages = reader.permissionKeys.includes(CONTENT_PERMISSIONS.read);
     const access = resolveChatAccess(reader.accountId);
     const profiles = ChatProfileStore.list({ enabledOnly: true });
-    const paths = profileFolderPaths(profiles, (profile) => canUseChatProfile(access, profile) && reader.permissionKeys.includes(profile.engine === 'llm' ? 'chat.use' : 'chat.agent.use'));
+    const paths = profileFolderPaths(profiles, (profile) => canUseChatProfile(access, profile));
     res.json(successResponse(profiles.map((profile) => {
       const assets = profileAssetFields(profile, canViewImages);
       return {
@@ -287,7 +288,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
     }));
   });
 
-  router.get('/audio/groups/:id/candidates', requireWallpaperRuntimePermission('audio.view'), (req: Request, res: Response) => {
+  router.get('/audio/groups/:id/candidates', requireWallpaperRuntimeRight('read'), (req: Request, res: Response) => {
     try {
       const { items } = listAudioCandidates(String(routeParam(req.params.id)), { limit: 200 });
       res.json(successResponse(items.map((candidate) => ({
@@ -301,7 +302,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
     }
   });
 
-  router.get('/audio/candidates/:id/file', requireWallpaperRuntimePermission('audio.view'), (req: Request, res: Response, next: NextFunction) => {
+  router.get('/audio/candidates/:id/file', requireWallpaperRuntimeRight('read'), (req: Request, res: Response, next: NextFunction) => {
     let found: ReturnType<typeof audioCandidateFile>;
     try {
       found = audioCandidateFile(String(routeParam(req.params.id)));
@@ -313,7 +314,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   });
 
   /** Newest published posts only, whatever the reader could otherwise see. */
-  router.get('/posts/recent', requireWallpaperRuntimePermission('posts.view'), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/posts/recent', requireWallpaperRuntimeRight('read'), asyncHandler(async (req: Request, res: Response) => {
     const access = getWallpaperRuntimeAccess(res);
     try {
       const result = await PostStore.list(
@@ -340,7 +341,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   }));
 
   /** One roll of a wildcard prompt template (e.g. "__scene__, __light__"). */
-  router.get('/prompt-roll', requireWallpaperRuntimePermission('wildcards.view'), (req: Request, res: Response) => {
+  router.get('/prompt-roll', requireWallpaperRuntimeRight('read'), (req: Request, res: Response) => {
     const text = typeof req.query.text === 'string' ? req.query.text.slice(0, 2000) : '';
     if (!text.trim()) {
       res.status(400).json(errorResponse('text is required'));

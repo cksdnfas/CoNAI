@@ -12,7 +12,7 @@ import { RuntimeEventBroadcaster } from '../services/runtime-events/runtimeEvent
 import {
   getWallpaperRuntimeAccess,
   requireWallpaperRuntimeAccess,
-  requireWallpaperRuntimePermission,
+  requireWallpaperRuntimeRight,
   resolveWallpaperRuntimeAccess,
 } from '../services/wallpaperRuntimeAccess';
 import { RUNTIME_EVENT_TOPIC_PERMISSIONS, type RuntimeEventTopic } from '../types/runtimeEvents';
@@ -162,7 +162,7 @@ router.get('/settings', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 /** Return one read-only workflow browse snapshot for wallpaper live widgets. */
-router.get('/browse-content', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/browse-content', requireWallpaperRuntimeRight('read'), asyncHandler(async (req: Request, res: Response) => {
   const folderIdResult = parseOptionalGraphFolderId(req.query.folder_id);
   if (!folderIdResult.ok) {
     return res.status(400).json(errorResponse('Invalid graph workflow folder ID'));
@@ -178,7 +178,7 @@ router.get('/browse-content', requireWallpaperRuntimePermission('images.view'), 
 }));
 
 /** Return one read-only group preview image list for wallpaper live widgets. */
-router.get('/groups/:id/preview-images', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
+router.get('/groups/:id/preview-images', requireWallpaperRuntimeRight('read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(req.params.id), 'Group ID');
     const count = parseInt(req.query.count as string) || 8;

@@ -19,7 +19,7 @@ type ProposalRow = {
 
 function human(actor: PostActor): boolean { return actor.profileId === null && (actor.origin ?? 'human') === 'human'; }
 function authority(actor:PostActor,row:ProposalRow):boolean {
-  if (!human(actor) || (!actor.isAdmin && !actor.keys.has('posts.write'))) return false;
+  if (!human(actor)) return false;
   if (row.post_id === null) return actor.isAdmin || row.proposer_account_key === knowledgeAccountKey(actor.accountId);
   try { return canEditPost(actor,requirePostRow(actor,row.post_id)); } catch { return false; }
 }
@@ -55,7 +55,7 @@ function validateFiles(actor:PostActor,body:string,targetPostId:number|null,sour
     const own = db().prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL AND chat_owner_key IS NULL").get(ref.ref);
     const previous = targetPostId ? db().prepare("SELECT 1 FROM post_media_refs WHERE post_id = ? AND owner_type = 'post' AND owner_id = ? AND kind = 'file' AND ref = ?").get(targetPostId,targetPostId,ref.ref) : null;
     if (previous) continue;
-    if (own) { requireKey(actor, 'files.view'); continue; }
+    if (own) { requireKey(actor, 'content.read'); continue; }
     // A source cannot revive a missing file or grant file permission.
     const source = sources.find((item) => item.postId && db().prepare("SELECT 1 FROM post_media_refs WHERE post_id = ? AND owner_type = ? AND owner_id = ? AND kind = 'file' AND ref = ?")
       .get(item.postId,item.kind === 'comment' ? 'comment' : 'post',item.commentId ?? item.postId,ref.ref));
@@ -66,7 +66,7 @@ function validateFiles(actor:PostActor,body:string,targetPostId:number|null,sour
 
 export const KnowledgeProposalStore = {
   create(actor:PostActor,input:PostKnowledgeProposalInput):PostKnowledgeProposal {
-    requireKey(actor,'posts.write'); requireKey(actor,'posts.view');
+    requireKey(actor,'content.read');
     if (!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.',409);
     if (!input || !['create','update'].includes(input.kind) || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > POST_LIMITS.title
       || typeof input.body !== 'string' || input.body.length > POST_LIMITS.body || typeof input.idempotencyKey !== 'string' || !input.idempotencyKey.trim() || input.idempotencyKey.length > 160) throw new PostError('지식 변경 제안 입력이 잘못됐어.');
@@ -102,10 +102,10 @@ export const KnowledgeProposalStore = {
     }).immediate();
   },
 
-  get(actor:PostActor,id:string):PostKnowledgeProposal { requireKey(actor,'posts.view');return toProposal(actor,requireProposal(actor,id)); },
+  get(actor:PostActor,id:string):PostKnowledgeProposal { requireKey(actor,'content.read');return toProposal(actor,requireProposal(actor,id)); },
 
   list(actor:PostActor,query:{postId?:unknown;status?:unknown;offset?:unknown;limit?:unknown}={}):PostKnowledgeProposalList {
-    requireKey(actor,'posts.view');
+    requireKey(actor,'content.read');
     const offset=query.offset === undefined ? 0 : Number(query.offset),limit=query.limit === undefined ? 20 : Number(query.limit);
     if (!Number.isSafeInteger(offset)||offset<0||!Number.isSafeInteger(limit)||limit<1||limit>50) throw new PostError('잘못된 제안 목록 범위야.');
     const where:string[]=[],params:unknown[]=[];
@@ -119,7 +119,6 @@ export const KnowledgeProposalStore = {
 
   apply(actor:PostActor,id:string,input:{expectedRevision?:unknown;contentVersion?:unknown}={}):PostKnowledgeProposal {
     if (!human(actor)) throw new PostError('사람 세션에서만 지식 변경을 승인할 수 있어.',403);
-    requireKey(actor,'posts.write');
     if(!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.',409);
     return db().transaction(() => {
       const row=requireProposal(actor,id);

@@ -23,7 +23,7 @@ import { historyWithinContextRating } from '../../services/codex-chat/chatConten
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
 import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from '../../services/generation-queue/generationJobRouting';
-import { canRequesterViewImages } from '../../middleware/imageAccess';
+import { requesterHasRight } from '../../middleware/featureAccess';
 import { isChatMcpSource } from '../context';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
@@ -56,7 +56,7 @@ function resolveUsableWorkflow(workflowId: number): WorkflowRecord {
 
 async function replaceOutputPathsWithArtifacts(result: Awaited<ReturnType<typeof saveMcpComfyOutputs>>, context: McpRequestContext) {
   const { outputPaths: _internalPaths, ...safeResult } = result;
-  if (context.requester && !canRequesterViewImages(context.requester)) {
+  if (context.requester && !requesterHasRight(context.requester, 'read')) {
     const { historyId: _historyId, historyIds: _historyIds, ...receipt } = safeResult;
     return receipt;
   }

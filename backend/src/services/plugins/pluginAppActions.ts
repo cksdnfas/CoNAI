@@ -33,8 +33,8 @@ function fresh(context: Context) {
   const origin = context as McpRequestContext
   const requester = context.requester ? { accountId: context.requester.accountId, accountType: context.requester.accountType } : undefined
   // A plugin acts on one project: the window's, or a chat's only one (with several the plugin gets none, never a guess).
-  // A chat's projects may come from its profile's delegated file permissions, but the plugin acts as the account alone:
-  // it gets the chat's project only when the account itself can open shared files, as chatWorkspaces decides.
+  // The plugin acts as the account: it gets the chat's project only when the account can open shared files, as
+  // chatWorkspaces decides.
   const opensFiles = () => { try { requireFileStoreOwner(requester); return true } catch { return false } }
   const bound = context.workspace ?? (origin.workspaces?.length === 1 && opensFiles() ? origin.workspaces[0] : undefined)
   const projectGrant = context.projectGrant ?? (bound ? { id: bound.project.id, revision: bound.project.revision, write: bound.write, threadId: origin.chatContext?.threadId, profileId: origin.chatContext?.profileId, bindingRevision: origin.chatContext ? bound.bindingRevision : undefined } : undefined)

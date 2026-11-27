@@ -56,7 +56,7 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
 
   const text = (result: unknown) => ((result as { content?: Array<{ text?: string }> }).content ?? []).map((part) => part.text ?? '').join('\n')
 
-  await t.test('connected page grants follow navigation without escaping public or preset restrictions', async () => {
+  await t.test('a connected page lends no domain tools; page tools follow navigation without escaping public or preset restrictions', async () => {
     const { rememberChatPage } = await import('../src/services/codex-chat/chatPageBridge')
     const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
     const { normalizeChatPageSnapshot } = await import('@conai/shared')
@@ -67,14 +67,12 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     const release = registerChatReply(execution, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge(admin, [], [], { chatContext: execution })
     try {
-      assert.ok(bridge.tools.some(tool => tool.function.name === 'search_images'))
+      assert.ok(!bridge.tools.some(tool => tool.function.name === 'search_images'), 'the library page lends no library tools to a profile without them')
       assert.ok(bridge.tools.some(tool => tool.function.name === 'get_chat_settings'), 'small tool sets retain settings discovery')
-      assert.notEqual((await bridge.call('search_images', {})).isError, true)
+      assert.equal((await bridge.call('search_images', {})).isError, true, 'calling it directly is refused too')
       const files = normalizeChatPageSnapshot({ ...page, instanceId: 'catalog-files', kind: 'files', path: '/files' })
       rememberChatPage(admin, files)
-      assert.notEqual((await bridge.call('list_files', {})).isError, true, 'navigation rebinds before dispatch')
-      assert.ok(!bridge.tools.some(tool => tool.function.name === 'search_images'))
-      assert.equal((await bridge.call('search_images', {})).isError, true)
+      assert.equal((await bridge.call('list_files', {})).isError, true, 'nor does the files page')
       const editor = normalizeChatPageSnapshot({ ...page, instanceId: 'catalog-editor', kind: 'workflow', path: '/generation', resourceId: 'workflow:draft:catalog', workflow: { revision: 'catalog-graph', name: 'Draft', description: '', nodes: [], edges: [] } })
       rememberChatPage(admin, editor)
       assert.notEqual((await bridge.call('list_workflow_modules', {})).isError, true, 'an initially ordinary page can enter the node editor')
@@ -95,9 +93,8 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
         const result = await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: 'list_workflow_modules', arguments: {} } })
         assert.notEqual(result.isError, true, text(result))
       } finally { await client.close(); await server.close(); releaseCodex() }
-      rememberChatPage(admin, files)
       ChatProfileStore.update(pageProfile.id, { pageAssist: false })
-      assert.equal((await bridge.call('list_files', {})).isError, true, 'live pageAssist revocation also removes domain grants')
+      assert.equal((await bridge.call('list_workflow_modules', {})).isError, true, 'live pageAssist revocation removes the page tools')
       const context = { requester: admin, source: 'llm-chat' as const, scopes: [] as never[], chatContext: { ...execution, page: { ...page, kind: 'codex' as const, path: '/generation', connectionId: 'preset-guard' } }, generationPresetIds: [1] }
       assert.equal(isContextToolAllowed(context, 'submit_generation_job', false), false)
       context.chatContext.page.path = '/public/workflows/example'

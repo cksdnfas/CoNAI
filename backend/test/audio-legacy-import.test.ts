@@ -177,7 +177,7 @@ test('audio legacy import: old SFX manager data into audio.db', { timeout: 18000
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin-legacy', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)
-  const editorGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-editor', permissionKeys: ['audio.view', 'audio.edit', 'workflows.edit'] })
+  const editorGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-editor', permissionKeys: ['content.read', 'content.edit'] })
   const editorId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('editor', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(editorGroup.id, editorId)
   invalidateConfiguredAuthCache()

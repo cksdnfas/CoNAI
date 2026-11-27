@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -41,7 +42,7 @@ function ChatGenerationSnackbar({ payload, accountId, message, onOpen }: { paylo
   if (!auth || (auth.accountId ?? null) !== accountId || (auth.hasCredentials && !auth.authenticated)) return null
   const cancelled = payload.status === 'cancelled'
   const failed = payload.status === 'failed' || payload.failureCode === 'no_image'
-  const canViewImages = hasAuthPermission(auth.permissionKeys, 'images.view')
+  const canViewImages = hasAuthPermission(auth.permissionKeys, CONTENT_PERMISSIONS.read)
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-[52px] w-10 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-surface-low">

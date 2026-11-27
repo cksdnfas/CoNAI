@@ -367,9 +367,10 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     AuthPermissionGroup.addAccountMembership(group.id, id)
     return id
   }
-  const listenerId = account('listener', ['audio.view'])
-  const editorId = account('editor', ['audio.view', 'audio.edit'])
-  const producerId = account('producer', ['audio.view', 'audio.edit', 'generation.execute', 'workflows.view'])
+  const listenerId = account('listener', ['content.read'])
+  const editorId = account('editor', ['content.read', 'content.edit'])
+  const producerId = account('producer', ['content.read', 'content.edit'])
+  const outsiderId = account('outsider', [])
   invalidateConfiguredAuthCache()
 
   const express = (await import('express')).default
@@ -396,7 +397,7 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     return { status: response.status, json: () => JSON.parse(text), text }
   }
 
-  await t.test('REST: workflow lists by kind, binding and orders follow audio.edit + generation.execute', async () => {
+  await t.test('REST: workflow lists by kind, binding and orders follow the read and edit rights', async () => {
     assert.deepEqual((await call('/api/workflows?kind=audio', adminId)).json().data.map((row: { id: number }) => row.id), [defaultWorkflow.id])
     assert.deepEqual((await call('/api/workflows?kind=image', adminId)).json().data.map((row: { id: number }) => row.id), [imageWorkflowId])
     assert.equal((await call('/api/workflows', adminId, { method: 'PUT' })).status, 404)
@@ -407,11 +408,10 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     assert.equal(listed.status, 200)
     assert.equal(listed.json().data[0].binding.prompt_field_id, 'prompt')
     assert.equal((await call(`/api/audio/workflows/${defaultWorkflow.id}/check`, listenerId, { method: 'POST' })).status, 403)
-    assert.equal((await call('/api/audio/workflows/default', editorId, { method: 'POST' })).status, 403, 'adding a workflow needs workflows.edit')
+    assert.equal((await call('/api/audio/workflows/default', listenerId, { method: 'POST' })).status, 403, 'adding a workflow needs edit')
 
     const body = JSON.stringify({ group_id: snow.id, text: 'rest take', seconds: 1, count: 1, seed: 900, request_key: 'rest-key-0001' })
-    assert.equal((await call('/api/audio/orders', listenerId, { method: 'POST', body })).status, 403)
-    assert.equal((await call('/api/audio/orders', editorId, { method: 'POST', body })).status, 403, 'ordering needs generation.execute')
+    // Ordering is generation: anyone who can read the audio workspace may order.
     const placed = await call('/api/audio/orders', producerId, { method: 'POST', body })
     assert.equal(placed.status, 201, placed.text)
     const orderId = placed.json().data.id as string
@@ -423,11 +423,17 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     const done = await waitForOrder(orderId)
     assert.equal(done.status, 'completed')
     assert.ok((await call(`/api/audio/orders?group_id=${snow.id}`, listenerId)).json().data.items.some((order: { id: string }) => order.id === orderId))
+    // Cancelling is the owner's (read is enough) or an editor's; a reader cannot cancel someone else's order.
     assert.equal((await call(`/api/audio/orders/${orderId}/cancel`, listenerId, { method: 'POST' })).status, 403)
+    assert.equal((await call(`/api/audio/orders/${orderId}/cancel`, outsiderId, { method: 'POST' })).status, 403)
+    const own = await call('/api/audio/orders', listenerId, { method: 'POST', body: JSON.stringify({ group_id: snow.id, text: 'own take', seconds: 1, count: 1, seed: 901, request_key: 'rest-key-0002' }) })
+    assert.equal(own.status, 201, own.text)
+    assert.equal((await call(`/api/audio/orders/${own.json().data.id}/cancel`, listenerId, { method: 'POST' })).status, 200)
+    assert.equal((await call('/api/audio/orders', outsiderId, { method: 'POST', body })).status, 403)
   })
 
   // ---------------------------------------------------------------- MCP
-  await t.test('MCP: order tools need audio.edit + generation.execute; wait is withheld from chat', async () => {
+  await t.test('MCP: order tools need the read right (no edit); wait is withheld from chat', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS } = await import('../src/mcp/context')
     const { Client } = await import('@modelcontextprotocol/client')
@@ -443,8 +449,8 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     const names = async (client: Awaited<ReturnType<typeof connect>>) => (await client.listTools()).tools.map((tool) => tool.name)
     const listener = await names(await connect({ accountId: listenerId, accountType: 'guest' }))
     assert.ok(listener.includes('list_audio_workflows') && listener.includes('get_audio_order'))
-    assert.ok(!listener.includes('order_audio'))
-    assert.ok(!(await names(await connect({ accountId: editorId, accountType: 'guest' }))).includes('order_audio'))
+    assert.ok(['order_audio', 'cancel_audio_order', 'retry_audio_order_job'].every((name) => listener.includes(name)), 'read is enough to order')
+    assert.ok(!(await names(await connect({ accountId: outsiderId, accountType: 'guest' }))).includes('order_audio'), 'no read, no ordering')
     assert.ok(CHAT_BLOCKED_TOOLS.has('wait_audio_order'))
 
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
@@ -492,19 +498,14 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     assert.match(generationOutcomeNote(summary.job_ids[0], { status: 'failed', images: 0, audio: true }), /Audio job .* failed: no sound/)
     assert.match(generationOutcomeNote(summary.job_ids[0], { status: 'running', images: 0, audio: true }), /its sound attaches/)
     assert.deepEqual(jobCandidates.audioOrderGroupsByQueueJob(summary.job_ids), new Map(summary.job_ids.map((id: number) => [id, snow.id])))
-
-    const { isAudioOrderChatJob } = await import('../src/services/generation-queue/queueJobExecutors')
-    assert.equal(isAudioOrderChatJob(summary.job_ids[0], 'order_audio'), true, 'an audio order job needs no workflows.view')
-    assert.equal(isAudioOrderChatJob(summary.job_ids[0], 'generate_comfyui'), false)
-    assert.equal(isAudioOrderChatJob(999_999, 'order_audio'), false, 'an audio tool name alone is not enough')
   })
 
   // ---------------------------------------------------------------- generation tab: image workflows that save sounds
   const { GenerationHistoryService } = await import('../src/services/generationHistoryService')
   const { AUDIO_GENERATION_TAB_PROJECT_NAME } = await import('../src/services/audio/audioGenerationOutputs')
   const jobCandidates = await import('../src/services/audio/audioJobCandidates')
-  const historyOwnerId = account('history-owner', ['images.view', 'generation.execute', 'workflows.view'])
-  const historyStrangerId = account('history-stranger', ['images.view'])
+  const historyOwnerId = account('history-owner', ['content.read'])
+  const historyStrangerId = account('history-stranger', ['content.read'])
   invalidateConfiguredAuthCache()
   const runImageWorkflow = async (workflowId: number) => {
     const jobId = GenerationQueueModel.create({

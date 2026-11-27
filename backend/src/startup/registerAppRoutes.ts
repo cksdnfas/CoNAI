@@ -1,5 +1,3 @@
-import { IMAGE_VIEW_PERMISSION } from '@conai/shared';
-import { allowImagesView, requireImagesView } from '../middleware/imageAccess';
 import express, { type Express, type Request, type RequestHandler, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -62,13 +60,12 @@ import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
 import spriteRoutes from '../routes/sprite.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
-import { orPublicWorkflow } from '../middleware/publicWorkflowScope';
 import {
-  allowAnonymousAnyPermission,
+  allowRead,
   optionalAuth,
   requireAdmin,
   requireAuth,
-  requirePermission,
+  requireRead,
 } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../services/auth/sessionAccess';
 import { settingsService } from '../services/settingsService';
@@ -90,7 +87,7 @@ export interface RegisterAppRoutesResult {
 
 /** Register one authenticated runtime directory with shared cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, requireAuth, requireImagesView, express.static(directoryPath, {
+  app.use(mountPath, requireAuth, requireRead, express.static(directoryPath, {
     setHeaders: (res) => {
       // Files can be replaced in place at the same URL and may contain private user media.
       res.setHeader('Cache-Control', 'private, no-cache');
@@ -148,10 +145,10 @@ function isImageReadRequest(req: Request): boolean {
   ].includes(req.path);
 }
 
-function allowReadAccess(permissionKeys: readonly string[], readPostPaths: readonly string[] = []): RequestHandler {
+function allowReadAccess(readPostPaths: readonly string[] = []): RequestHandler {
   return (req, res, next) => {
     if (isReadMethod(req) || (req.method === 'POST' && readPostPaths.includes(req.path))) {
-      allowAnonymousAnyPermission(permissionKeys)(req, res, next);
+      allowRead(req, res, next);
       return;
     }
 
@@ -159,10 +156,10 @@ function allowReadAccess(permissionKeys: readonly string[], readPostPaths: reado
   };
 }
 
-/** Preserve the existing authenticated data boundary while authorizing reads by feature. */
-function requireReadAccess(permissionKey: string, readPostPaths: readonly string[] = []): RequestHandler {
+/** Reads need the read right; writes only sign-in here, the routes require edit or delete themselves. */
+function requireReadAccess(readPostPaths: readonly string[] = []): RequestHandler {
   return (req, res, next) => {
-    if (isReadMethod(req) || (req.method === 'POST' && readPostPaths.includes(req.path))) requirePermission(permissionKey)(req, res, next);
+    if (isReadMethod(req) || (req.method === 'POST' && readPostPaths.includes(req.path))) requireRead(req, res, next);
     else optionalAuth(req, res, next);
   };
 }
@@ -172,7 +169,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api', dropRevokedWallpaperKeyLogin);
   // Requests from a shared plugin page borrow the keys of the native routes its package declared (pluginAppRoutes).
   app.use('/api', pluginRouteLending);
-  // The audio store lives under uploads but is only served through /api/audio (audio.view), never statically.
+  // The audio store lives under uploads but is only served through /api/audio (content.read), never statically.
   // Resolve the request like serve-static would, so `//audio`, `%2e%2e` or case tricks cannot reach it either.
   app.use('/uploads', (req, res, next) => {
     let decoded: string;
@@ -224,19 +221,19 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     }
 
     if (isImageReadRequest(req)) {
-      allowImagesView(req, res, next);
+      allowRead(req, res, next);
       return;
     }
 
     optionalAuth(req, res, next);
   }, imageRoutes);
-  app.use('/api/prompt-collection', options.readOnlyLimiter, requireReadAccess('prompts.view', ['/resolve-groups']), promptCollectionRoutes);
+  app.use('/api/prompt-collection', options.readOnlyLimiter, requireReadAccess(['/resolve-groups']), promptCollectionRoutes);
   app.use('/api/character-library', options.readOnlyLimiter, characterLibraryRoutes);
   app.use('/api/art-styles', options.readOnlyLimiter, artStyleRoutes);
-  app.use('/api/danbooru-browser', options.readOnlyLimiter, requireReadAccess('prompts.view'), danbooruBrowserRoutes);
-  app.use('/api/prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), promptGroupRoutes);
-  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), negativePromptGroupRoutes);
-  app.use('/api/prompt-presets', requireReadAccess('prompts.view'), promptPresetRoutes);
+  app.use('/api/danbooru-browser', options.readOnlyLimiter, requireReadAccess(), danbooruBrowserRoutes);
+  app.use('/api/prompt-groups', options.readOnlyLimiter, requireReadAccess(), promptGroupRoutes);
+  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, requireReadAccess(), negativePromptGroupRoutes);
+  app.use('/api/prompt-presets', requireReadAccess(), promptPresetRoutes);
   app.use('/api/groups', options.readOnlyLimiter, groupRoutes);
   app.use('/api/auto-folder-groups', options.readOnlyLimiter, autoFolderGroupRoutes);
   app.get('/api/settings/appearance-public', options.readOnlyLimiter, (_req, res) => {
@@ -256,17 +253,17 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.get('/api/runtime-settings/language', options.readOnlyLimiter, (_req, res) => {
     res.json({ success: true, data: { general: { language: settingsService.loadSettings().general.language } } });
   });
-  app.get('/api/runtime-settings/image-save', options.readOnlyLimiter, requireAuth, allowAnonymousAnyPermission(['images.view', 'generation.execute', 'workflows.view', 'images.upload']), (_req, res) => {
+  app.get('/api/runtime-settings/image-save', options.readOnlyLimiter, requireAuth, (_req, res) => {
     res.json({ success: true, data: { imageSave: settingsService.loadSettings().imageSave } });
   });
-  app.get('/api/runtime-settings/workflows', options.readOnlyLimiter, requirePermission('workflows.view'), (_req, res) => {
+  app.get('/api/runtime-settings/workflows', options.readOnlyLimiter, requireRead, (_req, res) => {
     const { tagger, kaloscope } = settingsService.loadSettings();
     res.json({ success: true, data: { tagger: { enabled: tagger.enabled }, kaloscope: { enabled: kaloscope.enabled } } });
   });
-  // A public workflow page shows its results without images.view; any signed-in viewer reads the result feed's
+  // A public workflow page shows its results without the read right; any signed-in viewer reads the result feed's
   // rating-safety settings so the publisher's safety rules still apply there.
   const resultSafetySettingPaths = ['/generation-history', '/rating-tiers'];
-  const runtimeMediaReadAccess = allowReadAccess([IMAGE_VIEW_PERMISSION]);
+  const runtimeMediaReadAccess = allowReadAccess();
   app.use('/api/runtime-media-settings', options.readOnlyLimiter, (req, res, next) => {
     if (isReadMethod(req) && resultSafetySettingPaths.includes(req.path) && req.session?.authenticated === true) next();
     else runtimeMediaReadAccess(req, res, next);
@@ -275,29 +272,24 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/page-settings', pageSettingsRoutes);
   app.use('/api/generation-layouts', generationLayoutRoutes);
   app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
-  app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
+  app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess(), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
   app.use('/api/refmods', requireAuth, refmodRoutes);
-  // Reads are guarded in the router like GET /api/refmods (characters.view or the Director picker's own access).
+  // Reads are guarded in the router (sign-in, as the Director picker needs).
   app.use('/api/refmod-entries', options.readOnlyLimiter, requireAuth, refmodEntryRoutes);
   app.use('/api/comfyui-servers', (req, res, next) => {
-    // The RefMod library backs the Director form, which generation-only accounts also use on published workflow pages.
-    // Published workflow pages reach it with their slug even when the viewer holds neither permission.
-    if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, () => orPublicWorkflow(allowAnonymousAnyPermission(['generation.execute', 'workflows.view']))(req, res, next));
-    else requireReadAccess('workflows.view')(req, res, next);
+    // The RefMod library backs the Director form, which every signed-in account can use (generation is open).
+    if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, next);
+    else requireReadAccess()(req, res, next);
   }, comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', (req, res, next) => {
     // Bitmap URLs are also consumed by published workflows without global workflow-data access.
     if (isReadMethod(req) && req.path === '/comfy-model-thumbnail') optionalAuth(req, res, next);
-    else requireReadAccess('workflows.view')(req, res, next);
+    else requireReadAccess()(req, res, next);
   }, customDropdownListRoutes);
-  app.use('/api/custom-nodes', requireReadAccess('workflows.view'), customNodeRoutes);
-  app.use('/api/module-definitions', requireReadAccess('workflows.view'), moduleDefinitionRoutes);
-  app.use('/api/graph-workflows', (req, res, next) => {
-    const readsMedia = isReadMethod(req) && (req.path === '/browse-content' || /^\/executions\/(?:previews|\d+)$/.test(req.path));
-    if (readsMedia) requirePermission('workflows.view')(req, res, () => requireImagesView(req, res, next));
-    else requireReadAccess('workflows.view')(req, res, next);
-  }, graphWorkflowRoutes);
+  app.use('/api/custom-nodes', requireReadAccess(), customNodeRoutes);
+  app.use('/api/module-definitions', requireReadAccess(), moduleDefinitionRoutes);
+  app.use('/api/graph-workflows', requireReadAccess(), graphWorkflowRoutes);
   app.use('/api/nai', options.uploadLimiter, optionalAuth, naiRoutes);
   app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
@@ -324,7 +316,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/folders', requireAdmin, watchedFoldersRoutes);
   app.use('/api/backup-sources', requireAdmin, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
-  app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), searchOptionsRoutes);
+  app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess(), searchOptionsRoutes);
   app.use('/api/system', requireAdmin, systemRoutes);
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);
   app.use('/api/file-verification', requireAdmin, fileVerificationRoutes);

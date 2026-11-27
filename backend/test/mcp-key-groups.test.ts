@@ -17,7 +17,7 @@ test('mcp keys: a key holds its permission group\'s permissions and nothing else
   const { mcpHttpSettingsService, MCP_HTTP_SCOPES } = await import('../src/services/mcpHttpSettingsService')
   const { isContextToolAllowed, requireMcpToolAccess } = await import('../src/mcp/toolAccess')
 
-  const viewers = AuthPermissionGroup.createCustomGroup({ name: '이미지 조회', permissionKeys: ['images.view'] })
+  const viewers = AuthPermissionGroup.createCustomGroup({ name: '이미지 조회', permissionKeys: ['content.read'] })
   const keyContext = (keyGroup: string | null) => ({ scopes: [...MCP_HTTP_SCOPES], keyId: 'k', keyGroup })
 
   await t.test('a key is created and updated with an existing group only', () => {
@@ -50,26 +50,34 @@ test('mcp keys: a key holds its permission group\'s permissions and nothing else
     const context = keyContext(viewers.group_key)
     assert.equal(isContextToolAllowed(context, 'search_images'), true)
     assert.doesNotThrow(() => requireMcpToolAccess(context, 'search_images'))
-    assert.equal(isContextToolAllowed(context, 'generate_nai'), false, 'generation.execute is not in the group')
-    assert.throws(() => requireMcpToolAccess(context, 'generate_nai'), /Permission required: generation\.execute/)
-    assert.equal(isContextToolAllowed(context, 'list_files'), false)
-    // Parameter-dependent keys apply to keys too: putting results in a group needs images.edit.
-    const generator = AuthPermissionGroup.createCustomGroup({ name: '생성', permissionKeys: ['generation.execute'] })
-    assert.doesNotThrow(() => requireMcpToolAccess(keyContext(generator.group_key), 'generate_nai', {}))
-    assert.throws(() => requireMcpToolAccess(keyContext(generator.group_key), 'generate_nai', { group_id: 1 }), /Permission required: images\.edit/)
+    assert.equal(isContextToolAllowed(context, 'list_files'), true, 'reading covers files too')
+    assert.equal(isContextToolAllowed(context, 'create_file_folder'), false, 'content.edit is not in the group')
+    assert.throws(() => requireMcpToolAccess(context, 'create_file_folder'), /Permission required: content\.edit/)
+    // Generating, also into an existing group, needs only a group; a group path may create a group, which edits.
+    assert.doesNotThrow(() => requireMcpToolAccess(context, 'generate_nai', {}))
+    assert.doesNotThrow(() => requireMcpToolAccess(context, 'generate_nai', { group_id: 1 }))
+    assert.throws(() => requireMcpToolAccess(context, 'generate_nai', { group_path: 'new/place' }), /Permission required: content\.edit/)
   })
 
   await t.test('no group, a deleted group, or chat setup: nothing', () => {
     assert.equal(isContextToolAllowed(keyContext(null), 'search_images'), false)
     assert.throws(() => requireMcpToolAccess(keyContext(null), 'search_images'), /Permission required/)
-    const gone = AuthPermissionGroup.createCustomGroup({ name: '지울 그룹', permissionKeys: ['images.view'] })
+    const gone = AuthPermissionGroup.createCustomGroup({ name: '지울 그룹', permissionKeys: ['content.read'] })
     AuthPermissionGroup.deleteCustomGroup(gone.id)
     assert.equal(isContextToolAllowed(keyContext(gone.group_key), 'search_images'), false)
+    // A key is signed in only through its group: without one, even generating (which needs no right) is refused.
+    for (const groupless of [keyContext(null), keyContext(gone.group_key)]) {
+      assert.equal(isContextToolAllowed(groupless, 'generate_nai'), false)
+      assert.throws(() => requireMcpToolAccess(groupless, 'generate_nai', {}), /Permission required/)
+      assert.equal(isContextToolAllowed(groupless, 'resize_images'), false)
+    }
+    assert.equal(isContextToolAllowed(keyContext('guest'), 'generate_nai'), true, 'any group signs a key in')
+    assert.doesNotThrow(() => requireMcpToolAccess(keyContext('guest'), 'generate_nai', {}))
     assert.equal(isContextToolAllowed(keyContext('admin'), 'list_chat_profiles'), false, 'configure is chat-only, never a key')
   })
 
   await t.test('changing the group\'s permissions changes the key at once', () => {
-    AuthPermissionGroup.updateCustomGroup(viewers.id, { name: '이미지 조회', permissionKeys: ['images.view', 'generation.execute'] })
-    assert.equal(isContextToolAllowed(keyContext(viewers.group_key), 'generate_nai'), true)
+    AuthPermissionGroup.updateCustomGroup(viewers.id, { name: '이미지 조회', permissionKeys: ['content.read', 'content.edit'] })
+    assert.equal(isContextToolAllowed(keyContext(viewers.group_key), 'create_file_folder'), true)
   })
 })

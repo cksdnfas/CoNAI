@@ -49,7 +49,7 @@ function sheetProblem(sheet: SheetEntry) {
 export function SpriteNormalizeTab({ active }: { active: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const isWide = useDesktopPageLayout()
   const [sheets, setSheets] = useState<SheetEntry[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -116,7 +116,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
   const problemHashes = sheets.filter(sheetProblem).map((sheet) => sheet.hash)
   const problems = problemHashes.length
   const running = Boolean(jobId) || starting
-  const canRun = has('images.edit') && sheets.length > 0 && problems === 0 && !running
+  const canRun = canRead && sheets.length > 0 && problems === 0 && !running
 
   const run = async (save: boolean) => {
     setStarting(true)
@@ -132,7 +132,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
   }
 
   useSpriteNormalizeChatPage({
-    active, sheets, setSheets, selected, setSelected, prepareSheets, options, setOptions, problems: problemHashes, running, canRun, canSave: has('images.upload'), run, savedHashes, failures,
+    active, sheets, setSheets, selected, setSelected, prepareSheets, options, setOptions, problems: problemHashes, running, canRun, canSave: canRead, run, savedHashes, failures,
   })
 
   const left = (
@@ -238,7 +238,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
           {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <Button size="sm" variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined}>
+        <Button size="sm" variant="default" disabled={!canRun} onClick={() => void run(true)} aria-busy={running || undefined}>
           {running ? <LoaderCircle className="animate-spin" /> : null}
           {t({ ko: '저장', en: 'Save' })}
         </Button>

@@ -29,7 +29,7 @@ type LibraryProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kin
 
 /**
  * A character library change the chat proposed (`propose_character_library`): save a setting (new or against its
- * revision), or delete a setting or a folder with what goes with it. A person with `characters.edit` applies it here
+ * revision), or delete a setting or a folder with what goes with it. A person with the edit right (the delete right to delete) applies it here
  * through the library REST with their own session; the proposal is then marked saved.
  */
 export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { proposal: LibraryProposal; threadId?: number }) {
@@ -37,8 +37,8 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
-  const canView = permissions.has('characters.view')
-  const canEdit = permissions.has('characters.edit')
+  const canView = permissions.canRead
+  const canEdit = permissions.canEdit
   const [state, setState] = useState<'saved' | 'dismissed' | null>(null)
   const [savedId, setSavedId] = useState<number | null>(proposal.savedId ?? null)
   const saved = state === 'saved' || proposal.saved === true || proposal.savedId != null

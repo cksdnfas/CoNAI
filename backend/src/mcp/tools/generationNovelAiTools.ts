@@ -5,7 +5,7 @@ import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema } from './mcpTargetGroup';
 import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
-import { canRequesterViewImages } from '../../middleware/imageAccess';
+import { requesterHasRight } from '../../middleware/featureAccess';
 import { errorResult, textResult } from '../toolResults';
 
 /** generate_nai answers synchronously; a job still running after this returns its id to wait on. */
@@ -79,7 +79,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
         if (job.status === 'failed' || job.status === 'cancelled') {
           return errorResult(`NAI generation ${job.status}: ${job.failure_message ?? 'no details'} (job ${job.id})`);
         }
-        const canView = !context.requester || canRequesterViewImages(context.requester);
+        const canView = !context.requester || requesterHasRight(context.requester, 'read');
 
         return textResult({
           success: job.finished,

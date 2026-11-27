@@ -539,7 +539,7 @@ export interface LlmSettings {
 }
 
 /** `configure` is chat-only (proposing chat profiles and display blocks); HTTP keys never carry it. */
-export type McpHttpScope = 'read' | 'generate' | 'organize' | 'configure' | 'backup' | 'restore';
+export type McpHttpScope = 'read' | 'generate' | 'organize' | 'delete' | 'configure' | 'backup' | 'restore';
 
 export interface McpHttpApiKey {
   id: string;

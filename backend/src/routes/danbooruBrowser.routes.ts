@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { hasAdminAccess, requireAdmin } from '../middleware/authMiddleware';
-import { requireImagesView } from '../middleware/imageAccess';
+import { requireAdmin, requireRead, hasAdminAccess } from '../middleware/authMiddleware';
 import { danbooruBrowserService } from '../services/danbooruBrowserService';
 import { toPublicDanbooruDbInfo } from '../services/danbooruBrowser/dbResolver';
 import { danbooruReleaseInstaller } from '../services/danbooruBrowser/releaseInstaller';
@@ -76,7 +75,7 @@ router.get('/character-facets', asyncHandler(async (_req: Request, res: Response
   sendSuccess(res, { available: danbooruBrowserService.isAvailable(), dimensions: catalogFacetDimensions() });
 }));
 
-router.get('/character-images/:tagId/:fileName', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/character-images/:tagId/:fileName', requireRead, asyncHandler(async (req: Request, res: Response) => {
   const fileName = typeof req.params.fileName === 'string' ? req.params.fileName : '';
   const filePath = await danbooruBrowserService.getCharacterImageFilePath(req.params.tagId, fileName);
   if (!filePath) {

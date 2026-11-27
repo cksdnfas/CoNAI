@@ -1,14 +1,13 @@
 import { z } from 'zod'
 import type { McpRequester } from '../../mcp/context'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { stringifyRequestJson } from '../../utils/stableRequestJson'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore, RuntimeJobConflictError, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
 import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
-import { publicScopeRequester, scopeForPlugin, type PluginPublicScope } from './pluginPublicScope'
+import { scopeForPlugin, type PluginPublicScope } from './pluginPublicScope'
 
-/** `publicScope`: the plugin window that started the job; a shared page that declares `jobs` lends generation.execute. */
+/** `publicScope`: the plugin window that started the job; starting one needs only a signed-in account. */
 type Params = { pluginId: string; digest: string; requester: McpRequester; inputKey: string; slot: number; publicScope?: PluginPublicScope }
 type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; job_id: string; expires_at: number }
 type Input = { requestId: string; data: Record<string, unknown> }
@@ -20,7 +19,6 @@ export function setPluginTaskInvoker(value: Invoker) { invoke = value }
 function access(pluginId: string, requester: McpRequester | undefined, digest?: string, publicScope?: PluginPublicScope) {
   const plugin = getPlugin(pluginId)
   if (!requester) throw new PluginError('플러그인 작업에는 로그인한 계정이 필요해.', 403)
-  requireRequesterPermission(publicScopeRequester(requester, scopeForPlugin(publicScope, pluginId), 'jobs'), 'generation.execute')
   if (digest && plugin.digest !== digest) throw new PluginError('플러그인 버전이 바뀌었어.', 409)
   return { plugin, requester, owner: String(requester.accountId ?? 'bootstrap') }
 }

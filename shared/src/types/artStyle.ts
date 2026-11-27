@@ -33,7 +33,7 @@ export type ArtStyleSummary = {
   /** One line. */
   description: string
   badges: string[]
-  /** The first image's file id; null without images or when the viewer lacks `images.view`. */
+  /** The first image's file id; null without images or when the viewer lacks `content.read`. */
   coverImageId: string | null
   imageCount: number
   favorite: boolean
@@ -46,7 +46,7 @@ export type ArtStyle = ArtStyleSummary & {
   keywords: string[]
   positive: string
   negative: string
-  /** The style's own images in order, the first is the cover; empty when the viewer lacks `images.view`. */
+  /** The style's own images in order, the first is the cover; empty when the viewer lacks `content.read`. */
   images: ArtStyleImage[]
   createdAt: string
 }
@@ -93,7 +93,7 @@ export type ArtStyleBadgeCount = { badge: string; count: number }
 
 /**
  * Titles are unique (case-insensitive). Badges and keywords are trimmed and kept once (case-insensitive). `images`
- * replaces the whole ordered list (each image once, the first is the cover) and needs `images.view`; images left out are
+ * replaces the whole ordered list (each image once, the first is the cover) and needs `content.read`; images left out are
  * deleted with their copies. `duplicateOf` (create only, without `images`) copies another style's images.
  */
 export type ArtStyleCreateInput = {
@@ -117,7 +117,7 @@ export type ArtStyleBulkResult = { changed: number }
 
 /**
  * One style of a portable bundle (`POST /export` answers a ZIP: `art-styles.json` holding `ArtStyleExport`, and each
- * image as the file `images` names). `images` is empty for viewers without `images.view`.
+ * image as the file `images` names). `images` is empty for viewers without `content.read`.
  */
 export type ArtStyleExportEntry = {
   title: string
@@ -136,7 +136,7 @@ export type ArtStyleExport = { format: 'conai.art-styles'; version: 1; styles: A
 export type ArtStyleExportInput = { ids: number[] } | Record<string, never>
 /**
  * `POST /import` (multipart `file`): taken titles get ` (2)`, ` (3)`…, bundled images become the new style's own
- * file-store copies (needs `images.view`), and an image that is missing, damaged or not a still image is dropped.
+ * file-store copies (needs `content.read`), and an image that is missing, damaged or not a still image is dropped.
  */
 export type ArtStyleImportResult = { created: number; renamed: number; importedImages: number; droppedImages: number }
 

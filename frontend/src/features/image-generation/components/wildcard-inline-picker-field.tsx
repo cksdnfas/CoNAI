@@ -120,7 +120,7 @@ export function WildcardInlinePickerField({
   const [rollNonce, setRollNonce] = useState(0)
   const [legacyUndo, setLegacyUndo] = useState<{ before: string; after: string; count: number } | null>(null)
   const { t } = useI18n()
-  const { canViewWildcards } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
   const randomTokens = useMemo(() => findPromptRandomTokens(value), [value])
   // `__my:그룹__`은 이 칸 종류(긍정/부정)의 같은 이름 그룹으로 풀린다
@@ -195,7 +195,7 @@ export function WildcardInlinePickerField({
   const rollPreviewQuery = useQuery({
     queryKey: ['prompt-field-roll-preview', tool, randomPromptKind, value, rollNonce],
     queryFn: () => parseWildcards({ text: value, tool, count: 3, promptType: randomPromptKind }),
-    enabled: isRollPreviewOpen && canViewWildcards && value.trim().length > 0,
+    enabled: isRollPreviewOpen && canRead && value.trim().length > 0,
     staleTime: Number.POSITIVE_INFINITY,
   })
 
@@ -702,7 +702,7 @@ export function WildcardInlinePickerField({
             >
               <AtSign />
             </IconButton>
-            {canViewWildcards ? (
+            {canRead ? (
               <IconButton
                 size="icon-xs"
                 variant={isRollPreviewOpen ? 'secondary' : 'ghost'}
@@ -769,7 +769,7 @@ export function WildcardInlinePickerField({
         </div>
       ) : null}
 
-      {isRollPreviewOpen && canViewWildcards && value.trim() ? (
+      {isRollPreviewOpen && canRead && value.trim() ? (
         <div className="space-y-1 rounded-sm bg-surface-low px-3 py-2 text-xs">
           <div className="flex items-center justify-between text-2xs text-muted-foreground">
             <span>{t({ ko: '실제로 들어갈 프롬프트 · 예시 3개', en: 'Resolved prompts · 3 samples' })}</span>
@@ -866,7 +866,7 @@ export function WildcardInlinePickerField({
             status={getTokenStatus(activeRandomToken)}
             tool={tool}
             promptType={randomPromptKind}
-            canPreview={canViewWildcards}
+            canPreview={canRead}
             onChange={handleChangeRandomToken}
             onRemove={handleRemoveRandomToken}
             onRename={(name) => handleRenameRandomToken(activeRandomToken, getTokenStatus(activeRandomToken).source, name)}

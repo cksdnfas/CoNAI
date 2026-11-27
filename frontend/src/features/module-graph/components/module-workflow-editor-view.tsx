@@ -112,7 +112,7 @@ export function ModuleWorkflowEditorView({
   onSave,
   onRevert,
 }: ModuleWorkflowEditorViewProps) {
-  const { canUpdateWorkflows, canExecuteGeneration } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { t } = useI18n()
   const [dockTab, setDockTab] = useState<WorkflowEditorDockTab>(selectionKey ? 'node' : 'inputs')
   const [isDockOpen, setIsDockOpen] = useState(() => (isWideLayout ? readDockOpen() : false))
@@ -206,7 +206,7 @@ export function ModuleWorkflowEditorView({
         ) : null}
       </div>
       {separator}
-      <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canUpdateWorkflows} label={t({ ko: '노드 추가 (더블클릭)', en: 'Add node (double-click)' })}>
+      <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canEdit} label={t({ ko: '노드 추가 (더블클릭)', en: 'Add node (double-click)' })}>
         <Plus />
       </IconButton>
       <IconButton size="icon-sm" variant="ghost" onClick={onUndo} disabled={!canUndo} label={withShortcut(t({ ko: '되돌리기', en: 'Undo' }), 'Mod+Z')}>
@@ -217,7 +217,7 @@ export function ModuleWorkflowEditorView({
       </IconButton>
       <WorkflowValidationIndicator issues={validationIssues} onIssueSelect={onValidationIssueSelect} />
       <span className="min-w-2 flex-1" />
-      <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
+      <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
         {isExecuting ? <Loader2 className="motion-safe:animate-spin" /> : <Play />}
       </IconButton>
       {!isDockOpen ? (
@@ -246,7 +246,7 @@ export function ModuleWorkflowEditorView({
         <FloatingSaveBar
           label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })}
           saving={isSavingGraph}
-          canSave={canUpdateWorkflows && nodesCount > 0}
+          canSave={canEdit && nodesCount > 0}
           onSave={onSave}
           onDiscard={onRevert}
         />
@@ -259,7 +259,7 @@ export function ModuleWorkflowEditorView({
 
   const noop = () => {}
   // Ctrl+S stays on the editor even when there is nothing it can save yet, so the browser's "save page" never opens.
-  usePageSaveShortcut(canUpdateWorkflows && nodesCount > 0 ? onSave : noop, isSavingGraph)
+  usePageSaveShortcut(canEdit && nodesCount > 0 ? onSave : noop, isSavingGraph)
 
   if (!isWideLayout) {
     // Phone: the editor takes the whole screen between the app header and the bottom tabs; the dock is a bottom sheet.

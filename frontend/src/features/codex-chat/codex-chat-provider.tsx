@@ -13,6 +13,7 @@ import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useChatPage } from './chat-page-context'
 import { hasActiveChatQuery, refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
 import { patchChatRoomLists } from './use-chat-room-directory'
@@ -333,7 +334,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [addAttachments, resolveThread, showSnackbar, t])
 
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
-  const canUse = statusQuery.data?.canUse === true
+  // The server lets every signed-in account chat; the chat screens (page, panel, launcher) follow the chat page.
+  const canUse = statusQuery.data?.canUse === true && hasAuthPermission(authStatus?.permissionKeys, 'page.chat.view')
 
   useEffect(() => {
     const streams = streamsRef.current

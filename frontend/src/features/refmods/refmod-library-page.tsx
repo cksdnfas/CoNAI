@@ -36,7 +36,7 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
   const { t, formatDate } = useI18n()
   const library = useRefModLibrary()
   useRefModChatPage(library)
-  const { canEdit, canBuild, canViewImages, editor, list, visibleEntries, total, selected, selectMode, presence } = library
+  const { canEdit, canDelete, canViewImages, editor, list, visibleEntries, total, selected, selectMode, presence } = library
   const importInput = useRef<HTMLInputElement | null>(null)
   const inUnregistered = library.serverFilter === 'unregistered'
   const filtering = Boolean(library.query) || Boolean(library.concept) || (!inUnregistered && library.serverFilter !== 'all')
@@ -47,13 +47,13 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
     const block = entryBlock(entry)
     return [
       { key: 'open', label: canEdit ? t({ ko: '편집', en: 'Edit' }) : t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => library.openEntry(entry.id) },
-      canBuild ? { key: 'build', label: block ?? t({ ko: '만들기', en: 'Build' }), icon: Hammer, disabled: Boolean(block), onSelect: () => void library.build(entry) } : null,
+      { key: 'build', label: block ?? t({ ko: '만들기', en: 'Build' }), icon: Hammer, disabled: Boolean(block), onSelect: () => void library.build(entry) },
       canEdit ? { key: 'favorite', label: entry.favorite ? t({ ko: '즐겨찾기 해제', en: 'Unfavorite' }) : t({ ko: '즐겨찾기', en: 'Favorite' }), icon: entry.favorite ? StarOff : Star, disabled: library.bulkPending, onSelect: () => library.toggleFavorite(entry) } : null,
       canEdit ? { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: CopyPlus, onSelect: () => void library.duplicate(entry) } : null,
       { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => void library.exportEntries({ ids: [entry.id] }, entry.name) },
       canEdit ? { key: 'select', label: selected.has(entry.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { library.setSelectMode(true); library.toggleSelected(entry) } } : null,
-      canEdit ? '-' : null,
-      canEdit ? { key: 'unregister', label: t({ ko: '미등록으로 이동', en: 'Move to Unregistered' }), icon: Trash2, disabled: library.isPending(entry), onSelect: () => void library.remove(entry) } : null,
+      canDelete ? '-' : null,
+      canDelete ? { key: 'unregister', label: t({ ko: '미등록으로 이동', en: 'Move to Unregistered' }), icon: Trash2, disabled: library.isPending(entry), onSelect: () => void library.remove(entry) } : null,
     ]
   }
 
@@ -75,11 +75,9 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
         onOpen={() => library.openEntry(entry.id)}
         onOpenMedia={(thumb) => library.openMedia(thumbs, thumb)}
         actions={<>
-          {canBuild ? (
-            <IconButton variant="ghost" size="icon-sm" aria-busy={library.isPending(entry)} disabled={Boolean(block)} label={block ?? t({ ko: '‘{name}’ 만들기', en: 'Build ‘{name}’' }, { name: entry.name })} onClick={() => void library.build(entry)}>
-              <Hammer />
-            </IconButton>
-          ) : null}
+          <IconButton variant="ghost" size="icon-sm" aria-busy={library.isPending(entry)} disabled={Boolean(block)} label={block ?? t({ ko: '‘{name}’ 만들기', en: 'Build ‘{name}’' }, { name: entry.name })} onClick={() => void library.build(entry)}>
+            <Hammer />
+          </IconButton>
           <ActionMenuButton label={t({ ko: '‘{name}’ 작업', en: '‘{name}’ actions' }, { name: entry.name })} entries={entryMenu(entry)} />
         </>}
       />
@@ -94,16 +92,16 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
         canEdit ? { key: 'register', label: t({ ko: '등록', en: 'Register' }), icon: Plus, disabled: library.adoptPending, onSelect: () => void library.adopt([row]) } : null,
         { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => void library.exportEntries({ ids: [entry.id] }, entry.name) },
         canEdit ? { key: 'select', label: selected.has(entry.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { library.setSelectMode(true); library.toggleSelected(entry) } } : null,
-        canEdit ? '-' : null,
-        canEdit ? { key: 'delete', label: t({ ko: '영구 삭제', en: 'Delete permanently' }), icon: Trash2, destructive: true, disabled: library.isPending(entry), onSelect: () => void library.remove(entry) } : null,
+        canDelete ? '-' : null,
+        canDelete ? { key: 'delete', label: t({ ko: '영구 삭제', en: 'Delete permanently' }), icon: Trash2, destructive: true, disabled: library.isPending(entry), onSelect: () => void library.remove(entry) } : null,
       ]
     }
     if (row.kind === 'record') {
       return [
         { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => library.openUnregisteredRow(row) },
         canEdit ? { key: 'register', label: t({ ko: '등록', en: 'Register' }), icon: Plus, disabled: library.adoptPending, onSelect: () => void library.adopt([row]) } : null,
-        canEdit ? '-' : null,
-        canEdit ? { key: 'delete', label: t({ ko: '영구 삭제', en: 'Delete permanently' }), icon: Trash2, destructive: true, onSelect: () => void library.removeUnregisteredRecord(row) } : null,
+        canDelete ? '-' : null,
+        canDelete ? { key: 'delete', label: t({ ko: '영구 삭제', en: 'Delete permanently' }), icon: Trash2, destructive: true, onSelect: () => void library.removeUnregisteredRecord(row) } : null,
       ]
     }
     return [
@@ -178,7 +176,7 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
               { key: 'export', label: t({ ko: 'RefMod 전체 내보내기', en: 'Export every RefMod' }), icon: Download, onSelect: () => void library.exportEntries({}, 'refmods') },
               canEdit ? { key: 'import', label: t({ ko: 'RefMod 묶음 ZIP 가져오기', en: 'Import a RefMod bundle' }), icon: Upload, onSelect: () => importInput.current?.click() } : null,
               canEdit ? { key: 'adopt', label: t({ ko: '미등록 전부 등록', en: 'Register every unregistered' }), icon: Layers, disabled: !library.unregisteredCount || library.adoptPending, onSelect: () => void library.adoptAll() } : null,
-              library.canAddWorkflow ? { key: 'workflow', label: t({ ko: 'RefMod 생성 워크플로 추가', en: 'Add the RefMod creation workflow' }), icon: Workflow, disabled: library.addingWorkflow, onSelect: () => void library.addCreationWorkflow() } : null,
+              library.canEdit ? { key: 'workflow', label: t({ ko: 'RefMod 생성 워크플로 추가', en: 'Add the RefMod creation workflow' }), icon: Workflow, disabled: library.addingWorkflow, onSelect: () => void library.addCreationWorkflow() } : null,
             ]}
           />
           {canEdit ? <Button size="sm" onClick={library.openNewEntry}><Plus />{t({ ko: '새 RefMod', en: 'New RefMod' })}</Button> : null}
@@ -249,7 +247,7 @@ export function RefModLibraryPage({ viewSwitch }: { viewSwitch: ReactNode }) {
               <SelectionBarAction icon={StarOff} label={t({ ko: '즐겨찾기 해제', en: 'Unfavorite' })} disabled={library.bulkPending} onClick={() => void library.bulk({ action: 'favorite', ids: [...selected.keys()], favorite: false })} />
             </>}
             <SelectionBarAction icon={Download} label={t({ ko: '내보내기', en: 'Export' })} onClick={() => void library.exportEntries({ ids: [...selected.keys()] }, t({ ko: '선택한 RefMod', en: 'selected refmods' }))} />
-            <SelectionBarAction icon={Trash2} label={inUnregistered ? t({ ko: '영구 삭제', en: 'Delete permanently' }) : t({ ko: '미등록으로 이동', en: 'Move to Unregistered' })} disabled={library.bulkPending} onClick={() => void library.removeSelected()} />
+            {canDelete ? <SelectionBarAction icon={Trash2} label={inUnregistered ? t({ ko: '영구 삭제', en: 'Delete permanently' }) : t({ ko: '미등록으로 이동', en: 'Move to Unregistered' })} disabled={library.bulkPending} onClick={() => void library.removeSelected()} /> : null}
           </>}
         />
       ) : null}

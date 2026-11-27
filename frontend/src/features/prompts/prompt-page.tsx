@@ -63,16 +63,16 @@ function PanelFallback({ toolbarProps }: { toolbarProps: PromptPageToolbarBasePr
 /** /prompts. The old `?tab=wildcards` view was the same panel as /wildcards, so that link now goes there. */
 export function PromptPage() {
   const [searchParams] = useSearchParams()
-  const { canViewPrompts } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   if (searchParams.get('tab') === 'wildcards') {
     return <Navigate to="/wildcards" replace />
   }
 
-  return canViewPrompts ? <PromptPageContent /> : <FeaturePermissionNotice permission="prompts.view" />
+  return canRead ? <PromptPageContent /> : <FeaturePermissionNotice />
 }
 
 function PromptPageContent() {
-  const { canCreatePrompts, canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
@@ -82,7 +82,7 @@ function PromptPageContent() {
   const view = parsePromptPageView(searchParams.get('tab'))
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
-  const canViewWildcards = hasAuthPermission(permissionKeys, 'page.wildcards.view')
+  const canRead = hasAuthPermission(permissionKeys, 'page.wildcards.view')
 
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
@@ -295,7 +295,7 @@ function PromptPageContent() {
   const toolbarProps: PromptPageToolbarBaseProps = {
     view,
     promptType,
-    canViewWildcards,
+    canRead,
     onChangeView: handleChangeView,
   }
 
@@ -500,20 +500,20 @@ function PromptPageContent() {
               setSelectedGroupId(groupId)
               setPage(1)
             }}
-            onCreateGroup={canCreatePrompts ? () => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) }) : undefined}
+            onCreateGroup={canEdit ? () => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) }) : undefined}
             onExportGroups={() => void handleExportGroups()}
-            onImportGroups={canCreatePrompts && canUpdatePrompts && canDeletePrompts ? () => importInputRef.current?.click() : undefined}
+            onImportGroups={canEdit && canDelete ? () => importInputRef.current?.click() : undefined}
             onOpenSummary={() => setIsSummaryModalOpen(true)}
-            onOpenCollect={canCreatePrompts ? () => setIsCollectModalOpen(true) : undefined}
-            onOpenDanbooruGrouping={canCreatePrompts && canUpdatePrompts ? () => setIsDanbooruGroupingModalOpen(true) : undefined}
+            onOpenCollect={canEdit ? () => setIsCollectModalOpen(true) : undefined}
+            onOpenDanbooruGrouping={canEdit ? () => setIsDanbooruGroupingModalOpen(true) : undefined}
           />
         )}
         sidebarFooter={(
           <PromptGroupActions
-            onEditGroup={canUpdatePrompts && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
-            onDeleteGroup={canDeletePrompts && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
-            onMoveGroupUp={canUpdatePrompts && canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
-            onMoveGroupDown={canUpdatePrompts && canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
+            onEditGroup={canEdit && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
+            onDeleteGroup={canDelete && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
+            onMoveGroupUp={canEdit && canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
+            onMoveGroupDown={canEdit && canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
           />
         )}
         toolbar={(

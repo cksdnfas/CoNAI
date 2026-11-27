@@ -8,7 +8,7 @@ import { ChatAssetError, requireChatAssetAdmin } from './chatAssetAccess'
 import { createChatAssetBatch, getChatAssetBatch, applyChatAssetBatch, chooseChatAssetSlot, validateChatAssetBatchProposal, resolveChatAssetTarget, assertChatAssetBatchOwner } from './chatAssetBatches'
 import { normalizeAvatarCrop } from './chatProfileAssets'
 import { getCharacterSetting } from '../characterLibrary'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 
 type AssetsProposal = (ChatProfileAssetsProposal | ChatCharacterAssetsProposal) & { id: number; dismissed?: boolean }
 
@@ -20,7 +20,7 @@ export function proposeProfileAssets(requester: McpRequester, context: ChatExecu
   if (value.profile_id !== undefined && value.setting_id !== undefined) throw new ChatAssetError('profile_id 또는 setting_id 중 하나만 골라줘.')
   const creationInput = value.action === 'apply' ? undefined : { ...(value.input as Record<string, unknown>), idempotencyKey: `proposal:${context.threadId}:${context.replyId}` }
   const owner = resolveChatAssetTarget(profileId, value.setting_id, value.batch_id, creationInput)
-  if (owner.kind === 'setting') requireRequesterPermission(requester, 'characters.edit')
+  if (owner.kind === 'setting') requireRequesterRight(requester, 'edit')
   const profile = owner.kind === 'setting' ? getCharacterSetting(owner.id) : ChatProfileStore.find(profileId)
   if (!profile) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
   const identity = owner.kind === 'setting' ? { kind: 'character_assets' as const, settingId: owner.id, settingName: profile.name } : { kind: 'profile_assets' as const, profileId, profileName: profile.name }

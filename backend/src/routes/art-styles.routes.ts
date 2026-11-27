@@ -1,12 +1,12 @@
 import fs from 'fs'
-import express, { type Request, type Response } from 'express'
+import express, { type Request, type RequestHandler, type Response } from 'express'
 import multer from 'multer'
 import { ZipArchive } from 'archiver'
 import { z } from 'zod'
 import { createUploadStorage, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { requirePermission } from '../middleware/authMiddleware'
-import { canRequesterViewImages, requireImagesView } from '../middleware/imageAccess'
+import { requireDelete, requireEdit, requireRead } from '../middleware/authMiddleware'
+import { requesterHasRight } from '../middleware/featureAccess'
 import { getRequester } from './requester-session-helpers'
 import { routeParam } from './routeParam'
 import { streamCacheableFile } from './images/query-file-response-helpers'
@@ -16,18 +16,19 @@ import { getFileThumbnail } from '../services/fileStorePreview'
 import * as styles from '../services/artStyles'
 
 /**
- * `/api/art-styles`: art styles (그림 스타일). Read with characters.view, write with characters.edit; images need
- * images.view. A style's images are its own file-store copies, served here (`/:styleId/files/:fileId`), never through
- * /api/files.
+ * `/api/art-styles`: art styles (그림 스타일). Read with the read right, write with edit, delete with delete. A style's
+ * images are its own file-store copies, served here (`/:styleId/files/:fileId`), never through /api/files.
  */
 const router = express.Router()
-const view = requirePermission('characters.view')
-const edit = requirePermission('characters.edit')
+const view = requireRead
+const edit = requireEdit
+/** Bulk requests that delete need the delete right. */
+const bulk: RequestHandler = (req, res, next) => (req.body?.action === 'delete' ? requireDelete : requireEdit)(req, res, next)
 const styleId = (req: Request) => styles.artStyleId(req.params.styleId)
-const images = (req: Request) => canRequesterViewImages(getRequester(req))
+const images = (req: Request) => requesterHasRight(getRequester(req), 'read')
 const actor = (req: Request): styles.ArtStyleActor => {
   const requester = getRequester(req)
-  return { owner: fileOwnerKey(requester.accountId), canViewImages: canRequesterViewImages(requester), requester }
+  return { owner: fileOwnerKey(requester.accountId), canViewImages: requesterHasRight(requester, 'read'), requester }
 }
 function failure(res: Response, error: unknown, fallback: string) {
   if (error instanceof FileStoreError) { res.status(error.status).json({ success: false, error: error.message }); return }
@@ -56,7 +57,7 @@ router.get('/', view, handle((req) => styles.listArtStyles({
   ...(req.query.offset !== undefined ? { offset: Number(req.query.offset) } : {}),
 }, images(req))))
 router.get('/badges', view, handle((req) => styles.artStyleBadges(listScope(req))))
-router.post('/bulk', edit, handle((req) => styles.bulkArtStyles(req.body, actor(req))))
+router.post('/bulk', bulk, handle((req) => styles.bulkArtStyles(req.body, actor(req))))
 /** A ZIP of the document and its images; images are already compressed, so entries are stored. */
 router.post('/export', view, asyncHandler(async (req, res) => {
   let bundle: ReturnType<typeof styles.exportArtStyles>
@@ -93,7 +94,7 @@ router.post('/import', edit, (req, res, next) => {
 router.get('/:styleId', view, handle((req) => styles.getArtStyle(styleId(req), images(req))))
 router.post('/', edit, handle((req) => styles.createArtStyle(req.body, actor(req)), 201))
 router.patch('/:styleId', edit, handle((req) => styles.patchArtStyle(styleId(req), req.body, actor(req))))
-router.delete('/:styleId', edit, handle((req) => styles.deleteArtStyle(styleId(req), req.query.revision === undefined ? undefined : styles.artStyleId(req.query.revision), actor(req))))
+router.delete('/:styleId', requireDelete, handle((req) => styles.deleteArtStyle(styleId(req), req.query.revision === undefined ? undefined : styles.artStyleId(req.query.revision), actor(req))))
 
 /** A file the style holds (404 for any other file or one deleted from the store). */
 function styleFile(req: Request, res: Response) {
@@ -107,7 +108,7 @@ function styleFile(req: Request, res: Response) {
   if (!file) res.status(404).json({ success: false, error: 'Art style image not found' })
   return file
 }
-router.get('/:styleId/files/:fileId', view, requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:styleId/files/:fileId', view, asyncHandler(async (req, res) => {
   const file = styleFile(req, res)
   if (!file) return
   res.setHeader('Content-Security-Policy', 'sandbox')
@@ -118,7 +119,7 @@ router.get('/:styleId/files/:fileId', view, requireImagesView, asyncHandler(asyn
     if (!res.headersSent) res.status((error as NodeJS.ErrnoException).code === 'ENOENT' ? 404 : 500).json({ success: false, error: 'Art style image is unavailable' })
   }
 }))
-router.get('/:styleId/files/:fileId/thumbnail', view, requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:styleId/files/:fileId/thumbnail', view, asyncHandler(async (req, res) => {
   const file = styleFile(req, res)
   if (!file) return
   let cached: string

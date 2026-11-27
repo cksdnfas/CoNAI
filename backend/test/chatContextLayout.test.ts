@@ -218,7 +218,7 @@ test('new chats and resets save the filled history around the greeting as ordina
   const { piPromptInput } = await import('../src/services/codex-chat/piChatCompletion')
   const { userPersonaOf } = await import('../src/services/codex-chat/chatUserProfiles')
   t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as never)
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['page.chat.view'] }))
   t.mock.method(Math, 'random', () => 0.5)
   updateChatSettings({ enabled: true })
   ExternalApiProvider.create({ provider_name: 'opening', display_name: 'Opening', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
@@ -440,7 +440,7 @@ test('new chats and resets save the filled history around the greeting as ordina
 
       const { WorkspaceService } = await import('../src/services/workspaceService')
       // A chat reaches a linked project only with the file store's view permission.
-      const files = s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use', 'files.view'] }))
+      const files = s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['page.chat.view', 'content.read'] }))
       s.after(() => files.mock.restore())
       const project = await WorkspaceService.create('account:1', '항구 기록', '처음 지침')
       WorkspaceService.setChatProject('account:1', chat, project.id, 'read')

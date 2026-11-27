@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-test('delegated chat media is bound to stored results and live account/profile/thread access', { timeout: 60000 }, async (t) => {
+test('chat media delivered to a non-reader is bound to stored results and live account/profile/thread access', { timeout: 60000 }, async (t) => {
   const previousEnv = { ...process.env }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-chat-delivery-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -36,12 +36,16 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const stranger = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('delivery-stranger', 'unused', 'guest')").run().lastInsertRowid)
   for (const id of [owner, stranger]) auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'guest'").run(id)
   auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest')").run()
-  auth.prepare(`INSERT INTO auth_group_permissions (group_id, permission_id, allowed)
-    SELECT g.id, p.id, 1 FROM auth_permission_groups g, auth_permissions p
-    WHERE g.group_key = 'guest' AND p.permission_key = 'chat.use'`).run()
   invalidateConfiguredAuthCache()
   invalidateResolvedAuthAccessCache()
-  const profile = ChatProfileStore.create({ name: 'Delivery', engine: 'llm', providerName: 'delivery', model: 'm', mcpEnabled: true, mcpScopes: ['read'], visionEnabled: true, delegatedPermissions: ['images.view'] })
+  // The owner holds the read right only while its chat's tools run: what they returned then stays viewable in that reply.
+  const reading = (on: boolean) => {
+    if (on) auth.prepare(`INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT g.id, p.id, 1 FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'content.read'`).run()
+    else auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'content.read')").run()
+    invalidateResolvedAuthAccessCache()
+  }
+  const profile = ChatProfileStore.create({ name: 'Delivery', engine: 'llm', providerName: 'delivery', model: 'm', mcpEnabled: true, mcpScopes: ['read'], visionEnabled: true })
   const other = ChatProfileStore.create({ name: 'No delegation', engine: 'llm', providerName: 'delivery', model: 'm' })
   const threadId = CodexChatStore.createThread(owner, 'Results', 'llm', profile.id)
   const hash = 'a1'.repeat(24)
@@ -94,13 +98,14 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const invoke = async (id: number, replyId: string, tool: string, args: Record<string, unknown>, catalog = false, succeeds = true) => {
     const chat = { threadId: id, profileId: profile.id, kind: id === threadId ? 'direct' as const : 'group' as const, replyId }
     const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    reading(true)
     const bridge = await openChatMcpBridge({ accountId: owner, accountType: 'guest' }, ['read'], null, { chatContext: chat, toolCatalog: catalog })
     try {
       if (catalog) assert.ok(bridge.catalogTools.has(tool), 'exercise the catalog-wrapped native handler too')
       const result = await bridge.call(tool, args)
       assert.equal(result.isError === true, !succeeds, JSON.stringify(result))
       return result
-    } finally { stop(); await bridge.close() }
+    } finally { stop(); await bridge.close(); reading(false) }
   }
   main.db.prepare('UPDATE media_metadata SET prompt = ? WHERE composite_hash = ?').run('only-returned-delivery', hash)
   const searched = await invoke(threadId, 'search-reply', 'search_images', { search_text: 'only-returned-delivery', limit: 1 })
@@ -119,7 +124,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   }
   const detailImage = await get(base + '/image')
   const detailBody = await detailImage.json() as { data: { composite_hash: string; detail_url: string; image_url: string } }
-  assert.equal(detailImage.status, 200, 'a result shown in the thread opens its detail without images.view')
+  assert.equal(detailImage.status, 200, 'a result shown in the thread opens its detail without the read right')
   assert.equal(detailBody.data.composite_hash, hash)
   assert.equal(detailBody.data.detail_url, base + '/image')
   assert.equal(detailBody.data.image_url, base + '/file')
@@ -131,7 +136,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const copiedThread = CodexChatStore.createThread(owner, 'Copied tool metadata', 'llm', profile.id)
   const copiedMessage = addReply(copiedThread)
   assert.equal(await status(`/api/codex-chat/threads/${copiedThread}/messages/${copiedMessage}/media/${hash}/file`), 404)
-  // A reference ("참조") without images.view: only what the same thread delivered goes back, never a bare hash.
+  // A reference ("참조") without the read right: only what the same thread delivered goes back, never a bare hash.
   const { prepareChatSend } = await import('../src/services/codex-chat/chatSendPreparation')
   const { FileStoreError } = await import('../src/services/fileStoreService')
   const reference = (id: number, hashes: string[]) => prepareChatSend({ accountId: owner, accountType: 'guest' }, CodexChatStore.findThread(id, owner)!, profile, 'this one', { mediaHashes: hashes, options: {} }, FileStoreError)
@@ -153,7 +158,8 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const viewed = await invoke(threadId, 'native-view', 'view_images', { composite_hashes: [viewedHash] })
   assert.ok(viewed.content?.some((part) => (part as { type?: string }).type === 'image'))
   assert.equal(await status(`/api/codex-chat/threads/${threadId}/messages/${viewedMessage}/media/${viewedHash}/file`), 200)
-  for (const url of [`/api/images/${hash}/file`, `/api/images/${hash}/thumbnail`, `/api/images/search`, '/api/generation-history?service_type=novelai']) assert.equal(await status(url), 403, url)
+  for (const url of [`/api/images/${hash}/file`, `/api/images/${hash}/thumbnail`, `/api/images/search`]) assert.equal(await status(url), 403, url)
+  assert.equal(await status('/api/generation-history?service_type=novelai'), 200, 'own generation runs need only sign-in')
   // The chat is the grant: any library media opens by hash inside chat routes, though the gallery stays closed.
   for (const url of [`/api/codex-chat/media/${unreturned}.png`, `/api/codex-chat/media/${unreturned}/thumbnail`, `/api/codex-chat/media/${unreturned}/image`]) assert.equal(await status(url), 200, url)
   assert.equal(await status(`/api/codex-chat/media/${unreturned}/image`, 0), 401)
@@ -182,13 +188,13 @@ test('delegated chat media is bound to stored results and live account/profile/t
   assert.deepEqual(CodexChatStore.listMessages(importedWithoutView)[0].tool_calls[0].compositeHashes, [])
   // Import while globally authorized, then revoke: imported tool records are still not server result evidence.
   const imageGrant = () => auth.prepare(`INSERT INTO auth_group_permissions (group_id, permission_id, allowed)
-    SELECT g.id, p.id, 1 FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'images.view'`).run()
+    SELECT g.id, p.id, 1 FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'content.read'`).run()
   imageGrant()
   invalidateResolvedAuthAccessCache()
   const importedWithView = await importFile()
   const importedMessage = CodexChatStore.listMessages(importedWithView)[0]
   assert.deepEqual(importedMessage.tool_calls[0].compositeHashes, [unreturned])
-  auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'images.view')").run()
+  auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'guest') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'content.read')").run()
   invalidateResolvedAuthAccessCache()
   // A server action can give an old message a reply id; this must not promote the imported calls themselves.
   CodexChatStore.ensureReplyId(importedWithView, importedMessage.id, () => 'assigned-after-import')
@@ -235,7 +241,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   await invoke(groupId, 'search-reply', 'get_image_metadata', { composite_hash: hash }, true)
   assert.equal(await status(groupBase + '/file'), 200)
   assert.equal(await status(groupBase.replace(`/messages/${groupMessage}/`, `/messages/${otherMessage}/`) + '/file'), 404)
-  ChatProfileStore.update(other.id, { mcpEnabled: true, mcpScopes: ['read'], delegatedPermissions: ['images.view'] })
+  ChatProfileStore.update(other.id, { mcpEnabled: true, mcpScopes: ['read'] })
   assert.equal(await status(groupBase.replace(`/messages/${groupMessage}/`, `/messages/${otherMessage}/`) + '/file'), 404, 'a grant for another speaker does not transfer with the reply id')
   ChatGroupStore.removeMember(groupId, profile.id)
   assert.equal(await status(groupBase + '/file'), 404)
@@ -246,7 +252,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   main.db.prepare("UPDATE media_metadata SET postprocess_status = 'pending' WHERE composite_hash = ?").run(unreturned)
   const generatedBase = `/api/codex-chat/threads/${threadId}/messages/${generatedMessage}/media/${unreturned}`
   assert.equal(await status(generatedBase + '/thumbnail'), 200)
-  assert.equal(await status(`/api/generation-history/${historyId}/file`), 403)
+  assert.equal(await status(`/api/generation-history/${historyId}/file`), 200, "the owner opens its own run without the read right")
   assert.equal(await status(base.replace(hash, unreturned) + '/file'), 404, 'another reply cannot borrow the generated result')
   db.prepare('UPDATE api_generation_history SET requested_by_account_id = ? WHERE id = ?').run(stranger, historyId)
   assert.equal(await status(generatedBase + '/file'), 404)
@@ -254,9 +260,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   user.initializeUserSettingsDb()
   db = user.getUserSettingsDb()
   assert.equal(await status(base + '/file'), 200, 'real result evidence remains after reopening storage')
-  ChatProfileStore.update(profile.id, { delegatedPermissions: [] })
-  assert.equal(await status(base + '/file'), 404)
-  ChatProfileStore.update(profile.id, { delegatedPermissions: ['images.view'], isEnabled: false })
+  ChatProfileStore.update(profile.id, { isEnabled: false })
   assert.equal(await status(base + '/file'), 404)
   ChatProfileStore.update(profile.id, { isEnabled: true })
   db.prepare('UPDATE codex_chat_threads SET profile_id = ? WHERE id = ?').run(other.id, threadId)

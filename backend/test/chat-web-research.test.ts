@@ -240,9 +240,10 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     const { LinkedFileStore } = await import('../src/services/codex-chat/chatLinkedFiles')
     const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
-    const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
-    assert.equal(TOOL_FEATURE_PERMISSIONS.web_search, 'chat.web.use')
-    assert.equal(TOOL_FEATURE_PERMISSIONS.web_read, 'chat.web.use')
+    const { toolRequirement } = await import('../src/mcp/toolAccess')
+    // Any signed-in account; the profile's tool settings decide whether a chat has them.
+    assert.equal(toolRequirement('web_search'), 'signedIn')
+    assert.equal(toolRequirement('web_read'), 'signedIn')
 
     updateChatSettings({ webResearch: { engine: 'claude', model: null } })
     const runner = t.mock.method(research.researchRunners, 'claude', async () => ({ text: 'Kai keeps the lighthouse. Source: https://example.com', tokens: null }))

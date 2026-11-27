@@ -10,7 +10,7 @@ import metadataRoutes from './metadata.routes';
 import promptSimilarityRoutes from './prompt-similarity.routes';
 import { batchResizeRoutes } from './batch-resize.routes';
 import { logger } from '../../utils/logger';
-import { requireImageAction } from '../../middleware/imageAccess';
+import { requireDelete, requireEdit } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -36,9 +36,9 @@ router.use('/metadata', metadataRoutes);
 
 // Prompt similarity routes
 router.use('/prompt-similarity', (req, res, next) => req.method === 'POST'
-  ? requireImageAction('images.edit')(req, res, next) : next(), promptSimilarityRoutes);
+  ? requireEdit(req, res, next) : next(), promptSimilarityRoutes);
 
-// Batch resize into new library items (guards inside: images.edit + images.upload)
+// Batch resize into new library items (guard inside: read)
 router.use('/batch-resize', batchResizeRoutes);
 
 // Query and download routes
@@ -49,13 +49,13 @@ router.use('/search/complex', complexSearchRoutes);
 
 // Similarity search routes (must come before managementRoutes to avoid /:compositeHash catching /files/bulk)
 router.use('/similarity', (req, res, next) => req.method === 'POST'
-  ? requireImageAction('images.edit')(req, res, next) : next());
+  ? requireEdit(req, res, next) : next());
 router.use('/', similarityRoutes);
 
 // Management routes (delete, update, etc.)
 router.use('/', (req, res, next) => {
-  if (req.method === 'DELETE') requireImageAction('images.delete')(req, res, next);
-  else if (req.method === 'PATCH' || req.path.endsWith('/rewrite-metadata/download')) requireImageAction('images.edit')(req, res, next);
+  if (req.method === 'DELETE') requireDelete(req, res, next);
+  else if (req.method === 'PATCH' || req.path.endsWith('/rewrite-metadata/download')) requireEdit(req, res, next);
   else next();
 }, managementRoutes);
 

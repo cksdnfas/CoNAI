@@ -82,10 +82,10 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
     return id
   }
   const adminId = account('admin', 'admin')
-  const readerId = account('reader', 'guest', ['images.view'])
-  const editorId = account('editor', 'guest', ['images.view', 'images.edit'])
-  const makerId = account('maker', 'guest', ['images.view', 'images.edit', 'images.upload'])
-  const otherMakerId = account('other-maker', 'guest', ['images.view', 'images.edit', 'images.upload'])
+  const readerId = account('reader', 'guest', ['content.read'])
+  const makerId = account('maker', 'guest', ['content.read', 'content.edit'])
+  const otherMakerId = account('other-maker', 'guest', ['content.read', 'content.edit'])
+  const outsiderId = account('outsider', 'guest', [])
   invalidateConfiguredAuthCache()
 
   const express = (await import('express')).default
@@ -150,10 +150,9 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
     } finally { await session.close() }
   }
 
-  await t.test('route needs images.edit and images.upload, and validates sizes up front', async () => {
+  await t.test('route needs the read right (it makes new copies) and validates sizes up front', async () => {
     assert.equal((await call('POST', '/api/images/batch-resize', undefined, body)).status, 401)
-    assert.equal((await call('POST', '/api/images/batch-resize', readerId, body)).status, 403)
-    assert.equal((await call('POST', '/api/images/batch-resize', editorId, body)).status, 403, 'saving new images needs images.upload')
+    assert.equal((await call('POST', '/api/images/batch-resize', readerId, { ...body, width: 0 })).status, 422, 'a reader reaches validation')
     assert.equal((await call('POST', '/api/images/batch-resize', makerId, { ...body, width: 0 })).status, 422)
     assert.equal((await call('POST', '/api/images/batch-resize', makerId, { ...body, width: 16384, height: 16384 })).status, 422, 'over 64 Mi pixels')
     assert.equal((await call('POST', '/api/images/batch-resize', makerId, { ...body, format: 'webp', quality: 0 })).status, 422)
@@ -192,7 +191,7 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
     assert.equal((await call('POST', '/api/images/batch-resize', adminId, { compositeHashes: [imageB], width: 12, height: 12, groupId: 999999 })).status, 404)
   })
 
-  await t.test('resize_images MCP tool: listed for image editors who can upload, returns new hashes', async () => {
+  await t.test('resize_images MCP tool: listed for anyone who can read (new copies, no edit), returns new hashes', async () => {
     const listed = async (accountId: number) => {
       const session = await connect(accountId)
       try {
@@ -201,8 +200,8 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
         await session.close()
       }
     }
-    assert.equal(await listed(readerId), false)
-    assert.equal(await listed(editorId), false)
+    assert.equal(await listed(outsiderId), false, 'no read, no resizing')
+    assert.equal(await listed(readerId), true)
     assert.equal(await listed(makerId), true)
     const session = await connect(makerId)
     try {
@@ -237,7 +236,7 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
         const denied = await other.client.callTool({ name: 'get_media_edit_job', arguments: { job_id: jobId } }) as { isError?: boolean }
         assert.equal(denied.isError, true)
       } finally { await other.close() }
-      for (const id of [readerId, editorId]) {
+      for (const id of [outsiderId]) {
         const denied = await connect(id)
         try {
           const names = (await denied.client.listTools()).tools.map((tool) => tool.name)

@@ -26,11 +26,10 @@ export function SpritePresetMenu({ activeId, current, onApply, onActiveChange }:
   onActiveChange: (id: string | null) => void
 }) {
   const { t } = useI18n()
-  const { has } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
-  const canEdit = has('images.edit')
   const presets = useQuery({ queryKey: PRESETS_QUERY_KEY, queryFn: listSpritePresets, staleTime: 30_000 })
   const active = presets.data?.find((preset) => preset.id === activeId) ?? null
   const [naming, setNaming] = useState(false)
@@ -91,7 +90,7 @@ export function SpritePresetMenu({ activeId, current, onApply, onActiveChange }:
           {canEdit ? <DropdownMenuItem onSelect={() => setNaming(true)}><Save />{t({ ko: '지금 설정을 새 프리셋으로', en: 'Save as a new preset' })}</DropdownMenuItem> : null}
           {canEdit && active ? <DropdownMenuItem onSelect={() => overwrite.mutate(active)}><RefreshCw />{t({ ko: '"{name}" 덮어쓰기', en: 'Save over "{name}"' }, { name: active.name })}</DropdownMenuItem> : null}
           <DropdownMenuItem onSelect={() => setPicking(true)}><FileInput />{t({ ko: '라이브러리 시트에서 가져오기', en: 'Load from a library sheet' })}</DropdownMenuItem>
-          {canEdit && active ? (
+          {canDelete && active ? (
             <DropdownMenuItem variant="destructive" onSelect={() => void (async () => {
               if (await confirm({ title: t({ ko: '프리셋 지우기', en: 'Delete preset' }), description: t({ ko: '"{name}"을(를) 모두의 목록에서 지울까?', en: 'Delete "{name}" for everyone?' }, { name: active.name }), confirmLabel: t({ ko: '지우기', en: 'Delete' }) })) remove.mutate(active)
             })()}><Trash2 />{t({ ko: '이 프리셋 지우기', en: 'Delete this preset' })}</DropdownMenuItem>

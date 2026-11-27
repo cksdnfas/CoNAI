@@ -28,7 +28,7 @@ test('plugin authoring keeps executable installation behind administrator review
   const accountId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES('author','unused','admin')").run().lastInsertRowid)
   const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES('reader','unused','guest')").run().lastInsertRowid)
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-authors', permissionKeys: ['chat.use'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-authors', permissionKeys: ['page.chat.view'] })
   AuthPermissionGroup.addAccountMembership(group.id, accountId)
   ;(await import('../src/services/auth/sessionAccess')).invalidateConfiguredAuthCache()
   const admin = { accountId, accountType: 'admin' as const }

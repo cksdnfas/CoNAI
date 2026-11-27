@@ -44,15 +44,15 @@ export function PromptPresetInlinePicker({
   onInsert: (text: string) => void
 }) {
   const { t } = useI18n()
-  const { canViewPrompts } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const presetsQuery = useQuery({
     queryKey: ['prompt-presets', 'hierarchical'],
     queryFn: () => getPromptPresets({ hierarchical: true, withItems: true }),
     staleTime: 60_000,
-    enabled: canViewPrompts,
+    enabled: canRead,
   })
 
-  const entries = useMemo(() => canViewPrompts ? flattenPromptPresetTree(presetsQuery.data ?? []) : [], [canViewPrompts, presetsQuery.data])
+  const entries = useMemo(() => canRead ? flattenPromptPresetTree(presetsQuery.data ?? []) : [], [canRead, presetsQuery.data])
   const presetNavItems = useMemo(() => entries.map((entry) => entry.preset), [entries])
   const insertableCount = entries.reduce((count, entry) => count + (entry.insertionText ? 1 : 0), 0)
   const presetEntriesById = useMemo(() => {
@@ -64,7 +64,7 @@ export function PromptPresetInlinePicker({
   }, [entries])
 
   const handleSelect = (preset: PromptPresetRecord) => {
-    if (!canViewPrompts) return
+    if (!canRead) return
     const insertionText = presetEntriesById.get(preset.id)?.insertionText ?? ''
     if (!insertionText) {
       return
@@ -74,7 +74,7 @@ export function PromptPresetInlinePicker({
     onClose()
   }
 
-  if (!canViewPrompts) return null
+  if (!canRead) return null
 
   return (
     <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden" closeOnBack>

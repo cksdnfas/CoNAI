@@ -32,7 +32,7 @@ export function CharacterSettingIdInput({ value, onChange, onClear, compact = fa
   compact?: boolean
 }) {
   const { t } = useI18n()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const [open, setOpen] = useState(false)
   const settingId = toSettingId(value)
   const settingQuery = useQuery({

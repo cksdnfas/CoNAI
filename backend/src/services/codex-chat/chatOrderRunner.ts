@@ -5,7 +5,6 @@ import { beginKnowledgeOrderTask } from '../posts/knowledge/knowledgeTaskObserva
 import type { ChatExecutionContext } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages } from './chatAttachments'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatFlagError } from './chatFlags'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatSummaryStore } from './chatMemory'
@@ -121,7 +120,7 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       // Keep the entire suffix, including hidden wakes: their images still participate in newest-first image selection.
       const attachmentHistory = candidates.length ? history.filter((message) => message.id >= candidates[0].id) : []
       const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, attachmentHistory, context)
-      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), attachmentHistory, context)
+      const attachedImages = await loadAttachedImages(profile, requester, attachmentHistory, context)
       const done = (call: Parameters<typeof chatOrderDone>[1]) => chatOrderDone(kind, call)
       if (group) {
         const members = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? [])

@@ -1,4 +1,4 @@
-import { requirePermission } from '../../middleware/authMiddleware';
+import { requireAuth } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { sendRouteBadRequest } from '../routeValidation'
@@ -9,7 +9,7 @@ import { WorkflowInputImageError, ingestWorkflowInputImage } from '../../service
 export function createGraphWorkflowInputImageRoutes() {
   const router = Router()
 
-  router.post('/input-images', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/input-images', requireAuth, asyncHandler(async (req: Request, res: Response) => {
     const dataUrl = typeof req.body?.data_url === 'string' ? req.body.data_url : ''
     if (!dataUrl) {
       return sendRouteBadRequest(res, 'data_url is required')

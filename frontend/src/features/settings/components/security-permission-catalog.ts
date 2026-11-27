@@ -1,52 +1,36 @@
 import type { TranslationInput } from '@/i18n'
 import type { PageAccessPermissionItem } from '@/lib/api-auth'
-import { PERMISSION_CATALOG, type PermissionSection as CatalogSection } from '@conai/shared'
+import { PERMISSION_CATALOG } from '@conai/shared'
 
-export interface PermissionSectionRow {
+export interface PermissionRow {
   key: string
   label: TranslationInput
+  info?: TranslationInput
 }
 
-export interface PermissionSection {
-  id: string
-  label: TranslationInput
-  rows: PermissionSectionRow[]
+/** The basic rights (switches) and the menu pages (checkboxes) a group can be granted. */
+export interface PermissionLayout {
+  rights: PermissionRow[]
+  pages: PermissionRow[]
 }
 
-const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
-  settings: { ko: '공용 페이지 설정', en: 'Shared page settings' },
-  images: { ko: '이미지', en: 'Images' },
-  prompts: { ko: '프롬프트', en: 'Prompts' },
-  characters: { ko: '캐릭터 라이브러리', en: 'Character library' },
-  generation: { ko: '생성', en: 'Generation' },
-  files: { ko: '파일 보관함', en: 'Files' },
-  audio: { ko: '오디오', en: 'Audio' },
-  posts: { ko: '게시판', en: 'Posts' },
-  chat: { ko: '채팅', en: 'Chat' },
-  plugins: { ko: '플러그인', en: 'Plugins' },
-  account: { ko: '계정', en: 'Account' },
+const RIGHT_INFO: Partial<Record<string, TranslationInput>> = {
+  'content.edit': { ko: '만들기·올리기·고치기·정리', en: 'Create, upload, change and organize' },
 }
 
 /**
- * Lay the server's grantable permissions out in the shared catalog's sections. The anonymous group only lists keys a
- * signed-out visitor can use; other groups leave out keys that only mean something to visitors. Keys the catalog doesn't
- * know yet land in a trailing section under the server label.
+ * Lay the server's grantable permissions out in catalog order. The anonymous group only lists what a signed-out visitor
+ * can use (reading, guest signup, the image pages); other groups never see guest signup.
  */
-export function buildPermissionSections(available: PageAccessPermissionItem[], groupKey: string | null): PermissionSection[] {
+export function buildPermissionLayout(available: PageAccessPermissionItem[], groupKey: string | null): PermissionLayout {
   const availableKeys = new Set(available.map((permission) => permission.permissionKey))
-  const fits = (permission: (typeof PERMISSION_CATALOG)[number]) => groupKey === 'anonymous' ? 'anonymous' in permission : !('anonymousOnly' in permission)
-  const sections = (Object.keys(SECTION_LABELS) as CatalogSection[]).map((id) => ({
-    id,
-    label: SECTION_LABELS[id],
-    rows: PERMISSION_CATALOG.filter((permission) => permission.section === id && availableKeys.has(permission.key) && fits(permission))
-      .map((permission) => ({ key: permission.key, label: permission.label })),
-  })).filter((section) => section.rows.length > 0)
-
-  const knownKeys = new Set<string>(PERMISSION_CATALOG.map((permission) => permission.key))
-  const unknownRows = groupKey === 'anonymous' ? [] : available
-    .filter((permission) => !knownKeys.has(permission.permissionKey))
-    .map((permission) => ({ key: permission.permissionKey, label: permission.label || permission.permissionKey }))
-  return unknownRows.length > 0 ? [...sections, { id: 'other', label: { ko: '기타', en: 'Other' }, rows: unknownRows }] : sections
+  const granted = PERMISSION_CATALOG.filter((permission) => availableKeys.has(permission.key)
+    && (groupKey === 'anonymous' ? 'anonymous' in permission : !('anonymousOnly' in permission)))
+  const toRow = (permission: (typeof granted)[number]): PermissionRow => ({ key: permission.key, label: permission.label, info: RIGHT_INFO[permission.key] })
+  return {
+    rights: granted.filter((permission) => permission.section !== 'pages').map(toRow),
+    pages: granted.filter((permission) => permission.section === 'pages').map(toRow),
+  }
 }
 
 /** A toggle changes only its own explicit grant. */

@@ -4,7 +4,6 @@ import executionRoutes from './execution.routes';
 import artifactsRoutes from './artifacts.routes';
 import serversRoutes from './servers.routes';
 import templatesRoutes from './templates.routes';
-import { requireImagesView } from '../../middleware/imageAccess';
 import { requireAdmin } from '../../middleware/authMiddleware';
 
 const router = Router();
@@ -35,7 +34,7 @@ const router = Router();
 
 // Static execution paths must precede the CRUD `/:id` route.
 // The legacy response includes the server's absolute canvas directory.
-router.use('/canvas-images', requireAdmin, requireImagesView);
+router.use('/canvas-images', requireAdmin);
 router.use('/', executionRoutes);
 router.use('/', templatesRoutes);
 

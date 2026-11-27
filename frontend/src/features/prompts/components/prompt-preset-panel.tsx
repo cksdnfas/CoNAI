@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-preset-chat-page'
@@ -286,9 +287,9 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
-  const canCreatePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
-  const canUpdatePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
-  const canDeletePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
+  const canCreatePresets = hasAuthPermission(permissionKeys, CONTENT_PERMISSIONS.edit)
+  const canUpdatePresets = canCreatePresets
+  const canDeletePresets = hasAuthPermission(permissionKeys, CONTENT_PERMISSIONS.delete)
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
   const [editorState, setEditorState] = useState<PromptPresetEditorState>(null)
 

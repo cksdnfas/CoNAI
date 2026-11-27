@@ -57,7 +57,7 @@ function imageSummary(context: McpRequestContext, image: ImageMetadataRecord) {
 export function registerImageLibraryTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     'upload_image',
-    { description: 'Save media to the library; requires images.upload and images.edit for grouping. Returns hash, status and optional download. If processing, retry get_image_metadata/get_media_download, not upload; temporary not-found is expected. Invalid format: supply a supported image/video data URL.', inputSchema: z.object({
+    { description: 'Save media to the library; requires content.edit. Returns hash, status and optional download. If processing, retry get_image_metadata/get_media_download, not upload; temporary not-found is expected. Invalid format: supply a supported image/video data URL.', inputSchema: z.object({
       data_url: z.string().regex(/^data:(?:image|video)\/[a-z0-9.+-]+;base64,[\s\S]+$/i).describe('Base64 image/* or video/* data URL; request security enforces the 50 MiB decoded media limit'),
       name: z.string().trim().min(1).regex(/^[^\\/:*?"<>|\u0000-\u001f\u007f]+$/).optional().describe('Optional filename, normalized by the library filename helper; the extension is chosen from the MIME type'),
       group_id: z.number().int().positive().optional().describe('Existing custom image group ID; omit both group fields to leave the upload ungrouped'),

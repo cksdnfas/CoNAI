@@ -1,3 +1,4 @@
+import { requireRead } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express'
 import AdmZip from 'adm-zip'
 import fs from 'fs'
@@ -7,11 +8,10 @@ import { WorkflowModel } from '../../models/Workflow'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../../services/workflowArtifactService'
 import { WorkflowResponse } from '../../types/workflow'
-import { requireImagesView } from '../../middleware/imageAccess'
 import { parseDirectoryPageRequest } from '../../services/directoryListingSnapshot'
 
 const router = Router()
-router.use('/:id/artifacts', requireImagesView)
+router.use('/:id/artifacts', requireRead)
 
 function parseWorkflowId(req: Request) {
   const id = parseInt(routeParam(req.params.id))

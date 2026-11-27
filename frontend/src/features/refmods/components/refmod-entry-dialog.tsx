@@ -40,7 +40,7 @@ const RUN_STATUS_BADGE = { pending: 'info', saved: 'success', failed: 'destructi
  */
 export function RefModEntryDialog({ library }: { library: RefModLibrary }) {
   const { t } = useI18n()
-  const { editor, canEdit, canBuild, visibleEntries, total, loadMore, openEntry, closeEntry, toggleFavorite, duplicate, exportEntries, build, presence } = library
+  const { editor, canEdit, canDelete, visibleEntries, total, loadMore, openEntry, closeEntry, toggleFavorite, duplicate, exportEntries, build, presence } = library
   const { latest, busy, recordPreview, serverSeed, isNew } = editor
   const pending = latest ? library.isPending(latest) : false
   const status = latest ? refModServerStatus(t, pending, presence.data, presence.isError, library.isOnServer(latest.name)) : null
@@ -117,18 +117,16 @@ export function RefModEntryDialog({ library }: { library: RefModLibrary }) {
                 <Star className={latest.favorite ? 'fill-current' : undefined} />
               </IconButton>
             ) : null}
-            {canBuild ? (
-              <IconButton variant="ghost" size="icon-sm" aria-busy={pending} disabled={Boolean(blockReason) || busy || (!editor.canSave && editor.dirty)} label={blockReason ?? (editor.dirty ? t({ ko: '저장하고 만들기', en: 'Save and build' }) : t({ ko: '만들기', en: 'Build' }))} onClick={() => void build(latest)}>
-                <Hammer />
-              </IconButton>
-            ) : null}
+            <IconButton variant="ghost" size="icon-sm" aria-busy={pending} disabled={Boolean(blockReason) || busy || (!editor.canSave && editor.dirty)} label={blockReason ?? (editor.dirty ? t({ ko: '저장하고 만들기', en: 'Save and build' }) : t({ ko: '만들기', en: 'Build' }))} onClick={() => void build(latest)}>
+              <Hammer />
+            </IconButton>
             <ActionMenuButton
               label={t({ ko: 'RefMod 작업', en: 'RefMod actions' })}
               entries={[
                 canEdit ? { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: CopyPlus, disabled: busy, onSelect: () => void duplicate(latest) } : null,
                 { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => void exportEntries({ ids: [latest.id] }, latest.name) },
-                canEdit ? '-' : null,
-                canEdit
+                canDelete ? '-' : null,
+                canDelete
                   ? latest.registered
                     ? { key: 'unregister', label: t({ ko: '미등록으로 이동', en: 'Move to Unregistered' }), icon: Trash2, disabled: busy || editor.deleting || pending, onSelect: () => void editor.remove(true).catch(() => undefined) }
                     : { key: 'delete', label: t({ ko: '영구 삭제', en: 'Delete permanently' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting || pending, onSelect: () => void editor.remove(true, true).catch(() => undefined) }
@@ -178,7 +176,7 @@ function RefModEntryBody({ library }: { library: RefModLibrary }) {
   const { editor, canEdit } = library
   const { base, latest, draft, busy, recordPreview, serverSeed, activeForm, activeWorkflowId } = editor
   // The same cache entry the ComfyUI tab reads: Power LoRA fields offer the auto-collected LoRA list.
-  const dropdownLists = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: () => getGenerationCustomDropdownLists(), enabled: editor.ready && !recordPreview && permissions.canViewWorkflows, staleTime: 60_000 })
+  const dropdownLists = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: () => getGenerationCustomDropdownLists(), enabled: editor.ready && !recordPreview && permissions.canRead, staleTime: 60_000 })
   const loraOptions = findAutoCollectedPowerLoraOptions(dropdownLists.data ?? [])
 
   if (recordPreview) {

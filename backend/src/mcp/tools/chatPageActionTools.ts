@@ -16,9 +16,9 @@ function resolveAction(context: McpRequestContext, page: ChatPageSnapshot, actio
   requireChatPageAccess(requester, page)
   const action = page.actions?.find((item) => item.id === actionId)
   if (!action) throw new Error(`이 화면에 없는 작업이야: ${actionId}. 지금 가능한 작업: ${(page.actions ?? []).map((item) => item.id).join(', ') || '없음'}.`)
-  requireChatPageActionAccess(requester, page, actionId)
+  requireChatPageActionAccess(requester, page, actionId, undefined, context.scopes)
   const validated = validateChatPageArguments(action.schema, args) as Record<string, ChatPageData>
-  requireChatPageActionAccess(requester, page, actionId, validated)
+  requireChatPageActionAccess(requester, page, actionId, validated, context.scopes)
   if (actionId === 'page.navigate') requirePublicChatPageTarget(context, page, typeof validated.to === 'string' ? validated.to : '')
   const data = page.data ?? {}
   if (actionId === 'comfy.node') {
@@ -68,7 +68,7 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
     const next = shown(answered)
     const shownUnder = ratingLimit()
     const done = { status: tier === 'commit' ? 'saved' : 'done', tier, action: action.label }
-    const view = pageOperationView(requester, page, next, shownUnder, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ ...done, page: null }))
+    const view = pageOperationView(requester, page, next, shownUnder, context.scopes, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ ...done, page: null }))
     const viewKey = notePageViewShown(context, next, shownUnder, view)
     return { ...pageResult({ ...done, page: view.page }), structuredContent: { pageOperation: { commandId, tier, label: pageOperationLabel(action.label, actionId, validated) }, ...viewKey } }
   }

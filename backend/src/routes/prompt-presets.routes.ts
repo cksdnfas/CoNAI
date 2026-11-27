@@ -2,7 +2,7 @@ import { requireNativeEditRevision, withNativeEditRevisions } from '../services/
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireEdit, requireDelete } from '../middleware/authMiddleware';
 import { PromptPresetModel, type PromptPresetCreateData, type PromptPresetItemInput, type PromptPresetUpdateData } from '../models/PromptPreset';
 
 const router = Router();
@@ -90,7 +90,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   return res.json({ success: true, data: withNativeEditRevisions([preset])[0] });
 }));
 
-router.post('/', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const name = normalizePresetName(req.body?.name);
   if (!name) {
     return res.status(400).json({ success: false, error: 'Name is required' });
@@ -121,7 +121,7 @@ router.post('/', requirePermission('prompts.edit'), asyncHandler(async (req: Req
   return res.status(201).json({ success: true, data: PromptPresetModel.findByIdWithItems(preset.id) });
 }));
 
-router.put('/:id', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parsePresetRouteId(routeParam(req.params.id));
   if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });
@@ -164,7 +164,7 @@ router.put('/:id', requirePermission('prompts.edit'), asyncHandler(async (req: R
   return res.json({ success: true, data: PromptPresetModel.findByIdWithItems(preset.id) });
 }));
 
-router.delete('/:id', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parsePresetRouteId(routeParam(req.params.id));
   if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });

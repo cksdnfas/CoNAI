@@ -343,16 +343,7 @@ export function useSecurityTabData() {
     },
   })
 
-  const editablePermissionCatalog = useMemo(() => {
-    const catalog = pageAccessQuery.data?.permissions ?? []
-    const editingCustomGroup = permissionGroupEditorMode === 'create'
-      || (activePermissionGroup !== null && !activePermissionGroup.systemGroup)
-    if (editingCustomGroup) {
-      // Guest signup belongs to the built-in anonymous/guest groups; the server rejects it on custom groups.
-      return catalog.filter((permission) => permission.permissionKey !== 'auth.guest.create')
-    }
-    return catalog
-  }, [activePermissionGroup, pageAccessQuery.data?.permissions, permissionGroupEditorMode])
+  const editablePermissionCatalog = useMemo(() => pageAccessQuery.data?.permissions ?? [], [pageAccessQuery.data?.permissions])
 
   /** Permission key → nearest ancestor group that grants it (guest inherits anonymous, admin inherits guest). */
   const inheritedPermissionSources = useMemo(() => {

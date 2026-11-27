@@ -29,7 +29,7 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
   const { createMcpServer } = await import('../src/mcp/server')
   const { Client } = await import('@modelcontextprotocol/client')
   const { InMemoryTransport } = await import('@modelcontextprotocol/client')
-  const server = createMcpServer({ scopes: ['read', 'organize'], source: 'http' })
+  const server = createMcpServer({ scopes: ['read', 'organize', 'delete'], source: 'http' })
   const client = new Client({ name: 'group-assistant', version: '1' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
@@ -230,14 +230,14 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
   })
 
   await t.test('group page actions are registered for /groups only', async () => {
-    const { chatPageActionAllowed, normalizeChatPageActions, CHAT_PAGE_ACTION_PERMISSIONS } = await import('@conai/shared')
+    const { chatPageActionAllowed, normalizeChatPageActions, chatPageActionScope } = await import('@conai/shared')
     for (const id of ['group.select', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete']) {
       assert.equal(chatPageActionAllowed('/groups', id), true)
       assert.equal(chatPageActionAllowed('/groups/12', id), true)
       assert.equal(chatPageActionAllowed('/prompts', id), false)
     }
-    assert.equal(CHAT_PAGE_ACTION_PERMISSIONS['group.create'], 'images.edit')
-    assert.equal(CHAT_PAGE_ACTION_PERMISSIONS['group.delete'], 'images.delete')
+    assert.equal(chatPageActionScope('group.create'), 'organize')
+    assert.equal(chatPageActionScope('group.delete'), 'delete')
     const schema = { type: 'object' as const, properties: { name: { type: 'string' as const } }, required: ['name'] }
     assert.equal(normalizeChatPageActions('/groups', [{ id: 'group.create', label: 'Create', description: '', effect: 'save', schema }]).length, 1)
     assert.throws(() => normalizeChatPageActions('/groups', [{ id: 'group.create', label: 'Create', description: '', effect: 'draft', schema }]))

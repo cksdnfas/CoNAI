@@ -2,7 +2,7 @@
 
 import { ApiRequestError, requestApiData } from '@/lib/api-request'
 
-export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
+export type ChatScope = 'read' | 'generate' | 'organize' | 'delete' | 'configure'
 
 /** The current record returned with a rejected revision-checked save. */
 export class ChatRevisionConflictError extends ApiRequestError {

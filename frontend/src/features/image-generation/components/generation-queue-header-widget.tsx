@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ListTodo, RefreshCw } from 'lucide-react'
@@ -120,7 +121,7 @@ export function GenerationQueueHeaderWidget() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const closePopup = useCallback(() => setIsOpen(false), [])
 
-  const canViewWorkflows = (authStatusQuery.data?.permissionKeys ?? []).includes('workflows.view')
+  const canRead = (authStatusQuery.data?.permissionKeys ?? []).includes(CONTENT_PERMISSIONS.read)
   // 큐 목록 REST 는 인증만 요구한다(permission-neutral). 페이지 권한은 워크플로 필터 목록과
   // 예약 탭에만 필요하므로, 큐 조회 자체는 인증 세션 기준으로 켠다.
   const canViewQueue = authStatusQuery.data !== undefined
@@ -131,7 +132,7 @@ export function GenerationQueueHeaderWidget() {
     queryKey: ['image-generation-workflows'],
     queryFn: () => getGenerationWorkflows(true, 'all'),
     staleTime: 60_000,
-    enabled: isOpen && canViewWorkflows,
+    enabled: isOpen && canRead,
   })
 
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data])
@@ -171,14 +172,14 @@ export function GenerationQueueHeaderWidget() {
   const reservationWorkflowQuery = useQuery({
     queryKey: ['graph-workflows', 'header-widget', 'names'],
     queryFn: () => getGraphWorkflowNames(true),
-    enabled: isOpen && canViewWorkflows,
+    enabled: isOpen && canRead,
     staleTime: 60_000,
   })
 
   const reservationSchedulesQuery = useQuery({
     queryKey: ['graph-workflow-schedules', 'header-widget'],
     queryFn: () => getGraphWorkflowSchedules(),
-    enabled: isOpen && canViewWorkflows,
+    enabled: isOpen && canRead,
     staleTime: 30_000,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.filter((schedule) => schedule.status === 'active').length ?? 0
@@ -237,8 +238,8 @@ export function GenerationQueueHeaderWidget() {
   }, [isOpen, latestQueueJobId])
 
   const hasUnreadQueueUpdate = isNotificationBaselineReady && latestQueueJobId > (lastSeenQueueJobId ?? 0)
-  // 예약 탭은 백엔드가 workflows.view 로 403 을 주는 표면이므로 권한 없는 계정에는 숨긴다.
-  const effectiveTab: HeaderPopupTab = canViewWorkflows ? activeTab : 'jobs'
+  // 예약 탭은 읽기 권한이 없으면 백엔드가 403 을 주는 표면이므로 그런 계정에는 숨긴다.
+  const effectiveTab: HeaderPopupTab = canRead ? activeTab : 'jobs'
 
   const handleRefresh = async () => {
     const refreshTargets = getGenerationQueueHeaderRefreshTargets({
@@ -329,7 +330,7 @@ export function GenerationQueueHeaderWidget() {
             value={effectiveTab}
             items={[
               { value: 'jobs', label: t('image-generation.components.generation.queue.header.widget.job.queue') },
-              ...(canViewWorkflows
+              ...(canRead
                 ? [{
                     value: 'reservations',
                     // The active count rides on the label (the tab has no summary row).
@@ -357,7 +358,7 @@ export function GenerationQueueHeaderWidget() {
             selectedFilter={selectedFilter}
             onFilterChange={setSelectedFilter}
             workflows={workflows}
-            showWorkflowListError={canViewWorkflows && workflowsQuery.isError}
+            showWorkflowListError={canRead && workflowsQuery.isError}
             filteredActiveCount={filteredActiveCount}
             records={records}
             isPending={activeQueueQuery.isPending}

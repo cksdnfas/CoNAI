@@ -19,15 +19,12 @@ export const workspacePublishSchema = z.object({
 /** Memberships precede retirement. A failed CAS never proceeds to the next file.
  * Retrying membership inserts is safe; a document success + queue conflict leaves a recoverable receipt. */
 export async function publishWorkspaceResources(context: McpRequestContext, owner: string, projectId: string, input: z.infer<typeof workspacePublishSchema>, checkAccess: () => void, signal?: AbortSignal) {
-  requireContextPermission(context, 'images.view');
-  requireContextPermission(context, 'images.edit');
+  requireContextPermission(context, 'content.edit');
   if (input.document.target.toLowerCase() === input.queue.target.toLowerCase()) throw new WorkspaceError('작업 문서와 목록은 서로 다른 파일이어야 해.');
   if ([input.document, input.queue].some(file => file.target.toLowerCase() === 'ai_guidelines.md') || input.document.text.includes('\0')) throw new WorkspaceError('지침 파일 또는 NUL 문자를 포함한 문서는 완료 대상으로 저장할 수 없어.');
   const check = () => {
     checkAccess();
-    requireContextPermission(context, 'images.view');
-    requireContextPermission(context, 'images.edit');
-    for (const { reference } of input.resources) requireContextPermission(context, reference.source === 'audio' ? 'audio.view' : reference.source === 'library' ? 'images.view' : 'files.view');
+    requireContextPermission(context, 'content.edit');
   };
   const queueWrite = { kind: 'write' as const, target: input.queue.target, expectedRevision: input.queue.expectedRevision, text: '' };
   const operations: WorkspaceOperation[] = [{ kind: 'write', ...input.document }, queueWrite];

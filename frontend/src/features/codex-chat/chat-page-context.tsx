@@ -3,11 +3,10 @@ import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { CHAT_PAGE_ACTION_PERMISSIONS, chatAutoApprovable, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
+import { CHAT_PAGE_ACTION_SCOPES, CONTENT_PERMISSIONS, chatPageActionRequirement, hasContentRight, chatAutoApprovable, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, answerChatPageCommand, checkChatPageProposal } from '@/lib/api-codex-chat'
 import { requestApiData } from '@/lib/api-request'
@@ -143,10 +142,11 @@ async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view
 
 const NO_ACTIONS: ChatPageAction[] = []
 /** Palette entries: native operations that only move or open something and need no input. Extension tiers are checked on the server, so they stay with the chat. */
-function isCommandAction(action: ChatPageAction, path: string, permissionKeys: string[] | undefined) {
-  if (!Object.hasOwn(CHAT_PAGE_ACTION_PERMISSIONS, action.id) || !chatPageActionAllowed(path, action.id) || chatPageActionTier(action.id) !== 'view' || action.schema.required?.length) return false
-  const permission = CHAT_PAGE_ACTION_PERMISSIONS[action.id]
-  return !permission || hasAuthPermission(permissionKeys, permission)
+function isCommandAction(action: ChatPageAction, path: string, auth: { isAdmin: boolean; permissionKeys: string[] } | undefined) {
+  if (!Object.hasOwn(CHAT_PAGE_ACTION_SCOPES, action.id) || !chatPageActionAllowed(path, action.id) || chatPageActionTier(action.id) !== 'view' || action.schema.required?.length) return false
+  const requirement = chatPageActionRequirement(action.id)
+  if (requirement === null || requirement === 'signedIn') return true
+  return requirement === 'admin' ? auth?.isAdmin === true : hasContentRight(auth?.permissionKeys ?? [], requirement)
 }
 
 function validateWorkflow(snapshot: ChatPageSnapshot | null, proposal: WorkflowPageProposal, undo: boolean, record?: WorkflowUndo) {
@@ -193,7 +193,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     setCommandWatchers((count) => count + 1)
     return () => setCommandWatchers((count) => count - 1)
   }, [])
-  const commandActions = useMemo(() => commandWatchers ? (activeEditor?.actions ?? []).filter((action) => isCommandAction(action, location.pathname, auth?.permissionKeys)) : NO_ACTIONS, [commandWatchers, activeEditor, location.pathname, auth?.permissionKeys])
+  const commandActions = useMemo(() => commandWatchers ? (activeEditor?.actions ?? []).filter((action) => isCommandAction(action, location.pathname, auth)) : NO_ACTIONS, [commandWatchers, activeEditor, location.pathname, auth])
   const fallbackTitle = t({
     ko: ({ '/': '이미지 라이브러리', '/access': '접근 가능한 페이지', '/chat': '채팅', '/chat/profiles': '채팅 · 프로필', '/chat/resources': '채팅 · 자원', '/chat/llm': '채팅 · AI 연결', '/chat/routines': '채팅 · 루틴', '/chat/judge': '채팅 · 판단 기록', '/chat/mine': '채팅 · 내 설정', '/generation': '이미지 생성', '/prompts': '프롬프트', '/groups': '그룹', '/characters': '캐릭터 라이브러리', '/wildcards': '와일드카드', '/files': '파일 보관함', '/upload': '업로드', '/settings': '설정', '/wallpaper': '배경화면', '/wallpaper/runtime': '배경화면 실행' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? '그룹 상세' : '이미지 상세'),
     en: ({ '/': 'Image library', '/access': 'Available pages', '/chat': 'Chat', '/chat/profiles': 'Chat · Profiles', '/chat/resources': 'Chat · Resources', '/chat/llm': 'Chat · AI connections', '/chat/routines': 'Chat · Routines', '/chat/judge': 'Chat · Judge log', '/chat/mine': 'Chat · My settings', '/generation': 'Image generation', '/prompts': 'Prompts', '/groups': 'Groups', '/characters': 'Character library', '/wildcards': 'Wildcards', '/files': 'File store', '/upload': 'Upload', '/settings': 'Settings', '/wallpaper': 'Wallpaper', '/wallpaper/runtime': 'Wallpaper runtime' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? 'Group detail' : 'Image detail'),
@@ -495,7 +495,7 @@ function PageNavigationRegistration({ title }: { title: string }) {
   const { t } = useI18n()
   const destinations = [...new Set((auth ? listAccessiblePageAccessItems(auth.permissionKeys) : []).flatMap((item) => {
     const views = PAGE_VIEWS[item.path]
-    return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])].filter((destination) => (auth?.isAdmin || !CHAT_ADMIN_DESTINATION.test(destination)) && (destination !== '/characters?view=catalog' || auth?.permissionKeys.includes('prompts.view')))
+    return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])].filter((destination) => (auth?.isAdmin || !CHAT_ADMIN_DESTINATION.test(destination)) && (destination !== '/characters?view=catalog' || auth?.permissionKeys.includes(CONTENT_PERMISSIONS.read)))
   }))]
   const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 생성과 프롬프트는 ?tab=, 캐릭터는 ?view=를 써.', en: 'Open an accessible CoNAI page or one of its tabs. Settings use ?section=, generation and prompts use ?tab=, and characters use ?view=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
   if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), t({ ko: '이 페이지에 적용되는 앱 공용 설정 창(저장 형식, 생성 속도 제한, 화면 테마 등)을 열어. 화면의 입력 칸(프롬프트 등)은 여기서 바꾸지 말고 page_fill로 채워.', en: 'Open the app-wide settings that apply to this page (save format, generation throttle, appearance, etc.). Never use it to change the screen\'s own inputs such as prompts; fill those with page_fill.' }), pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))

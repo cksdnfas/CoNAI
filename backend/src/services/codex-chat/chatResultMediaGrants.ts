@@ -1,9 +1,8 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { canRequesterViewImages } from '../../middleware/imageAccess'
+import { requesterHasRight } from '../../middleware/featureAccess'
 import { isChatMcpSource, isPublicChatPage, type McpRequestContext, type McpRequester } from '../../mcp/context'
 import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks'
 import { requireChatMcpAccountAccess } from './codexChatAccess'
-import { chatMcpRequester } from './chatProfilePermissions'
 import { requireActiveChatReply } from './chatReplyRegistry'
 import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 import { readMcpToolResult } from './chatToolReferences'
@@ -30,8 +29,7 @@ export function chatResultMediaRecorder(context: McpRequestContext, toolName: st
     try {
       requireActiveChatReply(invocation.chatContext)
       requireChatMcpAccountAccess(invocation, toolName)
-      const requester = chatMcpRequester(invocation)
-      if (!requester || !canRequesterViewImages(requester)) return
+      if (!invocation.requester || !requesterHasRight(invocation.requester, 'read')) return
     } catch { return }
     const db = getUserSettingsDb()
     const insert = db.prepare(`INSERT OR IGNORE INTO chat_result_media_grants

@@ -1,6 +1,6 @@
 import { isAdminRequest } from './requester-session-helpers';
 import { Router, Request, Response } from 'express';
-import { errorResponse, successResponse } from '@conai/shared';
+import { CONTENT_PERMISSIONS, errorResponse, successResponse } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requirePermission } from '../middleware/authMiddleware';
 import { AuthAccessControlService } from '../services/authAccessControlService';
@@ -46,9 +46,9 @@ function canAccessJob(req: Request, requestedByAccountId: number | null): boolea
  * Read only: cancel stays with the starter or an admin (`canAccessJob`).
  */
 export const SHARED_LIBRARY_JOB_VIEW_PERMISSION: Partial<Record<RuntimeJobKind, string>> = {
-  'group-auto-collect': 'images.edit',
-  'all-auto-collect': 'images.edit',
-  'auto-folder-rebuild': 'images.edit',
+  'group-auto-collect': CONTENT_PERMISSIONS.edit,
+  'all-auto-collect': CONTENT_PERMISSIONS.edit,
+  'auto-folder-rebuild': CONTENT_PERMISSIONS.edit,
 };
 
 /** Whether the requester may start, and so read, every job of this shared-library kind. */

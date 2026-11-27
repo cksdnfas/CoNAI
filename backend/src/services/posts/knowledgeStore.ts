@@ -33,8 +33,8 @@ export function getKnowledgeStates(postIds: number[], actor?: PostActor): Map<nu
     states.set(row.post_id, {
       enabled: row.enabled === 1, contentVersion: row.content_version, contentHash: row.content_hash, reviewStatus: row.review_status,
       verifiedContentVersion: row.verified_content_version, deletedAt: date(row.deleted_at), replacementPostId,
-      canEvaluate: Boolean(actor && !row.deleted_at && (actor.isAdmin || actor.keys.has('posts.evaluate'))),
-      canReview: Boolean(actor && isHumanPostActor(actor) && (actor.isAdmin || actor.keys.has('posts.knowledge.review'))),
+      canEvaluate: Boolean(actor && !row.deleted_at),
+      canReview: Boolean(actor && isHumanPostActor(actor) && (actor.isAdmin || actor.keys.has('content.edit'))),
     });
   }
   return states;
@@ -45,7 +45,7 @@ export function getKnowledgeState(postId: number, actor?: PostActor): PostKnowle
 }
 
 export function requireKnowledgeRow(actor: PostActor, postId: number, options: { allowDeleted?: boolean } = {}): KnowledgeRow & { post: PostRow } {
-  requireKey(actor, 'posts.view');
+  requireKey(actor, 'content.read');
   const row = findKnowledgeRow(postId);
   const post = db().prepare('SELECT * FROM posts WHERE id = ?').get(postId) as PostRow | undefined;
   if (!row || !post || !canSeePost(actor, post) || (row.deleted_at && (!options.allowDeleted || !canEditPost(actor, post)))) throw new PostError('지식 문서를 찾을 수 없어.', 404);
@@ -271,7 +271,7 @@ export function knowledgeIssues(postId: number, actor?: PostActor): PostReviewIs
 }
 
 function requirePermanentDeleteAuthority(actor:PostActor,postId:number,expectedRevision:unknown) {
-  requireHumanPostActor(actor);requireKey(actor,'posts.write');
+  requireHumanPostActor(actor);
   const knowledge=requireKnowledgeRow(actor,postId,{allowDeleted:true});
   if(!canEditPost(actor,knowledge.post)) throw new PostError('이 지식 문서를 영구 삭제할 권한이 없어.',403);
   if(!knowledge.deleted_at) throw new PostError('휴지통에 있는 지식 문서만 영구 삭제할 수 있어.',409);
@@ -339,7 +339,7 @@ export const KnowledgeStore = {
   },
 
   permanentDelete(actor:PostActor,postId:number,input:{expectedRevision?:unknown;previewToken?:unknown;confirm?:unknown}):PostKnowledgePermanentDeleteResult {
-    requireHumanPostActor(actor);requireKey(actor,'posts.write');
+    requireHumanPostActor(actor);
     if(input.confirm!==true||typeof input.previewToken!=='string'||!input.previewToken) throw new PostError('삭제 영향 확인과 명시적 영구 삭제 확인이 필요해.');
     const result=db().transaction(()=>{
       const prior=db().prepare('SELECT * FROM post_knowledge_deletions WHERE preview_token=? AND post_id=? AND account_key=?')
@@ -370,7 +370,7 @@ export const KnowledgeStore = {
   },
 
   patch(actor: PostActor, postId: number, input: { expectedRevision?: unknown; enabled?: unknown; sources?: unknown; replacementPostId?: unknown }): PostDetail {
-    requireHumanPostActor(actor); requireKey(actor, 'posts.write');
+    requireHumanPostActor(actor);
     if (!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.', 409);
     db().transaction(() => {
       PostStore.get(actor, postId);
@@ -446,7 +446,7 @@ export const KnowledgeStore = {
   },
 
   trash(actor: PostActor, postId: number, input: { expectedRevision?: unknown }) {
-    requireHumanPostActor(actor); requireKey(actor, 'posts.write');
+    requireHumanPostActor(actor);
     db().transaction(() => {
       const knowledge = requireKnowledgeRow(actor, postId, { allowDeleted: true });
       if (!canEditPost(actor, knowledge.post)) throw new PostError('지울 권한이 없어.', 403);
@@ -462,7 +462,7 @@ export const KnowledgeStore = {
   },
 
   restore(actor: PostActor, postId: number, input: { expectedRevision?: unknown }): PostDetail {
-    requireHumanPostActor(actor); requireKey(actor, 'posts.write');
+    requireHumanPostActor(actor);
     db().transaction(() => {
       const knowledge = requireKnowledgeRow(actor, postId, { allowDeleted: true });
       if (!canEditPost(actor, knowledge.post)) throw new PostError('복원할 권한이 없어.', 403);
@@ -482,7 +482,7 @@ export const KnowledgeStore = {
     requireHumanPostActor(actor);
     const action = String(input.action);
     if (!['verify','request_review','report_error','resolve_issue'].includes(action)) throw new PostError('검토 동작이 잘못됐어.');
-    requireKey(actor, action === 'report_error' ? 'posts.evaluate' : 'posts.knowledge.review');
+    if (action !== 'report_error') requireKey(actor, 'content.edit');
     db().transaction(() => {
       const knowledge = requireKnowledgeRow(actor, postId);
       if (input.contentVersion !== knowledge.content_version) throw new PostError('검토 대상 내용이 변경됐어.', 409);
@@ -502,7 +502,7 @@ export const KnowledgeStore = {
   },
 
   async reviewQueue(actor: PostActor, query: { offset?: unknown; limit?: unknown } = {}, options?: { signal?: AbortSignal }): Promise<PostKnowledgeReviewQueue> {
-    requireKey(actor, 'posts.knowledge.review');
+    requireKey(actor, 'content.edit');
     const list = await PostStore.list(actor, { kind: 'knowledge', reviewStatus: 'needs_review', status: 'all', ...query }, options);
     return { items: list.items.map(post => ({ post, issues: knowledgeIssues(post.id,actor) })), total: list.total };
   },

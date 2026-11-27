@@ -130,7 +130,7 @@ export interface ExtractJobParams {
   options: SpriteExtractOptionsInput
   frameIndices?: number[]
   render?: RenderInput
-  /** When set, the rendered sheet is saved to the library (images.upload checked by the caller). */
+  /** When set, the rendered sheet is saved to the library as a new item. */
   save?: SpriteGroupTarget | null
   requester: SpriteRequester
 }

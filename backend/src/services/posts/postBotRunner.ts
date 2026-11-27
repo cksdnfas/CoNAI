@@ -107,7 +107,7 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
   // A person answering a bot's comment calls that bot as if they had written its @name. Only when they could have:
   // otherwise it stays a plain reply, with no refused call shown under it. Bots answering bots still need the @name,
   // or two bots would keep answering each other up to the chain limit.
-  const callsAnswered = answered !== null && settings.safety.summonEnabled && (actor.isAdmin || actor.keys.has('posts.summon'))
+  const callsAnswered = answered !== null && settings.safety.summonEnabled
     && candidates.some((candidate) => candidate.id === answered);
   const targets = [...new Set([...(callsAnswered ? [answered] : []), ...picked, ...typed])].filter((id) => id !== comment.author_profile_id);
   if (targets.length === 0) return;
@@ -124,7 +124,6 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
       let reason: string | null = null;
       if (!settings.safety.summonEnabled) reason = '게시판 설정에서 봇 부르기가 꺼져 있어.';
       else if (AutomationSwitch.isPaused()) reason = '자동화가 멈춰 있어.';
-      else if (!parentRun && !actor.isAdmin && !actor.keys.has('posts.summon')) reason = '봇을 부를 권한이 없어.';
       else if (depth > 1 && depth - 1 > settings.safety.chainDepth) reason = `봇이 봇을 부르는 단계 한도(${settings.safety.chainDepth})를 넘었어.`;
       else if (index >= settings.safety.botsPerComment) reason = `댓글 하나에 부를 수 있는 봇은 ${settings.safety.botsPerComment}개까지야.`;
       else if (!candidates.some((candidate) => candidate.id === profileId)) reason = '이 계정으로는 부를 수 없는 봇이야.';
@@ -213,7 +212,7 @@ async function execute(run: BotRunRow, controller: AbortController): Promise<voi
   let post = db().prepare('SELECT * FROM posts WHERE id = ?').get(run.post_id) as PostRow | undefined;
   let trigger = run.trigger_comment_id ? db().prepare('SELECT * FROM post_comments WHERE id = ?').get(run.trigger_comment_id) as CommentRow | undefined : undefined;
   if (!post || !trigger || trigger.status !== 'visible') return void setStatus(run.id, 'skipped', { error: '글이나 부른 댓글이 사라졌어.' });
-  const runAs = resolveAutomationRunAs(run.run_as_account_id, ['posts.view', 'posts.comment']);
+  const runAs = resolveAutomationRunAs(run.run_as_account_id, ['content.read']);
   if (!runAs.ok) return void setStatus(run.id, 'failed', { error: runAs.message });
   if (!summonableProfiles(run.run_as_account_id).some((profile) => profile.id === run.profile_id)) return void setStatus(run.id, 'failed', { error: '이 계정으로는 더 이상 부를 수 없는 봇이야.' });
   const requester: McpRequester = runAs.requester;

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Loader2, RotateCcw, Square, X } from 'lucide-react'
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { Button } from '@/components/ui/button'
 import { ListRow } from '@/components/ui/list-row'
@@ -99,7 +98,6 @@ export function WorkflowActiveRunCard({
   isCancelling: boolean
   onCancel: (execution: GraphExecutionRecord) => void
 }) {
-  const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const isRunning = execution.status === 'running'
   // Progress needs only node event flags, not artifacts, IO, or full logs. `graph.execution.progress` refetches it; polling is the stream fallback.
@@ -128,7 +126,7 @@ export function WorkflowActiveRunCard({
           size="icon-xs"
           variant="ghost"
           onClick={() => onCancel(execution)}
-          disabled={!canExecuteGeneration || isCancelling || execution.cancel_requested}
+          disabled={isCancelling || execution.cancel_requested}
           label={execution.cancel_requested ? t({ ko: '취소 요청됨', en: 'Cancel requested' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
         >
           <X />
@@ -198,7 +196,6 @@ export function WorkflowRunHistory({
   onRetryExecution: (execution: GraphExecutionRecord) => void
   className?: string
 }) {
-  const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber, formatDateTime } = useI18n()
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const detailMatches = executionDetail && executionDetail.execution.id === selectedExecutionId ? executionDetail : undefined
@@ -267,11 +264,11 @@ export function WorkflowRunHistory({
             </button>
             </ListRow>
             {isActive ? (
-              <IconButton size="icon-xs" variant="ghost" onClick={() => onCancelExecution(execution)} disabled={!canExecuteGeneration || cancellingExecutionId === execution.id || execution.cancel_requested} label={t({ ko: '실행 취소', en: 'Cancel run' })}>
+              <IconButton size="icon-xs" variant="ghost" onClick={() => onCancelExecution(execution)} disabled={cancellingExecutionId === execution.id || execution.cancel_requested} label={t({ ko: '실행 취소', en: 'Cancel run' })}>
                 <Square />
               </IconButton>
             ) : retryable ? (
-              <IconButton size="icon-xs" variant="ghost" onClick={() => onRetryExecution(execution)} disabled={!canExecuteGeneration || isExecutingGraph} label={t({ ko: '다시 실행', en: 'Run again' })}>
+              <IconButton size="icon-xs" variant="ghost" onClick={() => onRetryExecution(execution)} disabled={isExecutingGraph} label={t({ ko: '다시 실행', en: 'Run again' })}>
                 <RotateCcw />
               </IconButton>
             ) : <span className="size-6 shrink-0" />}

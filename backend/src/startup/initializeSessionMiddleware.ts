@@ -2,7 +2,8 @@ import BetterSqlite3Store from 'better-sqlite3-session-store';
 import type { Express, RequestHandler } from 'express';
 import session, { type Store as SessionStore } from 'express-session';
 import { initializeAuthDb, getAuthDb } from '../database/authDb';
-import { initializeUserSettingsDb } from '../database/userSettingsDb';
+import { getUserSettingsDb, initializeUserSettingsDb } from '../database/userSettingsDb';
+import { migrateChatPermissionsV3 } from '../database/chatPermissionsV3Migration';
 import { initializeAudioDb } from '../database/audioDb';
 import { recoverInterruptedRefModRecords } from '../services/comfyui/refmodRecords';
 import { FileStoreService } from '../services/fileStoreService';
@@ -51,6 +52,7 @@ export async function initializeSessionMiddleware(
 ): Promise<void> {
   initializeAuthDb();
   initializeUserSettingsDb();
+  migrateChatPermissionsV3(getUserSettingsDb(), getAuthDb());
   await recoverInterruptedRefModRecords();
   initializeAudioDb();
   const { moved } = FileStoreService.migrateLayout();

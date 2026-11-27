@@ -31,7 +31,7 @@ export type CharacterSettingPickerDialogProps = {
 
 /**
  * Pick one appearance setting from the character library: the folder tree, a name search across the library and the
- * open folder's settings a page at a time. Browsing needs only `characters.view`; nothing here changes the library.
+ * open folder's settings a page at a time. Browsing needs only the read right; nothing here changes the library.
  */
 export function CharacterSettingPickerDialog(props: CharacterSettingPickerDialogProps) {
   // Mounted only while open, so each opening starts from `initialFolderId` with no leftover search or selection.
@@ -42,7 +42,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const [folderId, setFolderId] = useState(initialFolderId)
   const [searchText, setSearchText] = useState('')
   const query = useDebouncedValue(searchText.trim())

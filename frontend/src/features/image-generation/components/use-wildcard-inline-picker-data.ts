@@ -9,13 +9,13 @@ interface UseWildcardInlinePickerDataOptions {
 }
 
 export function useWildcardInlinePickerData({ enabled }: UseWildcardInlinePickerDataOptions) {
-  const { canViewWildcards } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const wildcardsQuery = useQuery({
     ...wildcardLibraryQueryOptions,
-    enabled: enabled && canViewWildcards,
+    enabled: enabled && canRead,
   })
 
-  const wildcards = useMemo(() => canViewWildcards ? wildcardsQuery.data ?? [] : [], [canViewWildcards, wildcardsQuery.data])
+  const wildcards = useMemo(() => canRead ? wildcardsQuery.data ?? [] : [], [canRead, wildcardsQuery.data])
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
 
   return {

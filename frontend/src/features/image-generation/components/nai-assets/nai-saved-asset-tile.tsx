@@ -37,7 +37,7 @@ export function NaiSavedAssetTile({
   onTogglePin,
 }: NaiSavedAssetTileProps) {
   const { t } = useI18n()
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const editLabel = t('image-generation.components.nai.saved.asset.tile.edit')
   const deleteLabel = t('image-generation.components.nai.saved.asset.tile.delete')
@@ -109,7 +109,7 @@ export function NaiSavedAssetTile({
             {isPinned ? <PinOff /> : <Pin />}
           </IconButton>
         ) : null}
-        {onEdit && canUpdateWorkflows && canViewImages ? (
+        {onEdit && canEdit && canViewImages ? (
           <IconButton
             size="icon-sm"
             variant="overlay"
@@ -122,7 +122,7 @@ export function NaiSavedAssetTile({
             <Pencil />
           </IconButton>
         ) : null}
-        {onDelete && canUpdateWorkflows ? (
+        {onDelete && canDelete ? (
           <IconButton
             size="icon-sm"
             variant="overlay"

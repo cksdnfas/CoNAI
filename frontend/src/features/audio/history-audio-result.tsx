@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AudioLines, Download, ExternalLink, Pause, Play } from 'lucide-react'
@@ -14,7 +15,7 @@ import { WaveformThumb } from './audio-waveform'
 /** Whether the viewer can open the audio workspace (where a run's sounds are reviewed). */
 function useCanOpenAudioTab() {
   const auth = useAuthStatusQuery().data
-  return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.view'))
+  return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, CONTENT_PERMISSIONS.read))
 }
 
 /** Keep a press on a control from starting the list's drag selection or activating the tile. */

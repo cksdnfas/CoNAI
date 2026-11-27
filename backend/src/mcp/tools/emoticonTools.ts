@@ -1,7 +1,7 @@
 import fs from 'fs';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { previewImage } from '../../services/imagePreview';
-import { requireContextPermission } from '../../middleware/featureAccess';
+import { requireContextRight } from '../../middleware/featureAccess';
 import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel } from '../../models/Group';
@@ -169,7 +169,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
   server.registerTool(
     'view_media_frames',
     { description: 'View video or animated GIF/WebP as numbered frame sheets with time labels; requires a vision model. Narrow the range or reduce frames_per_image for detail. On range/source errors, correct the range or select an available source.', inputSchema: z.object({
-      composite_hash: z.string().trim().min(1).optional().describe('Library media; use exactly one of composite_hash or file_id; requires images.view'),
+      composite_hash: z.string().trim().min(1).optional().describe('Library media; use exactly one of composite_hash or file_id; requires content.read'),
       file_id: z.string().regex(/^[a-f0-9]{32}$/).optional().describe('Shared stored media file; use instead of composite_hash'),
       count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional().describe(`Frames spread evenly over the clip or selected range (default ${MEDIA_FRAMES_DEFAULT})`),
       frames_per_image: z.number().int().min(1).max(FRAMES_PER_SHEET_MAX).optional().describe(`Frames tiled into one picture (default ${FRAMES_PER_SHEET_DEFAULT}); 1 sends each frame alone and larger`),
@@ -184,7 +184,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
         let label: string;
         if (composite_hash) {
           // The tool itself needs no permission in a chat; library media still needs what viewing it on the web needs.
-          requireContextPermission(context, 'images.view');
+          requireContextRight(context, 'read');
           const metadata = MediaMetadataModel.findByHash(composite_hash);
           const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(composite_hash) : null;
           if (!file || !fs.existsSync(file.path)) throw new Error('not an available media item');

@@ -57,7 +57,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   const addAccount = (name: string) => Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES (?, 'unused', 'guest')").run(name).lastInsertRowid)
   const aliceId = addAccount('plugin-alice'), bobId = addAccount('plugin-bob')
   auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('plugin-admin', 'unused', 'admin')").run()
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-file-editors', permissionKeys: ['files.view', 'files.edit', 'images.view', 'plugins.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-file-editors', permissionKeys: ['content.read', 'content.edit', 'page.extensions.view'] })
   AuthPermissionGroup.addAccountMembership(group.id, aliceId)
   AuthPermissionGroup.addAccountMembership(group.id, bobId)
   invalidateConfiguredAuthCache()
@@ -127,7 +127,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.equal(host.readPluginFile(instance.id, foreign.id, alice).text, '{"private":true}')
     assert.equal(host.readPluginFile(instance.id, file.id, alice).text, '{"frame":1}')
     const pageOnly = { requester: { accountId: addAccount('plugin-no-files'), accountType: 'guest' as const }, sessionId: 'page-only-session' }
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-only', permissionKeys: ['plugins.view'] }).id, pageOnly.requester.accountId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-only', permissionKeys: ['page.extensions.view'] }).id, pageOnly.requester.accountId)
     const empty = host.openPluginInstance('text-editor', 'editor', [], pageOnly)
     assert.equal(host.requirePluginInstance(empty.id, pageOnly).page.id, 'editor', 'opening a plugin needs no unrelated file permission')
     assert.throws(() => host.readPluginFile(empty.id, file.id, pageOnly), /권한/)
@@ -136,7 +136,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   })
   await t.test('a shared page opens without the plugin permission and closes when the share ends', () => {
     const { invalidateResolvedAuthAccessCache } = authAccess
-    const guestGrant = () => auth.prepare(`SELECT g.id AS group_id, p.id AS permission_id FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'plugins.view'`).get() as { group_id: number; permission_id: number }
+    const guestGrant = () => auth.prepare(`SELECT g.id AS group_id, p.id AS permission_id FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'page.extensions.view'`).get() as { group_id: number; permission_id: number }
     const { group_id, permission_id } = guestGrant()
     auth.prepare('DELETE FROM auth_group_permissions WHERE group_id = ? AND permission_id = ?').run(group_id, permission_id)
     invalidateResolvedAuthAccessCache()
@@ -224,21 +224,23 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
     const { resolveChatPageCommand } = await import('../src/services/codex-chat/chatPageBridge')
     const adminId = (auth.prepare("SELECT id FROM auth_accounts WHERE username='plugin-admin'").get() as {id:number}).id
-    const pageGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-assistant', permissionKeys: ['files.view', 'files.edit', 'plugins.view'] })
+    const pageGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-assistant', permissionKeys: ['content.read', 'content.edit', 'page.extensions.view'] })
     AuthPermissionGroup.addAccountMembership(pageGroup.id, adminId)
     const requester = { accountId: adminId, accountType: 'admin' as const }
     const page = shared.normalizeChatPageSnapshot({ instanceId: randomUUID(), connectionId: randomUUID(), path: '/ext/text-editor/editor', title: 'Text', kind: 'extension', resourceId: '1.0.0', fields: [], actions: instance.page.actions, revision: randomUUID(), dirty: true, data: {} })
     const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
     const { isDirectChatTool } = await import('../src/mcp/toolCatalog')
-    const discoveryContext = { source: 'llm-chat' as const, scopes: [], requester, chatContext: { threadId: 1, profileId: 1, kind: 'direct' as const, page } }
-    assert.equal(isContextToolAllowed(discoveryContext, 'list_plugin_pages', false), true, 'explicit extension connection supplies discovery even without general read scopes')
+    const discoveryContext = { source: 'llm-chat' as const, scopes: ['read' as const], requester, chatContext: { threadId: 1, profileId: 1, kind: 'direct' as const, page } }
+    assert.equal(isContextToolAllowed({ ...discoveryContext, scopes: [] }, 'list_plugin_pages', false), false, 'a connected extension page does not lift the profile tool scopes')
+    assert.equal(isContextToolAllowed(discoveryContext, 'list_plugin_pages', false), true, 'with read, the connected extension offers its discovery tools directly')
     assert.equal(isDirectChatTool(discoveryContext, 'list_plugin_pages'), true)
     const server = new McpServer({ name: 'plugin-page-test', version: '1' })
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
     const replyContext = { threadId: 1, profileId: 1, kind: 'direct' as const, replyId: randomUUID(), page }
     // Page commands are routed only from a reply that is still running.
     const releaseReply = registerChatReply(replyContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
-    registerChatPageActionTools(server, { source: 'llm-chat', scopes: ['read'], requester, chatContext: replyContext })
+    // The page's script acts with everything the plugin reaches (its file writes need organize), so the profile must allow it.
+    registerChatPageActionTools(server, { source: 'llm-chat', scopes: ['read', 'organize'], requester, chatContext: replyContext })
     const client = new Client({ name: 'plugin-page-test', version: '1' })
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     let dispatched = 0
@@ -331,7 +333,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       assert.equal(move('new.md').status, 'completed', 'only the final path has to be free')
       assert.equal(FileStoreService.findChild(owner, into.id, 'new.md')?.id, original.id)
       const mediaProcessing = await import('../src/services/plugins/pluginMediaProcessing')
-      await assert.rejects(mediaProcessing.proposePluginMedia(connected.id, { sourceTarget: 'media.json', target: 'audio.json', revision: null, operation: { kind: 'extract_audio', quality: 5 } }, alice), /권한|permission|Permission/)
+      await assert.rejects(mediaProcessing.proposePluginMedia(connected.id, { sourceTarget: 'media.json', target: 'audio.json', revision: null, operation: { kind: 'extract_audio', quality: 5 } }, alice), /찾을 수 없어/, 'reading and the project write are all it needs; the missing source is reported')
       await assert.rejects(projectHost.proposePluginWorkspaceChanges(readonly.id, { operations: [{ kind: 'mkdir', target: 'denied' }] }, alice), /읽기 전용/)
       const batch = await projectHost.proposePluginWorkspaceChanges(connected.id, { operations: [{ kind: 'mkdir', target: 'batch' }, { kind: 'write', target: 'batch/note.json', text: '{}', expectedRevision: null }] }, alice)
       await assert.rejects(projectHost.applyPluginWorkspaceWrite(batch.id, '0'.repeat(48), alice), /승인/)
@@ -473,9 +475,12 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
     const adminId = (auth.prepare("SELECT id FROM auth_accounts WHERE username='plugin-admin'").get() as { id: number }).id
     const admin = { requester: { accountId: adminId, accountType: 'admin' as const }, sessionId: 'app-host-session' }
-    const appPermissions = AuthPermissionGroup.createCustomGroup({ name: 'plugin-native-tools', permissionKeys: ['files.view', 'images.view', 'images.edit', 'posts.view', 'posts.write', 'workflows.view', 'audio.view'] })
+    const appPermissions = AuthPermissionGroup.createCustomGroup({ name: 'plugin-native-tools', permissionKeys: ['content.read', 'content.edit', 'page.posts.view'] })
     AuthPermissionGroup.addAccountMembership(appPermissions.id, adminId)
     const context = app.pluginBrowserContext(admin, 'http://localhost:1666', true)
+    const readerId = addAccount('plugin-reader')
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-readers', permissionKeys: ['content.read', 'page.extensions.view'] }).id, readerId)
+    const reader = { requester: { accountId: readerId, accountType: 'guest' as const }, sessionId: 'reader-session' }
     const largeJob = RuntimeJobStore.create({ kind: 'plugin-action', params: {}, singletonKey: null, requestedByAccountId: adminId })
     const largeResult = { content: [{ type: 'text', text: 'large plugin result '.repeat(6000) }] }
     RuntimeJobStore.markRunning(largeJob.jobId, 'all'); RuntimeJobStore.markCompleted(largeJob.jobId, largeResult)
@@ -515,7 +520,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.ok('id' in direct && direct.jobId && direct.status !== 'pending', 'browser actions start without a server module or an extra approval')
     for (let attempt = 0; attempt < 100 && ['queued', 'running'].includes(RuntimeJobStore.get(direct.jobId!)!.status); attempt++) await new Promise(resolve => setTimeout(resolve, 10))
     assert.equal(app.getPluginAppRequest(direct.id, directContext).status, 'completed')
-    await assert.rejects(app.runPluginServerAction({ pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'denied' }, requestId: 'guest-write-denied' }, app.pluginBrowserContext(alice)), /권한|permission|Permission/)
+    await assert.rejects(app.runPluginServerAction({ pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'denied' }, requestId: 'guest-write-denied' }, app.pluginBrowserContext(reader)), /권한|permission|Permission/)
     const input = { pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'plugin-app-test-group' }, requestId: 'stable-app-request' }
     const pending = await app.runPluginServerAction(input, context)
     assert.ok('id' in pending)
@@ -536,7 +541,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       const keyContext = mcpHttpSettingsService.authenticate(key.apiKey)!
       const keyed = await app.runPluginServerAction({ ...input, requestId: 'key-group-revocation' }, keyContext)
       assert.ok('id' in keyed)
-      const restricted = AuthPermissionGroup.createCustomGroup({ name: 'plugin-read-only-key', permissionKeys: ['files.view', 'images.view'] })
+      const restricted = AuthPermissionGroup.createCustomGroup({ name: 'plugin-read-only-key', permissionKeys: ['content.read'] })
       mcpHttpSettingsService.updateApiKey(key.id, key.name, restricted.group_key)
       assert.throws(() => app.applyPluginAppRequest(keyed.id, admin), /권한|permission|Permission/, 'admin approval must not replace the original key permission group')
       mcpHttpSettingsService.updateApiKey(key.id, key.name, appPermissions.group_key)
@@ -567,7 +572,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.equal(app.cancelPluginAppRequest(draft.id, context).status, 'cancelled')
     await registry.removePlugin('app-workbench')
   })
-  await t.test('plugin actions run in a chat whose profile delegates files.view, without its delegated project', async sub => {
+  await t.test('plugin actions in a chat run as the account, with the chat project the account can open', async sub => {
     const packageZip = new AdmZip()
     packageZip.addLocalFolder(path.resolve(__dirname, '../../plugins/app-workbench'), '', entry => !/\.md$/i.test(entry))
     packageZip.addLocalFile(path.resolve(__dirname, '../../plugins/sdk/conai-plugin.js'))
@@ -582,7 +587,6 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
-    const { chatProfileRequester } = await import('../src/services/codex-chat/chatProfilePermissions')
     const { chatWorkspaces } = await import('../src/services/codex-chat/chatWorkspace')
     const { WorkspaceService } = await import('../src/services/workspaceService')
     const { fileOwnerKey } = await import('../src/services/fileStoreService')
@@ -590,14 +594,14 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
     const adminId = (auth.prepare("SELECT id FROM auth_accounts WHERE username='plugin-admin'").get() as { id: number }).id
     const guestId = addAccount('plugin-delegated-chat')
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-delegated-chat', permissionKeys: ['chat.use', 'images.view', 'images.edit'] }).id, guestId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-delegated-chat', permissionKeys: ['page.chat.view', 'content.edit'] }).id, guestId)
     const requester = { accountId: guestId, accountType: 'guest' as const }
     const project = await WorkspaceService.create(fileOwnerKey(adminId), 'Delegated plugin project')
     ExternalApiProvider.create({ provider_name: 'plugin-delegated-chat', display_name: 'Delegated chat test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: {} })
     const profile = ChatProfileStore.create({ name: 'Delegated plugin chat', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-delegated-chat', 'test-model')!, mcpEnabled: true, mcpScopes: ['read', 'organize'],
-      toolAllowlist: ['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action'], delegatedPermissions: ['files.view'], workspaces: [{ id: project.id, write: false }] })
+      toolAllowlist: ['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action'], workspaces: [{ id: project.id, write: false }] })
     const chat = { threadId: CodexChatStore.createThread(guestId, 'delegated plugin chat', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: randomUUID() }
-    assert.equal(chatWorkspaces(chatProfileRequester(requester, chat), chat.threadId, profile.id).length, 1, 'the chat itself reaches the project through the delegation')
+    assert.equal(chatWorkspaces(requester, chat.threadId, profile.id).length, 1, 'edit includes reading: the account reaches the chat project')
     const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
     const server = createMcpServer({ scopes: ['read', 'organize'], source: 'llm-chat', requester, chatContext: chat, toolCatalog: false })
     const client = new Client({ name: 'plugin-delegated-chat', version: '1' })
@@ -612,7 +616,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       assert.equal((await call('run_plugin_action', { pluginId: 'app-workbench', action: 'app-workbench.groups', arguments: {} })).status, 'completed')
       const pending = await call('run_plugin_action', { pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'delegated-chat-group' }, requestId: 'delegated-chat-request' })
       assert.equal(pending.status, 'pending')
-      assert.equal(pending.project, undefined, 'the plugin acts as the account, which cannot open the delegated project')
+      assert.deepEqual(pending.project, { id: project.id, name: 'Delegated plugin project' }, 'the plugin acts as the account, which opens the chat project with its own right')
       assert.equal((await call('get_plugin_action', { requestId: pending.id })).status, 'pending')
       assert.equal((await call('cancel_plugin_action', { requestId: pending.id })).status, 'cancelled')
     } finally { stop(); await client.close(); await server.close() }

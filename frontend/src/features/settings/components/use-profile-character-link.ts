@@ -34,8 +34,8 @@ export function useProfileCharacterLink({ open, profile, draft, setDraft, adoptO
 }) {
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
-  const canView = permissions.has('characters.view')
-  const canEdit = permissions.has('characters.edit')
+  const canView = permissions.canRead
+  const canEdit = permissions.canEdit
   const draftRef = useRef(draft)
   draftRef.current = draft
   const link = draft.characterLink

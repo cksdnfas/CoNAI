@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -95,7 +96,7 @@ function PublicComfyWorkflowPageContent() {
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [authoringWorkflow, setAuthoringWorkflow] = useState<GenerationWorkflowDetail | null>(null)
   const [isAuthoringOpen, setIsAuthoringOpen] = useState(false)
-  const authoringDropdowns = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: getGenerationCustomDropdownLists, enabled: isAuthoringOpen || authStatusQuery.data?.permissionKeys.includes('workflows.view') === true })
+  const authoringDropdowns = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: getGenerationCustomDropdownLists, enabled: isAuthoringOpen || authStatusQuery.data?.permissionKeys.includes(CONTENT_PERMISSIONS.read) === true })
   const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
   const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
 
@@ -171,8 +172,8 @@ function PublicComfyWorkflowPageContent() {
     replaceDraft: (next) => { if (!persistDraft(next)) throw new Error('워크플로우 초안이 바뀌었어.'); setWorkflowDraft(next); clearFieldIssues() },
     loraOptions,
     onRefresh: async () => { const result = await workflowQuery.refetch(); if (result.error) throw result.error },
-    onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
-    onOpenEdit: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
+    onOpenCreate: authStatusQuery.data?.permissionKeys.includes(CONTENT_PERMISSIONS.edit) ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
+    onOpenEdit: authStatusQuery.data?.permissionKeys.includes(CONTENT_PERMISSIONS.edit) ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
   })
 
   const handleResetDraft = async () => {
@@ -312,7 +313,6 @@ function PublicComfyWorkflowPageContent() {
       serverRouting={false}
       queueMaxCount={publicQueueMaxCount}
       notice={queueLimitNotice}
-      requireExecutePermission={false}
       workflowDraft={workflowDraft}
       queueRegistrationCount={queueRegistrationCount}
       isGenerating={isQueueSubmitting}

@@ -32,7 +32,7 @@ function cleanup() {
 }
 /** A plugin page needs the plugin permission unless an administrator shared that page with every signed-in account. */
 function requirePluginPageAccess(requester: McpRequester, pluginId: string, pageId: string) {
-  if (requester.accountId === null || AuthAccessControlService.hasPermission(requester.accountId, 'plugins.view') || isPublicPluginPage(pluginId, pageId)) return
+  if (requester.accountId === null || AuthAccessControlService.hasPermission(requester.accountId, 'page.extensions.view') || isPublicPluginPage(pluginId, pageId)) return
   throw new PluginError('이 확장 페이지를 열 권한이 없어.', 403)
 }
 export function requirePluginInstance(id: string, caller: PluginCaller) {

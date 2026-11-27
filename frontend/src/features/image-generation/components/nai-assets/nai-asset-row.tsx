@@ -48,7 +48,7 @@ export function NaiAssetRow({
   onRemove,
 }: NaiAssetRowProps) {
   const { t } = useI18n()
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const strengthLabel = t({ ko: '강도', en: 'Strength' })
 
@@ -94,7 +94,7 @@ export function NaiAssetRow({
           {onSave ? <Tip content={saveDisabled ? saveTitle : undefined} side="left">
             <span className="grid" tabIndex={saveDisabled && saveTitle ? 0 : undefined}>
               <PopoverClose asChild>
-                <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled}>{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</Button>
+                <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onSave} disabled={!canEdit || !canViewImages || saveDisabled}>{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</Button>
               </PopoverClose>
             </span>
           </Tip> : null}

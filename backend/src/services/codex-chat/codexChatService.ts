@@ -36,7 +36,6 @@ import { notifyChatUserSend } from './chatSendEvents'
 import { attachJobResults, countPendingChatJobs, pendingGenerationOutcomes } from './codexChatMedia'
 import { chatResultMediaMap, collectChatResultMedia } from './chatResultMediaAccess'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { profileSkillIndex, skillReminderText } from './chatSkills'
 import { buildChatStyleGuidance, fieldRuleText } from './chatStyle'
@@ -203,7 +202,7 @@ function releaseStarting(threadId: number) {
  * by the generation presets with their edit time: Codex reads tool schemas once, so an edited preset gets a new process.
  */
 function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
-  const workspace = workspaceSignature(chatWorkspaces(chatContext ? chatProfileRequester(requester, chatContext) : requester, chatContext?.threadId, chatContext?.profileId))
+  const workspace = workspaceSignature(chatWorkspaces(chatContext ? requester : requester, chatContext?.threadId, chatContext?.profileId))
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
   // Tools are offered from the account's grants, so a changed grant or role needs a process with a fresh tool list.
@@ -643,7 +642,7 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
 }
 
 async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext, research?: ChatResearchExecution): Promise<Session> {
-  const workspaces = research ? [] : chatWorkspaces(chatContext ? chatProfileRequester(requester, chatContext) : requester, chatContext?.threadId, chatContext?.profileId)
+  const workspaces = research ? [] : chatWorkspaces(chatContext ? requester : requester, chatContext?.threadId, chatContext?.profileId)
   const runtime = prepareChatRuntime(requester, 'chat', research ? randomUUID().replace(/-/g, '') : workspaceRuntimeKey(workspaces))
   let features: Set<string>
   try { features = await probeCodexCli(runtime) }
@@ -973,7 +972,7 @@ export async function runCodexGroupReply(params: {
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id, params.history?.source)
         const rejected = pendingRejectedLore(threadId, profile, sent)
         const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
-        const generated = await pendingGeneratedImages(profile, chatProfileRequester(requester, params.chatContext), threadId, sent)
+        const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
         const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'))
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
@@ -1178,7 +1177,7 @@ export const CodexChatService = {
       const profile = requireCodexProfile(thread.profile_id, requester, thread.id)
       const chatContext: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct' }
       // The projects the session would get (sessionKey and startSession resolve them the same way), known before one starts.
-      const fingerprint = codexInstructionsFingerprint(profile, chatWorkspaces(chatProfileRequester(requester, chatContext), threadId, profile.id))
+      const fingerprint = codexInstructionsFingerprint(profile, chatWorkspaces(requester, threadId, profile.id))
       // Edited instructions: the next reply starts a new thread from a recap, so the old one is not worth folding.
       if (!resumableCodexThread(thread.codex_thread_id, thread.codex_instructions_fingerprint, fingerprint)) {
         throw new CodexChatError('캐릭터 지시가 바뀌어서 다음 답변부터 새 세션으로 이어져. 지금은 압축할 내용이 없어.', 409)
@@ -1569,7 +1568,7 @@ export const CodexChatService = {
         const rejected = pendingRejectedLore(threadId, profile, sent)
         const outcomes = pendingGenerationOutcomes(threadId, history.filter((entry) => entry.id < userMessageId), sent, { source: historySource, before: userMessageId })
         const replyGuide = pendingReplyGuidance(sent)
-        const pageReference = pendingPageReference(knowledgePage, requester, sent, profileContentLimit(profile))
+        const pageReference = pendingPageReference(knowledgePage, requester, sent, profileContentLimit(profile), scopes)
         const cards = pendingProposalOutcomes(threadId, sent)
         // The judge's yes items add their directives (Codex keeps its tools for the whole thread, so none are steered).
         turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, messages: history, signal: controller.signal }).catch((error: unknown) => {
@@ -1581,7 +1580,7 @@ export const CodexChatService = {
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user, historySource, userMessageId) : ''
         const agentResults = pendingAgentResults(threadId, userMessageId, sent, { recap: freshCodexThread || Boolean(recap) })
-        const mediaRequester = chatProfileRequester(requester, turn.delivery.context)
+        const mediaRequester = requester
         const images = await loadAttachedImages(profile, mediaRequester, [{ attachments, mediaAttachments }], turn.delivery.context)
         const generated = await pendingGeneratedImages(profile, mediaRequester, threadId, sent)
         const input = [recap, reference, agentResults.text, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, withMediaGeneration(mediaAttachments, profile, mediaRequester), await inlineTextsForChat(profile, requester.accountId, [{ attachments }], turn.delivery.context), images), directive, generated.text].filter(Boolean).join('\n\n')

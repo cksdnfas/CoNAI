@@ -153,7 +153,7 @@ export function knowledgeTaskConditionKey(context:KnowledgeExecutionContext,quer
 export function recordKnowledgeSearch(context:KnowledgeExecutionContext,query:string,postIds:number[]):void {
   if(!loadPostsSettings().knowledge.enabled||!query.trim()) return;
   const actor=currentKnowledgeActor(context.accountId,context.profileId,context.trust==='observed_execution'?'chat':'mcp');
-  requireKey(actor,'posts.view');
+  requireKey(actor,'content.read');
   const taskKey=knowledgeTaskConditionKey(context,query);
   db().transaction(()=>{
     const execution=ensureKnowledgeExecution(context);
@@ -173,7 +173,7 @@ export function recordKnowledgeUse(actor: PostActor, input: {
   postId: number; commentId?: number | null; body: string; intervals: Array<{ start: number; end: number }>; execution: KnowledgeExecutionContext;
 }): PostKnowledgeReference | null {
   if (!loadPostsSettings().knowledge.enabled) return null;
-  requireKey(actor, 'posts.view');
+  requireKey(actor, 'content.read');
   if (actor.accountId !== input.execution.accountId || actor.profileId !== input.execution.profileId) throw new PostError('조회 실행자가 일치하지 않아.', 403);
   const current = requirePostRow(actor, input.postId);
   // Ordinary board reads keep their existing contract and cannot accidentally create knowledge votes.
@@ -236,7 +236,7 @@ function normalizeAssessment(input: PostKnowledgeAssessmentInput, use: Knowledge
 
 function commitUseAssessment(use: KnowledgeUseRow, execution: KnowledgeExecutionRow, input: PostKnowledgeAssessmentInput, id: string): number {
   const actor = currentKnowledgeActor(execution.account_id,execution.profile_id);
-  requireKey(actor,'posts.view'); requireKey(actor,'posts.evaluate');
+  requireKey(actor,'content.read');
   const post = requirePostRow(actor,use.post_id);
   const knowledge=requireKnowledgeRow(actor,use.post_id);
   if(post.status==='hidden'||!knowledge.enabled) throw new PostError('평가할 지식 문서가 현재 사용 가능하지 않아.',404);
@@ -261,7 +261,6 @@ function commitUseAssessment(use: KnowledgeUseRow, execution: KnowledgeExecution
 }
 
 export function submitKnowledgeAssessment(actor: PostActor, executionContext: KnowledgeExecutionContext, input: PostKnowledgeAssessmentInput): { assessmentId: string; phase: 'provisional' | 'final'; eventId: number } {
-  requireKey(actor,'posts.evaluate');
   if(!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.',409);
   if (actor.accountId !== executionContext.accountId || actor.profileId !== executionContext.profileId) throw new PostError('평가 실행자가 일치하지 않아.',403);
   return db().transaction(() => {

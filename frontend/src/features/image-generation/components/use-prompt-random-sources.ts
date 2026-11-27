@@ -43,24 +43,24 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
   enabled: boolean
   promptType: PromptTypeFilter
 }) {
-  const { canViewPrompts } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const summaryQuery = useQuery({
     queryKey: ['danbooru-browser-summary', 'inline-group-picker'],
     queryFn: getDanbooruBrowserSummary,
-    enabled: enabled && canViewPrompts,
+    enabled: enabled && canRead,
     staleTime: 60_000,
     retry: false,
   })
   const positiveGroupsQuery = useQuery({
     queryKey: ['prompt-groups', 'random-source', 'positive'],
     queryFn: () => getPromptGroups('positive'),
-    enabled: enabled && canViewPrompts,
+    enabled: enabled && canRead,
     staleTime: 60_000,
   })
   const negativeGroupsQuery = useQuery({
     queryKey: ['prompt-groups', 'random-source', 'negative'],
     queryFn: () => getPromptGroups('negative'),
-    enabled: enabled && canViewPrompts,
+    enabled: enabled && canRead,
     staleTime: 60_000,
   })
   const myGroupsQuery = promptType === 'negative' ? negativeGroupsQuery : positiveGroupsQuery
@@ -99,14 +99,14 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
     const isKnownWildcard = isWildcardName(token.name)
     const readyBySource: Record<PromptRandomTokenSource, boolean> = {
       wildcard: wildcardsReady,
-      tag: summaryQuery.isSuccess || !canViewPrompts,
-      my: (positiveGroupsQuery.isSuccess && negativeGroupsQuery.isSuccess) || !canViewPrompts,
+      tag: summaryQuery.isSuccess || !canRead,
+      my: (positiveGroupsQuery.isSuccess && negativeGroupsQuery.isSuccess) || !canRead,
     }
     // 접두사 없는 토큰: 와일드카드가 없거나 예전 `[1~2]` 옵션을 쓰면 백엔드가 태그 그룹으로 해석
     const isLegacyPlus = token.raw.startsWith('++')
     const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.legacy || (wildcardsReady && !isKnownWildcard))
     const source: PromptRandomTokenSource = readsAsTagGroup ? 'tag' : token.source
-    if (!readyBySource[source] || (source === 'tag' && !canViewPrompts)) {
+    if (!readyBySource[source] || (source === 'tag' && !canRead)) {
       return { state: 'pending', source, suggestion: null }
     }
     if (source === 'wildcard' ? isKnownWildcard : namesBySource[source].has(name)) {
@@ -114,7 +114,7 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
     }
     const candidates = entries.filter((entry) => entry.source === source).map((entry) => entry.name)
     return { state: 'missing', source, suggestion: findClosestName(token.name, candidates) }
-  }, [canViewPrompts, entries, isWildcardName, namesBySource, negativeGroupsQuery.isSuccess, positiveGroupsQuery.isSuccess, summaryQuery.isSuccess, wildcardsReady])
+  }, [canRead, entries, isWildcardName, namesBySource, negativeGroupsQuery.isSuccess, positiveGroupsQuery.isSuccess, summaryQuery.isSuccess, wildcardsReady])
 
   return {
     entries,

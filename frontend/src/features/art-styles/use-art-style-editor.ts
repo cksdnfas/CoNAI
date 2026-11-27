@@ -82,7 +82,7 @@ export function useArtStyleEditor({ target, onCreated, onClose }: {
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  // Without images.view the stored list reads as empty and the server refuses `images`, so it is never sent.
+  // Without the read right the stored list reads as empty and the server refuses `images`, so it is never sent.
   const { canViewImages } = useImagePermissions()
   const styleId = target && 'styleId' in target ? target.styleId : null
   const isNew = Boolean(target && 'new' in target)

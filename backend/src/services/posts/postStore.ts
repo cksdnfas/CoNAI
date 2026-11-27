@@ -88,7 +88,6 @@ function announce(postId: number, kind: 'post' | 'comment' | 'run' | 'bot-run') 
 
 /** Names and avatars resolved once per response; deleted profiles and accounts fall back to the saved name. */
 export function createAuthorResolver(actor: PostActor) {
-  const canSeeImages = actor.isAdmin || actor.keys.has('images.view');
   const profiles = new Map<number, ReturnType<typeof ChatProfileStore.find>>();
   const accounts = new Map<number, string | null>();
   const profile = (id: number) => {
@@ -109,7 +108,7 @@ export function createAuthorResolver(actor: PostActor) {
       const avatarHash = found?.avatarHash ?? null;
       return {
         type: 'profile', accountId: row.owner_account_id, profileId: row.author_profile_id, name: found?.name ?? row.author_name,
-        avatarUrl: canSeeImages && avatarHash && !isProfileAssetHidden(avatarHash) ? `/api/images/${avatarHash}/thumbnail` : null,
+        avatarUrl: avatarHash && !isProfileAssetHidden(avatarHash) ? `/api/images/${avatarHash}/thumbnail` : null,
         avatarCrop: found?.avatarCrop ?? null,
       };
     }
@@ -157,7 +156,6 @@ export function canSeePost(actor: PostActor, row: Pick<PostRow, 'status' | 'owne
 /** People edit what their account owns; a bot edits only its own posts within the account it runs as. */
 export function canEditPost(actor: PostActor, row: Pick<PostRow, 'owner_account_id' | 'author_profile_id'>) {
   if (actor.isAdmin && actor.profileId === null) return true;
-  if (!actor.keys.has('posts.write') && !actor.isAdmin) return false;
   if (row.owner_account_id !== actor.accountId) return false;
   return actor.profileId === null || row.author_profile_id === actor.profileId;
 }
@@ -169,7 +167,7 @@ function canEditComment(actor: PostActor, row: Pick<CommentRow, 'owner_account_i
 }
 
 export function requirePostRow(actor: PostActor, postId: number): PostRow {
-  requireKey(actor, 'posts.view');
+  requireKey(actor, 'content.read');
   if (!Number.isSafeInteger(postId) || postId < 1) throw new PostError('잘못된 게시물 ID야.');
   const row = db().prepare('SELECT * FROM posts WHERE id = ?').get(postId) as PostRow | undefined;
   if (!row || !canSeePost(actor, row) || findKnowledgeRow(postId)?.deleted_at) throw new PostError('게시물을 찾을 수 없어.', 404);
@@ -402,7 +400,7 @@ function statusInput(actor: PostActor, value: unknown, fallback: PostStatus): Po
 export const PostStore = {
   /** One live published-source lookup; no bodies, author resolution, search, or per-source queries. */
   publishedSources(actor: PostActor, ids: readonly number[]) {
-    requireKey(actor, 'posts.view');
+    requireKey(actor, 'content.read');
     validateScopedPostIds(ids);
     if (!ids.length) return [];
     return db().prepare(`SELECT p.id, p.revision, k.content_version AS contentVersion,
@@ -414,7 +412,7 @@ export const PostStore = {
 
   async list(actor: PostActor, query: PostListQuery, options?: { signal?: AbortSignal; rankingRetries?: number; semanticMemo?: PostSemanticMemo }): Promise<PostListResult> {
     options?.signal?.throwIfAborted();
-    requireKey(actor, 'posts.view');
+    requireKey(actor, 'content.read');
     const retries = options?.rankingRetries ?? 0;
     const semanticMemo = options?.semanticMemo ?? {};
     const offset = query.offset === undefined ? 0 : Number(query.offset);
@@ -659,7 +657,7 @@ export const PostStore = {
 
   /** `source`: manual (web), chat (a bot tool), routine, workflow, mention; `origin`: the chat reply it came from. */
   create(actor: PostActor, input: PostInput, source = 'manual', origin: PostOrigin | null = null): PostDetail {
-    requireKey(actor, 'posts.write');
+    requireKey(actor, 'content.read');
     const title = postTitle(input.title);
     const body = postBody(input.body);
     const categoryId = parseCategoryId(input.categoryId);
@@ -777,7 +775,7 @@ export const PostStore = {
 
   /** Explicit historic version access belongs to editors; publication never grants a private old attachment. */
   embeddedKnowledgeVersionFileOwner(actor: PostActor,postId: number,contentVersion: number,fileId: string): string | null {
-    requireKey(actor,'posts.view');
+    requireKey(actor,'content.read');
     const post = db().prepare('SELECT * FROM posts WHERE id=?').get(postId) as PostRow | undefined;
     if (!post || !findKnowledgeRow(postId) || !canSeePost(actor,post) || !canEditPost(actor,post)) throw new PostError('이전 판의 첨부파일을 볼 권한이 없어.',403);
     if (!Number.isSafeInteger(contentVersion) || contentVersion<1 || !db().prepare('SELECT 1 FROM post_knowledge_versions WHERE post_id=? AND content_version=?').get(postId,contentVersion)) throw new PostError('내용 판을 찾을 수 없어.',404);
@@ -849,7 +847,7 @@ export const PostCommentStore = {
    * `mentions` are profile ids the writer picked; the bot caller decides which of them actually run.
    */
   create(actor: PostActor, postId: number, input: CommentInput, options: { botRunId?: number | null; origin?: PostOrigin | null } = {}): PostComment {
-    requireKey(actor, 'posts.comment');
+    requireKey(actor, 'content.read');
     const body = postBody(input.body, POST_LIMITS.comment).trim();
     if (!body) throw new PostError('댓글 내용을 입력해줘.');
     const mentions = Array.isArray(input.mentions) ? [...new Set(input.mentions.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 20) : [];

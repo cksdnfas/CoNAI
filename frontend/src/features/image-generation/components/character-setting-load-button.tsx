@@ -71,7 +71,7 @@ const appearanceOf = (setting: CharacterSetting, outfitIndex: number) => compose
 
 /**
  * "캐릭터 불러오기": pick a character library setting and copy its appearance tags (and, when chosen, its reference
- * or gallery images) into the form. Hidden without `characters.view`; images need `images.view`. The values are
+ * or gallery images) into the form. Hidden without the read right. The values are
  * copied at that moment, so later library edits leave the form alone.
  */
 export function CharacterSettingLoadButton({
@@ -87,7 +87,7 @@ export function CharacterSettingLoadButton({
 }: CharacterSettingLoadButtonProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [step, setStep] = useState<ConfirmStep | null>(null)
@@ -98,7 +98,7 @@ export function CharacterSettingLoadButton({
     onLoadRef.current = onLoad
   })
 
-  if (!has('characters.view')) return null
+  if (!canRead) return null
 
   const Icon = icon === 'add' ? UserRoundPlus : UserRound
   const imagesOf = (setting: CharacterSetting) => (canViewImages ? characterSettingImages(setting) : [])

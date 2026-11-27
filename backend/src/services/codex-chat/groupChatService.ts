@@ -12,7 +12,6 @@ import { ChatTaskRunner } from './chatTasks'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
 import { deliveredChatMediaHashes } from './chatResultMediaAccess'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
@@ -241,7 +240,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const controller = new AbortController()
   const bounded = readGroupReplyHistory(thread, profile, { threadId: run.threadId, excludeMessageId: replacingMessageId })
   const history = bounded.history
-  const mediaRequester = chatProfileRequester(requester, { threadId: run.threadId, profileId: profile.id, kind: 'group' })
+  const mediaRequester = requester
   const messages = withLatestMediaGeneration(withGenerationOutcomes(bounded.messages), profile, mediaRequester)
   const source = sourceMessageId === replacingMessageId ? null : CodexChatStore.findMessage(run.threadId, sourceMessageId) ?? null
   const replyId = randomUUID()

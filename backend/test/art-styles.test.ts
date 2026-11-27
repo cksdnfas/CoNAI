@@ -224,7 +224,7 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
     assert.deepEqual(restored.images.map((entry) => fileBytes(entry.id)), bytes)
     assert.deepEqual([restored.description, restored.badges, restored.keywords, restored.positive, restored.negative, restored.favorite], [original.description, original.badges, original.keywords, original.positive, original.negative, original.favorite])
     assert.equal(stored(restored.images[0].id)?.parentId, styleFolder('Watercolor Wash')!.id)
-    // Again: the title is taken, so it gets a number; a missing entry is dropped; without images.view no image comes.
+    // Again: the title is taken, so it gets a number; a missing entry is dropped; without the read right no image comes.
     const broken = { ...bundle.document, styles: [{ ...bundle.document.styles[0], images: [...bundle.document.styles[0].images, { bundleFile: 'images/9/9.png', name: 'gone.png', mimeType: 'image/png' }] }] }
     await writeZip(bundlePath, [{ name: styles.ART_STYLE_BUNDLE_DOCUMENT, data: Buffer.from(JSON.stringify(broken)) }, ...bundled])
     assert.deepEqual(await styles.importArtStyles({ bundlePath }), { created: 1, renamed: 1, importedImages: original.images.length, droppedImages: 1 })
@@ -303,29 +303,25 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
     }
     assert.equal((await call('/:styleId/files/:fileId', 'get', { styleId: String(pixel.id), fileId: 'nope' })).status, 400)
 
-    await sub.test('without images.view', async (inner) => {
-      withoutPermission(inner, 'images.view')
-      const read = await call('/:styleId', 'get', { styleId: String(pixel.id) })
-      assert.deepEqual([read.status, read.body.data.images, read.body.data.coverImageId, read.body.data.imageCount], [200, [], null, 2])
-      assert.equal((await call('/', 'get')).body.data.items.find((item: any) => item.title === 'Pixel').coverImageId, null)
-      assert.equal((await call('/', 'post', {}, { title: 'Hidden', images: [] })).status, 403)
-      assert.equal((await call('/:styleId/files/:fileId', 'get', { styleId: String(pixel.id), fileId: pixel.images[0].id })).status, 403)
-      const patched = await call('/:styleId', 'patch', { styleId: String(pixel.id) }, { revision: picked.body.data.revision, positive: 'pixel art' })
-      assert.equal(patched.status, 200)
-      assert.equal(styles.getArtStyle(pixel.id).images.length, 2)
-    })
-    await sub.test('without characters.edit', async (inner) => {
-      withoutPermission(inner, 'characters.edit')
+    await sub.test('without the edit right', async (inner) => {
+      withoutPermission(inner, 'content.edit')
       const styleId = String(pixel.id)
-      for (const [routePath, method, params] of [['/', 'post', {}], ['/:styleId', 'patch', { styleId }], ['/:styleId', 'delete', { styleId }], ['/bulk', 'post', {}], ['/import', 'post', {}]] as const) {
-        const response = await call(routePath, method, params, { title: 'Nope', revision: 1, ids: [1], action: 'delete' })
+      for (const [routePath, method, params] of [['/', 'post', {}], ['/:styleId', 'patch', { styleId }], ['/bulk', 'post', {}], ['/import', 'post', {}]] as const) {
+        const response = await call(routePath, method, params, { title: 'Nope', revision: 1, ids: [1], action: 'move' })
         assert.equal(response.status, 403, `${method} ${routePath}`)
       }
       assert.equal((await call('/', 'get')).status, 200)
       assert.ok(styles.getArtStyle(pixel.id))
     })
-    await sub.test('without characters.view', async (inner) => {
-      withoutPermission(inner, 'characters.view')
+    await sub.test('without the delete right', async (inner) => {
+      withoutPermission(inner, 'content.delete')
+      const styleId = String(pixel.id)
+      assert.equal((await call('/:styleId', 'delete', { styleId })).status, 403)
+      assert.equal((await call('/bulk', 'post', {}, { ids: [1], action: 'delete' })).status, 403)
+      assert.ok(styles.getArtStyle(pixel.id))
+    })
+    await sub.test('without the read right', async (inner) => {
+      withoutPermission(inner, 'content.read')
       for (const [routePath, method] of [['/', 'get'], ['/badges', 'get'], ['/:styleId', 'get'], ['/export', 'post'], ['/:styleId/files/:fileId', 'get']] as const) {
         assert.equal((await call(routePath, method, { styleId: String(pixel.id), fileId: pixel.images[0].id }, {})).status, 403, `${method} ${routePath}`)
       }
@@ -434,8 +430,7 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
       assert.equal(styles.getArtStyle(ocean.id).description, 'changed meanwhile')
     } finally { await bridge.close() }
 
-    await sub.test('viewing needs images.view and a model that sees images, never files.view', async (inner) => {
-      withoutPermission(inner, 'files.view')
+    await sub.test('viewing needs the read right and a model that sees images', async () => {
       const gated = await open()
       try {
         const viewed = await gated.call('get_art_style', { style_id: ocean.id, view_ids: [held.id] })
@@ -451,26 +446,17 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
         assert.equal(data(await blindBridge.call('get_art_style', { style_id: ocean.id })).id, ocean.id)
       } finally { await blindBridge.close(); closeBlind() }
     })
-    await sub.test('without images.view: images hidden and image changes refused', async (inner) => {
-      withoutPermission(inner, 'images.view')
-      const gated = await open()
-      try {
-        const read = data(await gated.call('get_art_style', { style_id: ocean.id }))
-        assert.deepEqual([read.images, read.coverImageId, read.imageCount], [[], null, 2])
-        assert.equal((await gated.call('get_art_style', { style_id: ocean.id, view_ids: [held.id] })).isError, true)
-        assert.equal(await refused(gated, 'propose_art_style', { action: 'save_style', style_id: ocean.id, revision: read.revision, input: { images: [] } }), true)
-      } finally { await gated.close() }
-    })
-    await sub.test('without characters.edit: reads stay, proposals refused', async (inner) => {
-      withoutPermission(inner, 'characters.edit')
+    await sub.test('without the edit right: reads and images stay, proposals refused', async (inner) => {
+      withoutPermission(inner, 'content.edit')
       const gated = await open()
       try {
         assert.equal(data(await gated.call('list_art_styles', {})).total > 0, true)
+        assert.equal(data(await gated.call('get_art_style', { style_id: ocean.id })).imageCount, 2)
         assert.equal(await refused(gated, 'propose_art_style', { action: 'save_style', input: { title: 'Not allowed' } }), true)
       } finally { await gated.close() }
     })
-    await sub.test('without characters.view: nothing to read', async (inner) => {
-      withoutPermission(inner, 'characters.view')
+    await sub.test('without the read right: nothing to read', async (inner) => {
+      withoutPermission(inner, 'content.read')
       const gated = await open()
       try {
         assert.equal(await refused(gated, 'list_art_styles', {}), true)

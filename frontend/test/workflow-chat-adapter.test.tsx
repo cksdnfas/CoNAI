@@ -102,7 +102,7 @@ test('workflow cancellation waits for all outcomes and refreshes after partial f
   const { ChatPageProvider, useChatPage } = await import('../src/features/codex-chat/chat-page-context')
   const { useWorkflowRunnerChatPage } = await import('../src/features/module-graph/use-workflow-runner-chat-page')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.generation.view', 'generation.execute'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.generation.view'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   const root = createRoot(document.getElementById('root')!)
   t.after(async () => {

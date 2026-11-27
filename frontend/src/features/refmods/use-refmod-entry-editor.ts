@@ -213,7 +213,7 @@ export function useRefModEntryEditor({ target, onCreated, onClose }: {
   const dropdownLists = useQuery({
     queryKey: ['image-generation-custom-dropdown-lists'],
     queryFn: () => getGenerationCustomDropdownLists(),
-    enabled: (entryId !== null || isNew) && permissions.canViewWorkflows,
+    enabled: (entryId !== null || isNew) && permissions.canRead,
     staleTime: 60_000,
   })
 

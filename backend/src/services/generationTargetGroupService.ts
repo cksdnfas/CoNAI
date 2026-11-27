@@ -20,8 +20,6 @@ export type GenerationTargetGroupResult =
   | { ok: true; groupId: number | null; path: string | null }
   | { ok: false; status: 400 | 403 | 404; error: string };
 
-const GROUP_PERMISSION_KEY = 'images.edit';
-
 function hasValue(value: unknown): boolean {
   return value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
 }
@@ -30,11 +28,6 @@ function hasValue(value: unknown): boolean {
 function hasGroupPermission(accountId: number | null | undefined, permission: string): boolean {
   if (accountId == null) return !hasConfiguredAuth() && AuthAccessControlService.resolveBootstrapAccess().permissionKeys.includes(permission);
   return AuthAccessControlService.hasPermission(accountId, permission);
-}
-
-/** 그룹 지정 권한. 그룹 생성/이미지 추가 라우트와 같은 권한 키를 요구한다. */
-export function canAssignGenerationGroup(accountId: number | null | undefined): boolean {
-  return hasGroupPermission(accountId, GROUP_PERMISSION_KEY);
 }
 
 /**
@@ -107,10 +100,8 @@ export class GenerationTargetGroupService {
     if (!this.hasTarget(input)) {
       return { ok: true, groupId: null, path: null };
     }
-    if (!canAssignGenerationGroup(accountId)) {
-      return { ok: false, status: 403, error: 'Group permission is required to assign generated images to a group' };
-    }
-    if (hasValue(input.groupPath) && !hasGroupPermission(accountId, 'images.edit')) {
+    // Any existing group may receive generated images; a path can create groups, which needs edit.
+    if (hasValue(input.groupPath) && !hasGroupPermission(accountId, 'content.edit')) {
       return { ok: false, status: 403, error: 'Group creation permission is required to resolve generated image group paths' };
     }
     return this.resolve(input);

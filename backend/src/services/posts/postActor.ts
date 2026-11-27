@@ -5,7 +5,8 @@ import { getRequesterAccountId, isAdminRequest } from '../../routes/requester-se
 
 /**
  * Who acts on posts. A person through the web, or a bot (chat profile `profileId`) running as `accountId` — the
- * account that called it (comments) or saved its routine. Keys are the account's current permission keys.
+ * account that called it (comments) or saved its routine. Keys are the account's current permission keys (pages and
+ * the read/edit/delete rights).
  */
 export type PostActor = {
   accountId: number | null;

@@ -61,7 +61,7 @@ export function ComfyWorkflowListSection({
   onCopyWorkflow,
   onDeleteWorkflow,
 }: WorkflowListSectionProps) {
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { t } = useI18n()
 
   return (
@@ -70,12 +70,12 @@ export function ComfyWorkflowListSection({
       count={workflows.length}
       actions={(
         <>
-          {canUpdateWorkflows ? (
+          {canEdit ? (
             <IconButton size="icon-sm" variant="ghost" disabled={isAddingRefModExportWorkflow} aria-busy={isAddingRefModExportWorkflow} onClick={onAddRefModExportWorkflow} label={t({ ko: 'RefMod 생성 워크플로 추가', en: 'Add RefMod creation workflow' })}>
               <PackagePlus />
             </IconButton>
           ) : null}
-          <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>
+          <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canEdit} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>
             <Plus />
           </IconButton>
         </>
@@ -86,7 +86,7 @@ export function ComfyWorkflowListSection({
         const entries: ActionMenuEntry[] = [
           { key: 'save-module', icon: Save, label: t({ ko: '모듈 저장', en: 'Save module' }), onSelect: () => onSaveModule(workflow.id) },
           { key: 'copy', icon: Copy, label: t({ ko: '복사', en: 'Copy' }), onSelect: () => onCopyWorkflow(workflow.id) },
-          { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows, onSelect: () => onDeleteWorkflow(workflow.id) },
+          { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canDelete, onSelect: () => onDeleteWorkflow(workflow.id) },
         ]
         return (
           <ActionContextMenu key={workflow.id} entries={entries}>
@@ -109,7 +109,7 @@ export function ComfyWorkflowListSection({
                 </Tip>
                 {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
               </Button>
-              <IconButton size="icon-sm" variant="ghost" onClick={() => onEditWorkflow(workflow.id)} disabled={!canUpdateWorkflows} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}>
+              <IconButton size="icon-sm" variant="ghost" onClick={() => onEditWorkflow(workflow.id)} disabled={!canEdit} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}>
                 <Pencil />
               </IconButton>
               <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
@@ -380,7 +380,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
 }
 
 export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onUpdateList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
-  const { canUpdateWorkflows, isAdmin } = useFeaturePermissions()
+  const { canEdit, canDelete, isAdmin } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
@@ -400,7 +400,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
     <section>
       <RowGroup heading={<SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>} actions={
         activeTab === 'custom' ? (
-          <IconButton size="icon-sm" variant="ghost" onClick={() => setIsCustomModalOpen(true)} disabled={!canUpdateWorkflows} label={t({ ko: '목록 추가', en: 'Add list' })}>
+          <IconButton size="icon-sm" variant="ghost" onClick={() => setIsCustomModalOpen(true)} disabled={!canEdit} label={t({ ko: '목록 추가', en: 'Add list' })}>
             <Plus />
           </IconButton>
         ) : (
@@ -424,7 +424,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
             list.items.slice(0, 6).join(', ') || null,
           ].filter(Boolean)
           const entries: ActionMenuEntry[] = [
-            !list.is_auto_collected && { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows || isSubmitting, onSelect: () => void onDeleteList(list.id) },
+            !list.is_auto_collected && { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canDelete || isSubmitting, onSelect: () => void onDeleteList(list.id) },
           ]
           return (
             <ActionContextMenu key={list.id} entries={entries}>
@@ -438,7 +438,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                   <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
                 ) : (
                   <>
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canEdit || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
                     <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
                   </>
                 )}

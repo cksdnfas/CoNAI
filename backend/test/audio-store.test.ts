@@ -429,10 +429,10 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin-audio', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)
-  const listenerGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-listener', permissionKeys: ['audio.view', 'images.view'] })
+  const listenerGroup = AuthPermissionGroup.createCustomGroup({ name: 'audio-listener', permissionKeys: ['content.read'] })
   const listenerId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('listener', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(listenerGroup.id, listenerId)
-  const imageGroup = AuthPermissionGroup.createCustomGroup({ name: 'image-only', permissionKeys: ['images.view'] })
+  const imageGroup = AuthPermissionGroup.createCustomGroup({ name: 'no-rights', permissionKeys: [] })
   const imageOnlyId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('imageonly', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(imageGroup.id, imageOnlyId)
   invalidateConfiguredAuthCache()
@@ -461,7 +461,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     return { status: response.status, headers: response.headers, buffer, json: () => JSON.parse(buffer.toString('utf8')) }
   }
 
-  await t.test('/api/audio: audio.view reads, audio.edit writes, everyone else is refused', async () => {
+  await t.test('/api/audio: the read right reads, edit writes, everyone else is refused', async () => {
     assert.equal((await call('/api/audio/projects')).status, 401)
     assert.equal((await call('/api/audio/projects', imageOnlyId)).status, 403)
     const projectPage = await call('/api/audio/projects?limit=1', listenerId)
@@ -572,7 +572,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   })
 
   // ---------------------------------------------------------------- MCP tools
-  await t.test('MCP: review, comments and single-candidate deletion require audio.edit', async () => {
+  await t.test('MCP: review and comments need edit, deletion needs delete, reading covers orders', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
     const { Client } = await import('@modelcontextprotocol/client')
@@ -588,7 +588,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const audioTools = async (client: Awaited<ReturnType<typeof connect>>) => (await client.listTools()).tools.map((tool) => tool.name).filter((name) => name.includes('audio')).sort()
 
     const listener = await connect({ accountId: listenerId, accountType: 'guest' })
-    assert.deepEqual(await audioTools(listener), ['export_audio_selected', 'get_audio_candidate', 'get_audio_download', 'get_audio_order', 'list_audio_candidates', 'list_audio_folders', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects', 'list_audio_workflows', 'wait_audio_order'])
+    assert.deepEqual(await audioTools(listener), ['cancel_audio_order', 'export_audio_selected', 'get_audio_candidate', 'get_audio_download', 'get_audio_order', 'list_audio_candidates', 'list_audio_folders', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects', 'list_audio_workflows', 'order_audio', 'retry_audio_order_job', 'wait_audio_order'], 'reading covers ordering and exports')
     assert.deepEqual(await audioTools(await connect({ accountId: imageOnlyId, accountType: 'guest' })), [])
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
     const adminTools = await audioTools(admin)

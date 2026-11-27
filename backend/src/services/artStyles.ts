@@ -199,7 +199,7 @@ export function artStyleBadges(input: unknown = {}): ArtStyleBadgeCount[] {
 
 export function requireArtStyleImageAccess(input: unknown, canViewImages: boolean) {
   if (!canViewImages && input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'images')) {
-    throw new ArtStyleError('Permission required: images.view', 403)
+    throw new ArtStyleError('Permission required: content.read', 403)
   }
 }
 function assertTitleFree(title: string, styleId = 0) {
@@ -218,11 +218,11 @@ type StoredImage = { fileId: string; name: string; width: number | null; height:
 
 /**
  * Checks a write's images without copying anything: a held `{ id }` must be one of this style's live copies, a
- * library `{ composite_hash }` an existing still image (images.view), a staged upload still stored, a `{ file_id }` an
- * image file the requester may read (files.view). Proposals validate with it before anything is saved.
+ * library `{ composite_hash }` an existing still image (read right), a staged upload still stored, a `{ file_id }` an
+ * image file the requester may read (content.read). Proposals validate with it before anything is saved.
  */
 function planImages(items: ImageItem[], styleId: number | null, actor: ArtStyleActor): ImagePlan[] {
-  if (items.length && !actor.canViewImages) throw new ArtStyleError('Permission required: images.view', 403)
+  if (items.length && !actor.canViewImages) throw new ArtStyleError('Permission required: content.read', 403)
   return items.map((item): ImagePlan => {
     if ('__ref' in item) {
       if (!isWorkflowInputAssetRef(item)) throw new ArtStyleError('올린 이미지 정보가 올바르지 않아. 다시 올려줘.')
@@ -459,7 +459,7 @@ export async function bulkArtStyles(input: unknown, actor: ArtStyleActor = LOCAL
 
 /**
  * Styles as a portable bundle: the document and each style's own image files (`ids`, or `{}` for all). Copies gone from
- * the store are left out; without `images` (no `images.view`) the document names no image.
+ * the store are left out; without `images` (no read right) the document names no image.
  */
 export function exportArtStyles(input: unknown, images: boolean): { document: ArtStyleExport; files: Array<{ name: string; path: string }> } {
   const value = parse(z.union([z.object({ ids: idList }).strict(), z.object({}).strict()]), input ?? {})
@@ -497,7 +497,7 @@ const documentSchema = z.object({
 /**
  * Add a bundle's styles: a taken title gets ` (2)`, ` (3)`…, and each bundled image becomes the new style's own copy in
  * the file store (no library import). An image that is missing, damaged, not a still image, or that the person may not
- * see (no `images.view`) is dropped and counted.
+ * see (no read right) is dropped and counted.
  */
 export async function importArtStyles(input: { bundlePath: string }, actor: ArtStyleActor = LOCAL_ACTOR): Promise<ArtStyleImportResult> {
   let zip: AdmZip

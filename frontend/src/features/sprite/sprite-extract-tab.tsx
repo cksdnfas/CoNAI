@@ -65,7 +65,7 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const isWide = useDesktopPageLayout()
   const [stored] = useState(readStoredSpriteSettings)
   const [videoHashes, setVideoHashes] = useState<string[]>(initialVideoHash ? [initialVideoHash] : [])
@@ -157,10 +157,9 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
   const previewRunning = Boolean(previewJobId)
   const tooMany = sampling?.problem === 'frame_limit' || sampling?.problem === 'count_range'
   const samplingError = sampling?.problem && !tooMany ? t({ ko: '추출 구간·간격·개수를 확인해. 구간에 있는 프레임 수보다 많이 뽑을 수 없어.', en: 'Check the range, interval and count. The count cannot exceed the frames available in the range.' }) : null
-  const canEdit = has('images.edit')
-  const canUpload = has('images.upload')
-  const canPreview = canEdit && Boolean(info) && !sampling?.problem && !previewRunning && !batchRunning && !starting
-  const canRunAll = canEdit && canUpload && videoHashes.length > 0 && !batchRunning && !starting
+  const canUpload = canRead
+  const canPreview = canRead && Boolean(info) && !sampling?.problem && !previewRunning && !batchRunning && !starting
+  const canRunAll = canRead && videoHashes.length > 0 && !batchRunning && !starting
 
   const preview = async () => {
     if (!selected) return

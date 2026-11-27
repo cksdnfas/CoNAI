@@ -135,17 +135,14 @@ test('settings page connection: field hints, settings operation tiers and bindin
     assert.throws(() => contentEvaluationTopicPatch(full, { operation: 'add', name: '새 주제', description: '기준' }), /전체 100개/)
   })
 
-  await t.test('agent-only chat access permits personal settings actions and native writes, but no-chat accounts are denied', async (s) => {
-    const { withPagePermissions } = await import('@conai/shared')
+  await t.test('the chat page permits personal settings actions and native writes, but inactive accounts are denied', async (s) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
     const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
     const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
-    const agentPermissions = withPagePermissions(['chat.agent.use'], false)
-    assert.ok(!agentPermissions.includes('chat.use'))
-    s.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'guest' }) as never)
+    s.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: id === 3 ? 'disabled' : 'active', account_type: 'guest' }) as never)
     s.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number | null | undefined) => ({
-      groupKeys: [], permissionKeys: id === 2 ? agentPermissions : [],
+      groupKeys: [], permissionKeys: id === 2 ? ['page.chat.view'] : [],
     }))
     const personal = { path: '/settings', kind: 'settings' as const, resourceId: 'mine' }
     const agent = { accountId: 2, accountType: 'guest' as const }
@@ -153,7 +150,6 @@ test('settings page connection: field hints, settings operation tiers and bindin
     assert.doesNotThrow(() => requireChatPageAccess(agent, personal))
     for (const id of ['settings.user_profile', 'settings.flag']) {
       assert.doesNotThrow(() => requireChatPageActionAccess(agent, personal, id))
-      assert.throws(() => requireChatPageActionAccess(denied, personal, id), /권한/)
     }
     assert.throws(() => requireChatPageAccess(denied, personal), /권한/)
     updateChatSettings({ enabled: true })
@@ -194,9 +190,9 @@ test('settings page connection: field hints, settings operation tiers and bindin
     const { storedFilePath } = await import('../src/services/fileStorePaths')
     const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
     s.mock.method(AuthAccount, 'countActiveAdmins', () => 1)
-    s.mock.method(AuthAccount, 'findById', (id: number) => ({ id, username: `user-${id}`, status: 'active', account_type: id === 1 ? 'admin' : 'guest' }) as never)
+    s.mock.method(AuthAccount, 'findById', (id: number) => ({ id, username: `user-${id}`, status: id === 3 ? 'disabled' : 'active', account_type: id === 1 ? 'admin' : 'guest' }) as never)
     s.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number | null | undefined) => ({
-      groupKeys: [], permissionKeys: id === 3 ? [] : ['chat.use'],
+      groupKeys: [], permissionKeys: [],
     }))
     invalidateConfiguredAuthCache()
     updateChatSettings({ enabled: true })
@@ -226,7 +222,7 @@ test('settings page connection: field hints, settings operation tiers and bindin
       assert.equal((await read(`/admin/lorebooks/${global.id}`, 2)).status, 403)
       assert.equal((await read(`/admin/lorebooks/${account.id}`, 1)).status, 404)
       const accountRead = await read(`/lorebooks/${account.id}`, 1)
-      assert.equal(accountRead.status, 200, 'account books are shared across accounts with chat access')
+      assert.equal(accountRead.status, 200, 'account books are shared across signed-in accounts')
       assert.deepEqual((await accountRead.json() as { data: unknown }).data, account)
       assert.equal((await read(`/lorebooks/${account.id}`, 3)).status, 403)
       assert.equal((await read(`/lorebooks/${global.id}`, 1)).status, 404)

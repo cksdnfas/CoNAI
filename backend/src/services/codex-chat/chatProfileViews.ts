@@ -1,4 +1,4 @@
-import { canRequesterViewImages } from '../../middleware/imageAccess'
+import { requesterHasRight } from '../../middleware/featureAccess'
 import type { ChatProfile } from './chatProfiles'
 import { chatExpressionGroupId } from './chatEmoticons'
 import { effectiveModelOf, modelLabelOf } from './chatModelRoles'
@@ -16,7 +16,7 @@ export function backgroundVersionOf(profile: ChatProfile) {
  * the profile looks like is named (its folders and name); others only see the profile.
  */
 export function toPublicProfile(profile: ChatProfile, accountId: number | null, canViewLibrary: boolean, hidden?: ReadonlySet<string>) {
-  const canViewImages = canRequesterViewImages({ accountId, accountType: null })
+  const canViewImages = requesterHasRight({ accountId, accountType: null }, 'read')
   const link = canViewLibrary ? profile.characterLink : null
   return {
     id: profile.id,

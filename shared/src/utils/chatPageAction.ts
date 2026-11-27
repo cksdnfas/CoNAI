@@ -1,4 +1,6 @@
 import { pageSettingsScopes } from '../constants/pageSettings'
+import { scopeRequirement, type ContentRight } from '../constants/permissions'
+import type { McpHttpScope } from '../types/settings'
 import type { ChatPageAction, ChatPageActionProposal, ChatPageData, ChatPageSchema } from '../types/chatPageAction'
 import type { ChatPageSnapshot } from '../types/chatPage'
 import { requireChatPageTarget } from './chatPage'
@@ -90,119 +92,130 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 }
 
 /** IDs and route bindings are maintained by the app; snapshots cannot grant arbitrary native actions. */
-const nativeActionPermissions = {
-  'plugin_author.open': null, 'plugin_author.create': null, 'plugin_author.file': null, 'plugin_author.edit': null,
-  'plugin_author.save': null, 'plugin_author.review': null, 'plugin_author.install': null, 'plugin_author.export': null, 'plugin_author.refresh': null,
-  'plugin_author.write': null, 'plugin_author.at': null,
+const nativeActionScopes = {
+  'plugin_author.open': 'configure', 'plugin_author.create': 'configure', 'plugin_author.file': 'configure', 'plugin_author.edit': 'configure',
+  'plugin_author.save': 'configure', 'plugin_author.review': 'configure', 'plugin_author.install': 'configure', 'plugin_author.export': 'configure', 'plugin_author.refresh': 'configure',
+  'plugin_author.write': 'configure', 'plugin_author.at': 'configure',
   // Plugin management's Git sources (administrator routes): check and review install nothing; install is a review card.
-  'plugin_source.check': null, 'plugin_source.review': null, 'plugin_source.install': null,
+  'plugin_source.check': 'configure', 'plugin_source.review': 'configure', 'plugin_source.install': 'configure',
   // Retrying the startup sync of official packages replaces plugin code, so it is a review card.
-  'plugin_bundled.sync': null,
-  'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
-  'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
-  'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.delete': 'prompts.edit', 'prompt.select': 'prompts.view',
-  'prompt.search': 'prompts.view', 'prompt.group': 'prompts.view', 'prompt.page': 'prompts.view',
-  'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.delete': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
-  'wildcard.create': 'wildcards.edit', 'wildcard.update': 'wildcards.edit', 'wildcard.delete': 'wildcards.edit', 'wildcard.select': 'wildcards.view', 'wildcard.draft': 'wildcards.view',
+  'plugin_bundled.sync': 'configure',
+  'workspace.open': 'read', 'workspace.search': 'read', 'workspace.new': 'organize', 'workspace.create': 'organize', 'workspace.mkdir': 'organize', 'workspace.save': 'organize',
+  'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': 'configure', 'page_settings.select': null, 'page_settings.close': null,
+  'prompt.create': 'organize', 'prompt.update': 'organize', 'prompt.delete': 'delete', 'prompt.select': 'read',
+  'prompt.search': 'read', 'prompt.group': 'read', 'prompt.page': 'read',
+  'preset.create': 'organize', 'preset.update': 'organize', 'preset.delete': 'delete', 'preset.select': 'read', 'preset.draft': 'read', 'preset.insert': 'read',
+  'wildcard.create': 'organize', 'wildcard.update': 'organize', 'wildcard.delete': 'delete', 'wildcard.select': 'read', 'wildcard.draft': 'read',
   // Character library (/characters): folder and setting navigation, the open editor's draft, and review-card saves/deletes.
-  'character.open_folder': 'characters.view', 'character.search': 'characters.view', 'character.open_setting': 'characters.view',
-  'character.new_setting': 'characters.edit', 'character.draft': 'characters.edit', 'character.save': 'characters.edit', 'character.delete': 'characters.edit',
-  'character.folder_create': 'characters.edit', 'character.folder_rename': 'characters.edit', 'character.folder_move': 'characters.edit',
-  'character.filter': 'characters.view', 'character.fill': 'characters.edit', 'character.favorite': 'characters.edit',
-  'character.editor_tab': 'characters.view',
-  'character.references_add': 'characters.edit', 'character.reference_category': 'characters.edit', 'character.reference_remove': 'characters.edit', 'character.reference_set': 'characters.edit',
-  'character.category_add': 'characters.edit', 'character.category_rename': 'characters.edit', 'character.category_remove': 'characters.edit',
-  'character.bulk_move': 'characters.edit', 'character.bulk_delete': 'characters.edit',
-  'character.catalog_search': 'prompts.view', 'character.catalog_import': 'characters.edit',
+  'character.open_folder': 'read', 'character.search': 'read', 'character.open_setting': 'read',
+  'character.new_setting': 'organize', 'character.draft': 'organize', 'character.save': 'organize', 'character.delete': 'delete',
+  'character.folder_create': 'organize', 'character.folder_rename': 'organize', 'character.folder_move': 'organize',
+  'character.filter': 'read', 'character.fill': 'organize', 'character.favorite': 'organize',
+  'character.editor_tab': 'read',
+  'character.references_add': 'organize', 'character.reference_category': 'organize', 'character.reference_remove': 'organize', 'character.reference_set': 'organize',
+  'character.category_add': 'organize', 'character.category_rename': 'organize', 'character.category_remove': 'organize',
+  'character.bulk_move': 'organize', 'character.bulk_delete': 'delete',
+  'character.catalog_search': 'read', 'character.catalog_import': 'organize',
   // The scrolled lists' next batch (library and catalog).
-  'character.load_more': 'characters.view', 'character.catalog_load_more': 'prompts.view',
+  'character.load_more': 'read', 'character.catalog_load_more': 'read',
   // Art styles (/characters?view=styles): list view, the open style's draft, favorites, and review-card create/save/delete.
-  'art_style.filter': 'characters.view', 'art_style.load_more': 'characters.view', 'art_style.open': 'characters.view', 'art_style.close': 'characters.view',
-  'art_style.draft': 'characters.edit', 'art_style.images': 'characters.edit', 'art_style.favorite': 'characters.edit',
-  'art_style.create': 'characters.edit', 'art_style.save': 'characters.edit', 'art_style.delete': 'characters.edit',
+  'art_style.filter': 'read', 'art_style.load_more': 'read', 'art_style.open': 'read', 'art_style.close': 'read',
+  'art_style.draft': 'organize', 'art_style.images': 'organize', 'art_style.favorite': 'organize',
+  'art_style.create': 'organize', 'art_style.save': 'organize', 'art_style.delete': 'delete',
   // RefMod entries (/characters?view=refmods): list view and server status, the open entry's draft (its form fields go through
   // page_fill, comfy.node and media.attach/media.clear like the ComfyUI page), favorites and 등록 at once, review-card create/save/delete/build.
-  'refmod.filter': 'characters.view', 'refmod.load_more': 'characters.view', 'refmod.server': 'characters.view', 'refmod.open': 'characters.view', 'refmod.close': 'characters.view',
-  'refmod.draft': 'characters.edit', 'refmod.favorite': 'characters.edit', 'refmod.adopt': 'characters.edit',
-  'refmod.create': 'characters.edit', 'refmod.save': 'characters.edit', 'refmod.delete': 'characters.edit', 'refmod.build': 'generation.execute',
-  'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.edit', 'comfy.open_edit': 'workflows.edit',
-  'comfy.author': 'workflows.view', 'comfy.save': 'workflows.edit', 'comfy.register': 'workflows.edit', 'comfy.node': null,
-  // The server check uses the editor's own check route (workflows.edit); suggested fields only mark inputs in the draft.
-  'comfy.check': 'workflows.edit', 'comfy.suggest_fields': 'workflows.view',
+  'refmod.filter': 'read', 'refmod.load_more': 'read', 'refmod.server': 'read', 'refmod.open': 'read', 'refmod.close': 'read',
+  'refmod.draft': 'organize', 'refmod.favorite': 'organize', 'refmod.adopt': 'organize',
+  'refmod.create': 'organize', 'refmod.save': 'organize', 'refmod.delete': 'delete', 'refmod.build': 'generate',
+  'comfy.select': 'read', 'comfy.refresh': 'read', 'comfy.open_create': 'organize', 'comfy.open_edit': 'organize',
+  'comfy.author': 'read', 'comfy.save': 'organize', 'comfy.register': 'organize', 'comfy.node': null,
+  // The server check uses the editor's own check route (content.edit); suggested fields only mark inputs in the draft.
+  'comfy.check': 'organize', 'comfy.suggest_fields': 'read',
   'media.attach': null, 'media.clear': null,
   'nai.characters': null, 'nai.references': null,
-  'nai.generate': 'generation.execute', 'codex.generate': 'generation.execute', 'comfy.generate': 'generation.execute',
-  'generation.history_load': 'images.view',
-  'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view', 'workflow.save': 'workflows.edit',
+  'nai.generate': 'generate', 'codex.generate': 'generate', 'comfy.generate': 'generate',
+  'generation.history_load': 'read',
+  'workflow.select': 'read', 'workflow.inputs': 'read', 'workflow.save': 'organize',
   // Workflow runs and autoruns (예약): each applied card calls the same route as its button, as the person.
-  'workflow.run': 'generation.execute', 'workflow.schedule_save': 'workflows.edit', 'workflow.schedule_pause': 'generation.execute',
-  'workflow.schedule_resume': 'generation.execute', 'workflow.schedule_run_now': 'generation.execute', 'workflow.schedule_delete': 'workflows.edit',
-  'workflow.run_cancel': 'generation.execute', 'workflow.runs_cleanup': 'workflows.edit',
-  'group.select': 'images.view', 'group.create': 'images.edit', 'group.update': 'images.edit', 'group.auto_collect': 'images.edit',
-  'group.move': 'images.edit', 'group.delete': 'images.delete',
-  'group.source': 'images.view', 'group.select_images': 'images.view', 'group.add_images': 'images.edit',
-  'group.remove_images': 'images.edit', 'group.delete_images': 'images.delete', 'group.auto_collect_all': 'images.edit', 'group.rebuild_folders': 'images.edit',
+  'workflow.run': 'generate', 'workflow.schedule_save': 'organize', 'workflow.schedule_pause': 'generate',
+  'workflow.schedule_resume': 'generate', 'workflow.schedule_run_now': 'generate', 'workflow.schedule_delete': 'delete',
+  'workflow.run_cancel': 'generate', 'workflow.runs_cleanup': 'organize',
+  'group.select': 'read', 'group.create': 'organize', 'group.update': 'organize', 'group.auto_collect': 'organize',
+  'group.move': 'organize', 'group.delete': 'delete',
+  'group.source': 'read', 'group.select_images': 'read', 'group.add_images': 'organize',
+  'group.remove_images': 'organize', 'group.delete_images': 'delete', 'group.auto_collect_all': 'organize', 'group.rebuild_folders': 'organize',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
-  'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
-  'profile.open_folder': null, 'profile.search': null, 'profile.folder_create': null, 'profile.folder_rename': null,
-  'profile.folder_move': null, 'profile.folder_delete': null, 'profile.move': null, 'profile.reorder': null,
+  'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': 'configure', 'profile.section': null, 'profile.draft': null, 'profile.save': 'configure', 'profile.assets': 'generate',
+  'profile.open_folder': null, 'profile.search': null, 'profile.folder_create': 'configure', 'profile.folder_rename': 'configure',
+  'profile.folder_move': 'configure', 'profile.folder_delete': 'configure', 'profile.move': 'configure', 'profile.reorder': 'configure',
   // Saves the profile's own appearance into the character library (new setting, or over its detached origin).
-  'profile.character_save': 'characters.edit',
+  'profile.character_save': 'organize',
   // Generation pages: copy a character library setting's tags (and reference image) into the form.
-  'character_setting.insert': 'characters.view',
+  'character_setting.insert': 'read',
   // Generation pages: copy an art style's prompts (and, when asked, its images) into the form.
-  'art_style.insert': 'characters.view',
-  'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view',
-  'library.filters': 'images.view', 'library.assign_group': 'images.edit', 'library.delete': 'images.delete', 'files.open': 'files.view', 'files.preview': 'files.view',
+  'art_style.insert': 'read',
+  'library.search': 'read', 'library.history': 'read', 'library.open': 'read', 'library.select': 'read', 'library.hide_groups': 'read',
+  'library.filters': 'read', 'library.assign_group': 'organize', 'library.delete': 'delete', 'files.open': 'read', 'files.preview': 'read',
   // File store: names and moves run directly; deletes, restores and document saves use review cards.
-  'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
-  'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
-  'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
+  'files.select': 'read', 'files.new_folder': 'organize', 'files.rename': 'organize', 'files.move': 'organize', 'files.new_document': 'organize', 'files.edit_document': 'organize',
+  'files.name_save': 'organize', 'files.move_save': 'organize', 'files.delete': 'delete', 'files.restore_version': 'organize',
+  'files.doc_at': 'read', 'files.doc_edit': 'organize', 'files.doc_append': 'organize', 'files.doc_save': 'organize',
   // Chat › 자원 and Settings › 채팅 editors (lorebooks, generation presets, judge presets, blocks, tool presets, skills). Saving uses each editor's own admin API.
-  'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null, 'skill.sections': null,
-  'chat.open': 'chat.use', 'chat.prepare': 'chat.use', 'chat.rename': 'chat.use', 'chat.pin': 'chat.use', 'chat.archive': 'chat.use', 'chat.delete': 'chat.use',
+  'resource.open': null, 'resource.save': 'configure', 'lorebook.entries': null, 'block.fields': null, 'skill.sections': null,
+  'chat.open': null, 'chat.prepare': null, 'chat.rename': null, 'chat.pin': null, 'chat.archive': null, 'chat.delete': null,
   'plugins.open': null,
-  'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
+  'audio.open': 'read', 'audio.filter': 'read', 'audio.select': 'read',
   'sprite.select': null,
   // Sprite tabs: list and form edits are drafts; runs that save to the library are review cards.
-  'sprite.add_videos': 'images.edit', 'sprite.remove_videos': 'images.edit', 'sprite.preview': 'images.edit', 'sprite.run': 'images.upload', 'sprite.stop': 'images.edit', 'sprite.download_zip': 'images.view',
-  'sprite.add_sheets': 'images.edit', 'sprite.remove_sheets': 'images.edit', 'sprite.sheet': 'images.edit', 'sprite.download': 'images.edit',
-  'sprite.add_sources': 'images.edit', 'sprite.remove_sources': 'images.edit',
-  'audio.project': 'audio.view', 'audio.search': 'audio.view', 'audio.generate': 'generation.execute',
+  'sprite.add_videos': null, 'sprite.remove_videos': null, 'sprite.preview': 'read', 'sprite.run': 'generate', 'sprite.stop': 'generate', 'sprite.download_zip': 'read',
+  'sprite.add_sheets': null, 'sprite.remove_sheets': null, 'sprite.sheet': null, 'sprite.download': 'read',
+  'sprite.add_sources': null, 'sprite.remove_sources': null,
+  'audio.project': 'read', 'audio.search': 'read', 'audio.generate': 'generate',
   // Upload page: re-reading, converting and downloading stay on screen; adding to the library is a review card.
-  'upload.reextract': 'images.upload', 'upload.convert': 'images.upload', 'upload.download': 'images.upload', 'upload.library': 'images.upload',
+  'upload.reextract': null, 'upload.convert': null, 'upload.download': null, 'upload.library': 'organize',
   // Posts board: the editor and the comment box save through the board's own routes.
-  'posts.open': 'posts.view', 'posts.category': 'posts.view', 'posts.tag': 'posts.view', 'posts.back': 'posts.view',
-  'posts.new': 'posts.write', 'posts.edit': 'posts.write', 'posts.save': 'posts.write', 'posts.comment': 'posts.comment',
-  'posts.layout': 'posts.view', 'posts.filter': 'posts.view', 'posts.body_at': 'posts.view', 'posts.body_edit': 'posts.write',
-  'posts.comments_more': 'posts.view', 'posts.comments_at': 'posts.view',
-  'posts.delete': 'posts.write', 'posts.restore_revision': 'posts.write', 'posts.comment_update': 'posts.comment', 'posts.comment_delete': 'posts.comment', 'posts.bot_cancel': 'posts.view',
+  'posts.open': 'read', 'posts.category': 'read', 'posts.tag': 'read', 'posts.back': 'read',
+  'posts.new': 'organize', 'posts.edit': 'organize', 'posts.save': 'organize', 'posts.comment': 'organize',
+  'posts.layout': 'read', 'posts.filter': 'read', 'posts.body_at': 'read', 'posts.body_edit': 'organize',
+  'posts.comments_more': 'read', 'posts.comments_at': 'read',
+  'posts.delete': 'organize', 'posts.restore_revision': 'organize', 'posts.comment_update': 'organize', 'posts.comment_delete': 'organize', 'posts.bot_cancel': 'read',
   // Administrators only (the routes check the role; the page offers them only to administrators).
-  'posts.comment_hide': 'posts.view', 'posts.category_create': 'posts.view', 'posts.category_update': 'posts.view', 'posts.category_delete': 'posts.view',
-  'wallpaper.select': null, 'wallpaper.open_preset': null, 'wallpaper.add_widget': null, 'wallpaper.save': null,
+  'posts.comment_hide': 'configure', 'posts.category_create': 'configure', 'posts.category_update': 'configure', 'posts.category_delete': 'configure',
+  'wallpaper.select': null, 'wallpaper.open_preset': null, 'wallpaper.add_widget': null, 'wallpaper.save': 'configure',
   // Wallpaper editor: draft edits stay in this browser's draft; presets, the schedule and runtime keys save through admin-only routes.
   'wallpaper.update_widget': null, 'wallpaper.arrange': null, 'wallpaper.apply_template': null, 'wallpaper.set_look': null, 'wallpaper.set_canvas': null,
   'wallpaper.history': null, 'wallpaper.open_dialog': null,
-  'wallpaper.delete_preset': null, 'wallpaper.save_schedule': null, 'wallpaper.issue_key': null, 'wallpaper.revoke_key': null,
-  'metadata.save': 'images.edit',
-  'image_detail.open_metadata': 'page.metadata-editor.view', 'image_detail.step': 'images.view', 'image_detail.similar': 'images.view',
-  'image_detail.edit': 'images.edit', 'image_detail.sprite': 'images.edit', 'image_detail.assign_group': 'images.edit', 'image_detail.delete': 'images.delete',
+  'wallpaper.delete_preset': 'configure', 'wallpaper.save_schedule': 'configure', 'wallpaper.issue_key': 'configure', 'wallpaper.revoke_key': 'configure',
+  'metadata.save': 'organize',
+  'image_detail.open_metadata': 'read', 'image_detail.step': 'read', 'image_detail.similar': 'read',
+  'image_detail.edit': 'organize', 'image_detail.sprite': 'organize', 'image_detail.assign_group': 'organize', 'image_detail.delete': 'delete',
   // Full-screen image editor (an overlay on any page that opens it). Edits stay in the browser's canvas; saving runs the
   // opener's own save path (library upload or the generation form), whose routes check their permissions.
   'image_editor.tool': null, 'image_editor.layer_select': null, 'image_editor.brush': null, 'image_editor.layer': null,
   'image_editor.crop': null, 'image_editor.crop_apply': null, 'image_editor.history': null, 'image_editor.transform': null,
   'image_editor.selection': null, 'image_editor.mask': null, 'image_editor.save': null,
   // Settings tabs (an administrator's page). Every change saves through that tab's own admin API, so each is a review card.
-  'settings.save': null, 'settings.ai_runtime': null, 'settings.ai_runtime_check': null, 'settings.kaloscope_requeue': null, 'settings.rating_tier_add': null,
-  'settings.mcp_http': null, 'settings.maintenance': null, 'settings.folder': null,
-  'settings.chat_options': null, 'settings.default_model': null, 'settings.default_judge': null, 'settings.llm_preset': null, 'settings.mcp_server': null, 'settings.mcp_server_draft': null,
+  'settings.save': 'configure', 'settings.ai_runtime': 'configure', 'settings.ai_runtime_check': null, 'settings.kaloscope_requeue': 'configure', 'settings.rating_tier_add': 'configure',
+  'settings.mcp_http': 'configure', 'settings.maintenance': 'configure', 'settings.folder': 'configure',
+  'settings.chat_options': 'configure', 'settings.default_model': 'configure', 'settings.default_judge': 'configure', 'settings.llm_preset': 'configure', 'settings.mcp_server': 'configure', 'settings.mcp_server_draft': null,
   'settings.usage_period': null, 'settings.judge_filter': null,
-  'settings.content_topic': null,
-  'settings.user_profile': 'page.chat.view', 'settings.flag': 'page.chat.view', 'settings.routine': null, 'settings.automation_switch': null,
-} satisfies Record<string, string | null>
+  'settings.content_topic': 'configure',
+  'settings.user_profile': null, 'settings.flag': null, 'settings.routine': 'configure', 'settings.automation_switch': 'configure',
+} satisfies Record<string, McpHttpScope | null>
 /** Native adapters can only declare IDs present in the shared permission contract. */
-export type NativeChatPageActionId = keyof typeof nativeActionPermissions
-export const CHAT_PAGE_ACTION_PERMISSIONS: Readonly<Record<string, string | null>> = nativeActionPermissions
+export type NativeChatPageActionId = keyof typeof nativeActionScopes
+/** The tool scope each native action needs (null: none). The account needs scopeRequirement(scope); a chat profile needs the scope. */
+export const CHAT_PAGE_ACTION_SCOPES: Readonly<Record<string, McpHttpScope | null>> = nativeActionScopes
+export function chatPageActionScope(actionId: string): McpHttpScope | null {
+  return own(CHAT_PAGE_ACTION_SCOPES, actionId) ? CHAT_PAGE_ACTION_SCOPES[actionId] : null
+}
+/** Posts and comments the person writes are their own: the profile still needs the scope, the account only sign-in. */
+const OWN_CONTENT_ACTIONS = new Set(['posts.new', 'posts.edit', 'posts.save', 'posts.body_edit', 'posts.delete', 'posts.restore_revision', 'posts.comment', 'posts.comment_update', 'posts.comment_delete'])
+/** What the account needs for a native action (null: nothing beyond the page). */
+export function chatPageActionRequirement(actionId: string): ContentRight | 'signedIn' | 'admin' | null {
+  const scope = chatPageActionScope(actionId)
+  return scope === null ? null : OWN_CONTENT_ACTIONS.has(actionId) ? 'signedIn' : scopeRequirement(scope)
+}
 /**
  * Native action tiers are fixed here; installed plugins declare their own tiers in the manifest:
  * - view: moves or opens something (navigation, tabs, selection, opening an editor). Runs right away.
@@ -259,7 +272,7 @@ for (const id of ['prompt.delete', 'preset.delete', 'wildcard.delete', 'chat.del
 for (const id of ['prompt.search', 'prompt.group', 'prompt.page', 'plugins.open']) VIEW_ACTIONS.add(id)
 for (const id of ['prompt.search', 'prompt.group', 'prompt.page']) IN_PLACE_VIEW_ACTIONS.add(id)
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
-  if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
+  if (!own(CHAT_PAGE_ACTION_SCOPES, id)) {
     if (action?.tier === 'view' || action?.tier === 'draft' || action?.tier === 'direct' || action?.tier === 'commit') return action.tier
     throw new Error('등록된 작업 등급이 필요해.')
   }
@@ -290,12 +303,12 @@ export function pluginPageRoute(path: string): { pluginId: string; pageId: strin
 }
 export function chatPageActionAllowed(path: string, id: string): boolean {
   // Plugin management (drafts, Git sources, official plugin updates) appears in Settings and on the 플러그인 page; the server requires an administrator.
-  if (id.startsWith('plugin_author.') || id.startsWith('plugin_source.') || id.startsWith('plugin_bundled.')) return (path === '/settings' || path === '/extensions') && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
+  if (id.startsWith('plugin_author.') || id.startsWith('plugin_source.') || id.startsWith('plugin_bundled.')) return (path === '/settings' || path === '/extensions') && own(CHAT_PAGE_ACTION_SCOPES, id)
   const extension = pluginPageRoute(path)
   // Structural validation only. The server additionally checks the installed manifest on every use.
-  if (extension && !own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return id.startsWith(`${extension.pluginId}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)
-  if (id.startsWith('workspace.')) return path === '/files' && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
-  if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
+  if (extension && !own(CHAT_PAGE_ACTION_SCOPES, id)) return id.startsWith(`${extension.pluginId}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)
+  if (id.startsWith('workspace.')) return path === '/files' && own(CHAT_PAGE_ACTION_SCOPES, id)
+  if (!own(CHAT_PAGE_ACTION_SCOPES, id)) return false
   if (id.startsWith('page_settings.') || id === 'page.settings_open') return pageSettingsScopes(path).length > 0
   if (id.startsWith('page.')) return true
   // The editor opens over library, group, detail and generation pages; extension pages never host it.
@@ -350,7 +363,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
       if (keys.some(key => typeof key !== 'string' || !key || key.length > 200 || isPrivateChatPageKey(key)) || !own(schema.properties ?? {}, target.argument)) throw new Error('작업 대상 정의가 올바르지 않아.')
       return { argument: target.argument, collection: target.collection, id: target.id, keys: [...new Set(target.keys)].sort() }
     })
-    if (pluginPageRoute(path) && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
+    if (pluginPageRoute(path) && !own(CHAT_PAGE_ACTION_SCOPES, raw.id)) {
       return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier }
     }
     return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, ...inputs, ...(targets ? { targets } : {}), ...(raw.revisionScope === 'action' ? { revisionScope: 'action' as const } : {}) }

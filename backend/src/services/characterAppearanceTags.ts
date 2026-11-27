@@ -126,7 +126,7 @@ export async function fillCharacterAppearance(input: unknown, canViewImages: boo
   const value = parsed.data;
   if (value.source === 'danbooru') return fillFromDanbooruCharacter(value.character);
   if (value.source === 'text') return { ...splitAppearanceText(value.text), name: null };
-  if (!canViewImages) throw new CharacterAppearanceFillError('Permission required: images.view', 403);
+  if (!canViewImages) throw new CharacterAppearanceFillError('Permission required: content.read', 403);
   const record = queryActiveImageRecord(value.imageHash);
   if (!record) throw new CharacterAppearanceFillError('라이브러리에서 그 이미지를 찾지 못했어.', 404);
   let tags = ValidatorService.parseAutoTags(record.auto_tags);

@@ -34,9 +34,9 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   const admin = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(admin)
   invalidateConfiguredAuthCache()
-  const allowed = AuthPermissionGroup.createCustomGroup({ name: 'image generator', permissionKeys: ['generation.execute', 'workflows.view', 'images.view'] })
-  const denied = AuthPermissionGroup.createCustomGroup({ name: 'generator without images', permissionKeys: ['generation.execute', 'workflows.view'] })
-  const alsoAllowed = AuthPermissionGroup.createCustomGroup({ name: 'other image generator', permissionKeys: ['generation.execute', 'workflows.view', 'images.view'] })
+  const allowed = AuthPermissionGroup.createCustomGroup({ name: 'image generator', permissionKeys: ['content.read'] })
+  const denied = AuthPermissionGroup.createCustomGroup({ name: 'generator without images', permissionKeys: [] })
+  const alsoAllowed = AuthPermissionGroup.createCustomGroup({ name: 'other image generator', permissionKeys: ['content.read'] })
   const allowedSettings = mcpHttpSettingsService.createApiKey('allowed', allowed.group_key)
   const allowedKey = allowedSettings.keys.find((key) => key.name === 'allowed')!
   const deniedSettings = mcpHttpSettingsService.createApiKey('denied', denied.group_key)
@@ -63,7 +63,7 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   const input = { service_type: 'comfyui' as const, workflow_id: workflowId, inputs: { image: { composite_hash: hash } } }
   requireMcpToolAccess(allowedContext, 'submit_generation_job', input)
   requireMcpToolAccess(deniedContext, 'submit_generation_job', input)
-  await assert.rejects(enqueueMcpGenerationJob(deniedContext, input), /images\.view/)
+  await assert.rejects(enqueueMcpGenerationJob(deniedContext, input), /content\.read/)
   const queued = await enqueueMcpGenerationJob(allowedContext, input)
   assert.ok(queued?.id)
   const job = GenerationQueueModel.findById(queued.id)!
@@ -103,8 +103,8 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   const stored = JSON.parse(await fs.promises.readFile(keyFile, 'utf8'))
   stored.keys.find((key: { id: string }) => key.id === allowedKey.id).groupKey = denied.group_key
   await fs.promises.writeFile(keyFile, JSON.stringify(stored))
-  await assert.rejects(executeGenerationQueueJob(retry, null, {} as any), /images\.view/)
-  assert.throws(() => GenerationQueueService.retryJob(job.id), /images\.view/)
+  await assert.rejects(executeGenerationQueueJob(retry, null, {} as any), /content\.read/)
+  assert.throws(() => GenerationQueueService.retryJob(job.id), /content\.read/)
   stored.keys.find((key: { id: string }) => key.id === allowedKey.id).groupKey = alsoAllowed.group_key
   await fs.promises.writeFile(keyFile, JSON.stringify(stored))
   const movedJob = await enqueueMcpGenerationJob(allowedContext, input)
@@ -150,8 +150,8 @@ test('accountless MCP image jobs retain only their authenticated key authority',
     const response = await fetch(origin + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     assert.equal(response.status, 400, route)
   }
-  AuthPermissionGroup.updateCustomGroup(allowed.id, { name: allowed.name, permissionKeys: ['generation.execute', 'workflows.view'] })
-  await assert.rejects(executeGenerationQueueJob(retry, null, {} as any), /images\.view/)
+  AuthPermissionGroup.updateCustomGroup(allowed.id, { name: allowed.name, permissionKeys: [] })
+  await assert.rejects(executeGenerationQueueJob(retry, null, {} as any), /content\.read/)
   assert.equal(uploads, 5)
   auth.prepare('DELETE FROM auth_accounts WHERE id = ?').run(admin)
   invalidateConfiguredAuthCache()

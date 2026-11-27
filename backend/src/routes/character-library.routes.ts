@@ -1,14 +1,13 @@
 import fs from 'fs'
-import express, { type Request, type Response } from 'express'
+import express, { type Request, type RequestHandler, type Response } from 'express'
 import multer from 'multer'
 import { ZipArchive } from 'archiver'
 import { z } from 'zod'
 import { createUploadStorage, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
-import { canRequesterViewImages } from '../middleware/imageAccess'
-import { isRequesterAdmin, requesterPermissionKeys } from '../middleware/featureAccess'
+import { requireAdmin, requireDelete, requireEdit, requireRead } from '../middleware/authMiddleware'
+import { isRequesterAdmin, requesterHasRight } from '../middleware/featureAccess'
 import { getRequester } from './requester-session-helpers'
 import * as library from '../services/characterLibrary'
 import assetBatches, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
@@ -18,11 +17,13 @@ import { normalizeProfileAssetHash } from '../services/codex-chat/chatProfileAss
 import { CharacterAppearanceFillError, fillCharacterAppearance, splitAppearanceText } from '../services/characterAppearanceTags'
 
 const router = express.Router()
-const view = requirePermission('characters.view')
-const edit = requirePermission('characters.edit')
+const view = requireRead
+const edit = requireEdit
+/** Bulk requests that delete need the delete right. */
+const bulk: RequestHandler = (req, res, next) => (req.body?.action === 'delete' ? requireDelete : requireEdit)(req, res, next)
 const settingId = (req: Request) => library.characterId(req.params.settingId)
 const folderId = (req: Request) => library.characterId(req.params.folderId)
-const images = (req: Request) => canRequesterViewImages(getRequester(req))
+const images = (req: Request) => requesterHasRight(getRequester(req), 'read')
 function handle(run: (req: Request, res: Response) => unknown | Promise<unknown>, status = 200) {
   return asyncHandler(async (req, res) => {
     try { res.status(status).json({ success: true, data: await run(req, res) }) }
@@ -45,8 +46,8 @@ const visiblePreview = (req: Request, preview: ReturnType<typeof library.preview
 router.get('/folders', view, handle(() => library.listCharacterFolders()))
 router.post('/folders', edit, handle((req) => library.createCharacterFolder(req.body), 201))
 router.patch('/folders/:folderId', edit, handle((req) => library.patchCharacterFolder(folderId(req), req.body)))
-router.get('/folders/:folderId/delete-preview', edit, handle((req) => visiblePreview(req, library.previewCharacterDelete('folder', folderId(req)))))
-router.delete('/folders/:folderId', edit, handle((req) => library.deleteCharacterLibrary('folder', folderId(req))))
+router.get('/folders/:folderId/delete-preview', requireDelete, handle((req) => visiblePreview(req, library.previewCharacterDelete('folder', folderId(req)))))
+router.delete('/folders/:folderId', requireDelete, handle((req) => library.deleteCharacterLibrary('folder', folderId(req))))
 /** The list scope from the query string; `filters` is a JSON object of tag lists per dimension. */
 const listScope = (req: Request) => ({
   ...(req.query.folderId !== undefined ? { folderId: req.query.folderId === 'root' ? null : library.characterId(req.query.folderId) } : {}),
@@ -65,7 +66,7 @@ router.post('/settings/appearance-fill', edit, asyncHandler(async (req, res) => 
   try { res.json({ success: true, data: await fillCharacterAppearance(req.body, images(req)) }) }
   catch (error) { res.status(error instanceof CharacterAppearanceFillError ? error.status : 400).json({ success: false, error: error instanceof Error ? error.message : '외형을 채우지 못했어.' }) }
 }))
-router.post('/settings/bulk', edit, handle((req) => library.bulkCharacterSettings(req.body)))
+router.post('/settings/bulk', bulk, handle((req) => library.bulkCharacterSettings(req.body)))
 /** A ZIP of the document and its images; images are already compressed, so entries are stored. */
 router.post('/settings/export', view, asyncHandler(async (req, res) => {
   let bundle: ReturnType<typeof library.exportCharacterLibrary>
@@ -97,7 +98,7 @@ router.post('/settings/import', edit, (req, res, next) => {
   try {
     if (!req.file) throw new library.CharacterLibraryError('외형 묶음 ZIP을 골라줘.')
     const folderId = typeof req.body?.folderId === 'string' && req.body.folderId ? library.characterId(req.body.folderId) : null
-    return await library.importCharacterLibrary({ folderId, bundlePath: req.file.path }, images(req), requesterPermissionKeys(getRequester(req)).includes('images.upload'))
+    return await library.importCharacterLibrary({ folderId, bundlePath: req.file.path }, images(req), true)
   } finally { if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {}) }
 }, 201))
 router.post('/settings/appearance-draft', edit, requireAdmin, handle(async (req, res) => {
@@ -118,11 +119,11 @@ router.post('/settings/from-profile', edit, requireAdmin, handle((req) => visibl
 router.post('/settings', edit, handle((req) => visible(req, library.createCharacterSetting(req.body, images(req))), 201))
 router.patch('/settings/:settingId', edit, handle((req) => visible(req, library.patchCharacterSetting(settingId(req), req.body, images(req)))))
 router.post('/settings/:settingId/references/catalog', edit, handle(async (req) => {
-  const result = await library.importCharacterCatalogReferences(settingId(req), req.body, images(req), requesterPermissionKeys(getRequester(req)).includes('images.upload'))
+  const result = await library.importCharacterCatalogReferences(settingId(req), req.body, images(req), true)
   return { ...result, setting: visible(req, result.setting) }
 }))
-router.get('/settings/:settingId/delete-preview', edit, handle((req) => visiblePreview(req, library.previewCharacterDelete('setting', settingId(req)))))
-router.delete('/settings/:settingId', edit, handle((req) => library.deleteCharacterLibrary('setting', settingId(req), req.query.revision === undefined ? undefined : library.characterId(req.query.revision))))
+router.get('/settings/:settingId/delete-preview', requireDelete, handle((req) => visiblePreview(req, library.previewCharacterDelete('setting', settingId(req)))))
+router.delete('/settings/:settingId', requireDelete, handle((req) => library.deleteCharacterLibrary('setting', settingId(req), req.query.revision === undefined ? undefined : library.characterId(req.query.revision))))
 router.use('/settings/:settingId/asset-batches', edit, assetBatches)
 router.use('/settings/:settingId/expressions', edit, chatProfileExpressionsRouter)
 export default router

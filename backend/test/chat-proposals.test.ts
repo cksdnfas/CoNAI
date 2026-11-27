@@ -555,7 +555,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const open = async (autoApprove?: string) => {
       const context: ChatExecutionContext = { threadId: autoThreadId, profileId: autoProfile.id, kind: 'direct', replyId: `auto-approve-${autoApprove ?? 'off'}`, page: snapshot, ...(autoApprove ? { autoApprove } : {}) }
       const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-      const bridge = await openChatMcpBridge(requester, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+      const bridge = await openChatMcpBridge(requester, ['read', 'generate', 'organize', 'delete', 'configure'], null, { chatContext: context })
       return { bridge, close: async () => { unregister(); await bridge.close() } }
     }
     try {
@@ -821,7 +821,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal(ChatProposalStore.listForThread(pageThreadId).length, before)
       const privateContext = { ...context, replyId: 'private-page-tools', page: privatePage }
       const unregisterPrivate = registerChatReply(privateContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-      const privateReply = await openChatMcpBridge(admin, [], [], { chatContext: privateContext })
+      const privateReply = await openChatMcpBridge(admin, ['read', 'organize'], [], { chatContext: privateContext })
       try {
         assert.notEqual((await privateReply.call('page_act', { action: 'files.name_save', arguments: {} })).isError, true)
         assert.notEqual((await privateReply.call('page_fill', { changes: [{ fieldId: 'content', value: 'requested change' }] })).isError, true)
@@ -839,7 +839,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       actions: ['files.name_save', 'files.move_save', 'files.delete'].map((id) => ({ id, label: id, description: '', effect: 'save', schema: { type: 'object', properties: {} } })) })
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'direct-page-tools', page: directPage }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge(admin, [], [], { chatContext: context })
+    const bridge = await openChatMcpBridge(admin, ['read', 'organize'], [], { chatContext: context })
     const before = ChatProposalStore.listForThread(pageThreadId).length
     const commands: string[] = []
     let browser: { revision?: string; answer: Record<string, unknown> } = { revision: directPage.revision, answer: { ok: true, page: directPage } }
@@ -890,7 +890,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'page_fill'], { chatContext: context })
     const unbound = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
-    const broad = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+    const broad = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'delete', 'configure'], null, { chatContext: context })
     try {
       assert.ok(!offered(unbound).some((tool) => tool === 'get_current_page'))
       assert.ok(['submit_generation_job', 'generate_nai', 'delete_files', 'move_files'].every((tool) => offered(broad).includes(tool)), 'ordinary pages retain general grants')
@@ -955,13 +955,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   await t.test('workflow feature permission protects graph tools independently of current page reading', async (sub) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-    const db = authModule.getAuthDb()
-    const installed = db.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get('workflows.view')
-    if (!installed) {
-      db.prepare('INSERT INTO auth_permissions (permission_key, resource, action) VALUES (?, ?, ?)').run('workflows.view', 'workflows', 'view')
-      sub.after(() => { db.prepare('DELETE FROM auth_permissions WHERE permission_key = ?').run('workflows.view') })
-    }
-    let permissions = ['chat.use', 'page.generation.view']
+    let permissions = ['page.chat.view', 'page.generation.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
     const ownedThread = CodexChatStore.createThread(7, 'owned workflow', 'llm', workflowProfile.id)
@@ -973,11 +967,11 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok((await bridge.call('get_workflow_editor', {})).isError)
       assert.ok((await bridge.call('list_workflow_modules', {})).isError)
       assert.ok(!offered(bridge).some((tool) => tool === 'get_workflow_editor'), 'a tool the account cannot use is not offered')
-      permissions.push('workflows.view')
+      permissions.push('content.read')
       const granted = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], null, { chatContext: context })
       try {
         assert.ok(!(await granted.call('get_workflow_editor', {})).isError, 'a grant shows up in the next reply')
-        permissions = permissions.filter((permission) => permission !== 'workflows.view')
+        permissions = permissions.filter((permission) => permission !== 'content.read')
         assert.ok((await granted.call('workflow_edit', { operations: createGraph })).isError, 'revocation is checked during the same reply')
       } finally { await granted.close() }
     } finally { unregister(); await bridge.close() }
@@ -993,7 +987,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
-    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'generation.execute', 'images.view'] }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['page.chat.view', 'page.generation.view', 'content.read'] }))
     const generator = ChatProfileStore.create({ name: 'Generator', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['generate'] })
     const callers = [7, 8].map((accountId) => {
       const chatContext: ChatExecutionContext = { threadId: CodexChatStore.createThread(accountId, 'generation', 'llm', generator.id), profileId: generator.id, kind: 'direct', replyId: `generation-${accountId}` }

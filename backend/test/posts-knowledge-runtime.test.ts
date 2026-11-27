@@ -25,7 +25,7 @@ test('knowledge runtime: authenticated evidence, observed outcomes, atomic propo
   const {AuthAccessControlService}=await import('../src/services/authAccessControlService');
   const {RuntimeJobRunner}=await import('../src/services/runtimeJobs/runtimeJobRunner');
   type Actor=import('../src/services/posts/postActor').PostActor;
-  const permissions=['posts.view','posts.write','posts.comment','posts.evaluate','posts.knowledge.review','chat.use'];
+  const permissions=['content.read', 'content.edit'];
   t.mock.method(AuthAccount,'findById',(id:number)=>({id,username:`account-${id}`,account_type:id===1?'admin':'guest',status:'active'}));
   t.mock.method(AuthAccessControlService,'resolveForAccountId',()=>({permissionKeys:permissions,groupKeys:[]}));
   t.mock.method(globalThis,'fetch',async()=>{throw new Error('Unexpected network request');});

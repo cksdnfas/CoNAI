@@ -1,4 +1,4 @@
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireEdit, requireDelete } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptGroupService } from '../services/promptGroupService';
@@ -135,7 +135,7 @@ router.get('/:id/prompts', async (req: Request, res: Response) => {
  * 새 네거티브 프롬프트 그룹 생성
  * POST /api/negative-prompt-groups
  */
-router.post('/', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.post('/', requireEdit, async (req: Request, res: Response) => {
   try {
     const { group_name, display_order, is_visible } = req.body;
 
@@ -180,7 +180,7 @@ router.post('/', requirePermission('prompts.edit'), async (req: Request, res: Re
  * 네거티브 프롬프트 그룹 정보 업데이트
  * PUT /api/negative-prompt-groups/:id
  */
-router.put('/:id', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, async (req: Request, res: Response) => {
   try {
     const id = routeParam(req.params.id);
     const { group_name, display_order, is_visible } = req.body;
@@ -229,7 +229,7 @@ router.put('/:id', requirePermission('prompts.edit'), async (req: Request, res: 
  * 네거티브 프롬프트 그룹 삭제
  * DELETE /api/negative-prompt-groups/:id
  */
-router.delete('/:id', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, async (req: Request, res: Response) => {
   try {
     const id = routeParam(req.params.id);
     const groupId = parseInt(id);
@@ -268,7 +268,7 @@ router.delete('/:id', requirePermission('prompts.edit'), async (req: Request, re
  * 네거티브 프롬프트 그룹 순서 일괄 업데이트
  * PUT /api/negative-prompt-groups/reorder
  */
-router.put('/reorder', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.put('/reorder', requireEdit, async (req: Request, res: Response) => {
   try {
     const { group_orders } = req.body;
 
@@ -306,7 +306,7 @@ router.put('/reorder', requirePermission('prompts.edit'), async (req: Request, r
  * 네거티브 프롬프트를 다른 그룹으로 이동
  * PUT /api/negative-prompt-groups/move-prompt
  */
-router.put('/move-prompt', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.put('/move-prompt', requireEdit, async (req: Request, res: Response) => {
   try {
     const { prompt_id, target_group_id } = req.body;
 
@@ -373,7 +373,7 @@ router.get('/export', async (req: Request, res: Response) => {
  * JSON에서 네거티브 프롬프트 그룹 설정 가져오기
  * POST /api/negative-prompt-groups/import
  */
-router.post('/import', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
+router.post('/import', requireEdit, async (req: Request, res: Response) => {
   try {
     const importData = req.body;
 

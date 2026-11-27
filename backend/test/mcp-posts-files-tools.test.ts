@@ -44,10 +44,10 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     if (permissionKeys.length) AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: `${name}-group`, permissionKeys }).id, id)
     return id
   }
-  const KEYS = ['posts.view', 'posts.write', 'posts.comment', 'files.view', 'files.edit']
+  const KEYS = ['content.read', 'content.edit']
   const writerId = addAccount('writer', KEYS)
   const otherId = addAccount('other', KEYS)
-  const adminId = addAccount('admin', [...KEYS, 'posts.evaluate', 'images.view', 'images.upload', 'images.edit'], 'admin')
+  const adminId = addAccount('admin', KEYS, 'admin')
   invalidateConfiguredAuthCache()
 
   const { createMcpServer } = await import('../src/mcp/server')
@@ -248,7 +248,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     assert.equal(accepted, true)
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
     ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ enabled: true })
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'binary-chat', permissionKeys: ['chat.use'] }).id, adminId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'binary-chat', permissionKeys: ['page.chat.view'] }).id, adminId)
     const chat = { ...chatContext(), source: 'llm-chat' as const }
     const closeReply = registerChatReply(chat.chatContext, new AbortController().signal, () => ({ replyId: chat.chatContext.replyId, replyTo: null, recipients: ['user'] }))
     const chatServer = createMcpServer({ ...chat, toolCatalog: false })
@@ -276,7 +276,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     const described = ok(await call(admin, 'get_file_info', { file_id: original.id, include_image_metadata: true }))
     assert.equal(described.width, 3)
     assert.equal(described.ai_metadata.prompts.prompt, null, 'a plain PNG carries no generation info')
-    assert.match((await call(other, 'get_file_info', { file_id: original.id, include_image_metadata: true })).text, /images\.view/)
+    assert.equal(ok(await call(other, 'get_file_info', { file_id: original.id, include_image_metadata: true })).width, 3, 'files and images share the read right')
     assert.equal((await call(admin, 'get_file_info', { file_id: doc.id, include_image_metadata: true })).isError, true)
     const imported = ok(await call(admin, 'import_files_to_library', { file_ids: [original.id, doc.id], group_path: 'File round trip/Originals' }))
     const hash = imported.items[0].composite_hash
@@ -309,55 +309,74 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     }
   })
 
-  await t.test('library copies require the account image-view permission even when its chat profile delegates it', async () => {
+  await t.test('library copies need the account edit right; the chat profile lends none', async () => {
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
-    const accountId = addAccount('delegated-copy', ['files.view', 'files.edit', 'chat.use'])
-    const delegated = ChatProfileStore.create({
-      name: 'Delegated file copy', engine: 'llm', providerName: 'conn', mcpEnabled: true,
-      mcpScopes: ['organize'], toolAllowlist: ['copy_library_media_to_files'], delegatedPermissions: ['images.view'],
+    const accountId = addAccount('chat-copy', [])
+    const profile = ChatProfileStore.create({
+      name: 'Chat file copy', engine: 'llm', providerName: 'conn', mcpEnabled: true,
+      mcpScopes: ['organize'], toolAllowlist: ['copy_library_media_to_files'],
     })
-    const chat = { threadId: CodexChatStore.createThread(accountId, 'delegated copy', 'llm', delegated.id), profileId: delegated.id, kind: 'direct' as const, replyId: 'delegated-copy-reply' }
+    const chat = { threadId: CodexChatStore.createThread(accountId, 'chat copy', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'chat-copy-reply' }
     const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const server = createMcpServer({ scopes: ['organize'], source: 'llm-chat', requester: { accountId, accountType: 'guest' }, chatContext: chat, toolCatalog: false })
-    const client = new Client({ name: 'delegated-copy-test', version: '1' })
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    try {
+    const open = async () => {
+      const server = createMcpServer({ scopes: ['organize'], source: 'llm-chat', requester: { accountId, accountType: 'guest' }, chatContext: chat, toolCatalog: false })
+      const client = new Client({ name: 'chat-copy-test', version: '1' })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
-      assert.ok((await names(client)).includes('copy_library_media_to_files'), 'the delegated grant reaches the normal tool boundary')
-      const args = { composite_hashes: ['a'.repeat(48)] }
-      const refused = await call(client, 'copy_library_media_to_files', args)
-      assert.equal(refused.isError, true, 'delegated images.view cannot authorize exporting a library original')
-      assert.match(refused.text, /images.view/)
-      AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'own-copy-images', permissionKeys: ['images.view'] }).id, accountId)
-      assert.equal(ok(await call(client, 'copy_library_media_to_files', args)).items[0].status, 'skipped', 'own permission allows lookup of the missing item')
-    } finally { stop(); await client.close(); await server.close() }
+      return { client, close: async () => { await client.close(); await server.close() } }
+    }
+    const args = { composite_hashes: ['a'.repeat(48)] }
+    try {
+      const before = await open()
+      try {
+        assert.ok(!(await names(before.client)).includes('copy_library_media_to_files'), 'a profile tool the account cannot use is not listed')
+        const refused = await call(before.client, 'copy_library_media_to_files', args).catch((error: Error) => ({ isError: true, text: error.message }))
+        assert.equal(refused.isError, true, 'calling it directly is refused too')
+      } finally { await before.close() }
+      AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'own-copy-edit', permissionKeys: ['content.edit'] }).id, accountId)
+      const after = await open()
+      try {
+        assert.ok((await names(after.client)).includes('copy_library_media_to_files'))
+        assert.equal(ok(await call(after.client, 'copy_library_media_to_files', args)).items[0].status, 'skipped', 'own edit right allows lookup of the missing item')
+      } finally { await after.close() }
+    } finally { stop() }
   })
 
-  await t.test('delegated file permissions work in the bound chat, and the same account elsewhere is still refused', async () => {
+  await t.test('file and workspace tools in a chat follow the account rights, not the profile', async () => {
     const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
     const { WorkspaceService } = await import('../src/services/workspaceService')
-    const { requireFileStoreAction, requireFileStoreOwner } = await import('../src/services/fileStoreAccess')
-    const accountId = addAccount('delegated-files', ['chat.use'])
-    const project = await WorkspaceService.create(fileOwnerKey(adminId), 'Delegated project')
-    const delegated = ChatProfileStore.create({
-      name: 'Delegated files', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read', 'organize'],
-      toolAllowlist: ['list_files', 'create_file_folder'], delegatedPermissions: ['files.view', 'files.edit'], workspaces: [{ id: project.id, write: false }],
+    const accountId = addAccount('chat-files', [])
+    const project = await WorkspaceService.create(fileOwnerKey(adminId), 'Chat project')
+    const profile = ChatProfileStore.create({
+      name: 'Chat files', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read', 'organize'],
+      toolAllowlist: ['list_files', 'create_file_folder'], workspaces: [{ id: project.id, write: false }],
     })
     const requester = { accountId, accountType: 'guest' as const }
-    const chat = { threadId: CodexChatStore.createThread(accountId, 'delegated files', 'llm', delegated.id), profileId: delegated.id, kind: 'direct' as const, replyId: 'delegated-files-reply' }
+    const chat = { threadId: CodexChatStore.createThread(accountId, 'chat files', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'chat-files-reply' }
     const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const server = createMcpServer({ scopes: ['read', 'organize'], source: 'llm-chat', requester, chatContext: chat, toolCatalog: false })
-    const client = new Client({ name: 'delegated-files-test', version: '1' })
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    try {
+    const open = async () => {
+      const server = createMcpServer({ scopes: ['read', 'organize'], source: 'llm-chat', requester, chatContext: chat, toolCatalog: false })
+      const client = new Client({ name: 'chat-files-test', version: '1' })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
       await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
-      ok(await call(client, 'list_files', {}))
-      ok(await call(client, 'create_file_folder', { name: 'delegated-folder' }))
-      ok(await call(client, 'workspace_list', {}))
-    } finally { stop(); await client.close(); await server.close() }
-    assert.throws(() => requireFileStoreOwner(requester), { status: 403 })
-    assert.throws(() => requireFileStoreAction(requester, 'organize'), { status: 403 })
-    assert.ok(!(await names(await connect(requester))).includes('list_files'), 'an MCP key of the account gets no delegated file tools')
+      return { client, close: async () => { await client.close(); await server.close() } }
+    }
+    try {
+      const before = await open()
+      try {
+        const listed = await names(before.client)
+        for (const tool of ['list_files', 'create_file_folder', 'workspace_list']) assert.ok(!listed.includes(tool), `${tool} needs the account right`)
+        const refused = await call(before.client, 'list_files', {}).catch((error: Error) => ({ isError: true, text: error.message }))
+        assert.equal(refused.isError, true)
+      } finally { await before.close() }
+      AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'own-chat-files', permissionKeys: ['content.edit'] }).id, accountId)
+      const after = await open()
+      try {
+        ok(await call(after.client, 'list_files', {}))
+        ok(await call(after.client, 'create_file_folder', { name: 'chat-folder' }))
+        ok(await call(after.client, 'workspace_list', {}))
+      } finally { await after.close() }
+    } finally { stop() }
   })
 
   await t.test('library imports validate bytes before creating groups or copying unsupported stored files', async () => {
@@ -492,7 +511,8 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
       assert.equal(denied.isError, true, name)
       assert.match(denied.text, /posts_propose_knowledge/)
     }
-    assert.ok(!await names(writer).then(tools => tools.includes('posts_assess')), 'assessment requires the explicit new permission')
+    const knowledgeReader = await connect({ accountId: addAccount('knowledge-reader', ['content.read']), accountType: 'guest' })
+    assert.ok(await names(knowledgeReader).then(tools => tools.includes('posts_assess')), 'an assessment is the account own record: sign-in only')
     assert.equal(isContextToolAllowed({ requester: { accountId: adminId, accountType: 'admin' }, keyId: 'test-read-only', source: 'http', scopes: ['read'] }, 'posts_assess'), false)
     const assessment = ok(await call(admin, 'posts_assess', { use_id: read.reference.useId, reference_token: read.reference.referenceToken,
       stage: 'final', quality: 'down', task_fit: 'unknown', reason_code: 'error', evidence: [{ scope: 'body', start: 0, end: 5, quote: post.body.slice(0, 5) }], idempotency_key: 'external-final' }))
@@ -524,7 +544,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     const {updateChatSettings}=await import('../src/services/codex-chat/chatSettings')
     const {registerChatReply}=await import('../src/services/codex-chat/chatReplyRegistry')
     updateChatSettings({enabled:true})
-    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({name:'bounded-read-chat',permissionKeys:['chat.use','chat.agent.use']}).id,adminId)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({name:'bounded-read-chat',permissionKeys:['page.chat.view']}).id,adminId)
     const {PostStore,PostCommentStore}=await import('../src/services/posts/postStore')
     const {KnowledgeStore}=await import('../src/services/posts/knowledgeStore')
     const human={accountId:adminId,isAdmin:true,keys:new Set(KEYS),profileId:null,origin:'human' as const}
@@ -572,8 +592,8 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
   })
   await t.test('shared files still require view, edit and delete permissions for guests and MCP', async () => {
     const { requireFileStoreOwner, requireFileStoreAction } = await import('../src/services/fileStoreAccess')
-    const viewerId = addAccount('file-viewer', ['files.view'])
-    const deniedId = addAccount('no-files', ['posts.view'])
+    const viewerId = addAccount('file-viewer', ['content.read'])
+    const deniedId = addAccount('no-files', [])
     const viewer = { accountId: viewerId, accountType: 'guest' as const }
     const denied = { accountId: deniedId, accountType: 'guest' as const }
     const file = FileStoreService.writeText(fileOwnerKey(writerId), null, 'shared-permissions.md', 'shared')

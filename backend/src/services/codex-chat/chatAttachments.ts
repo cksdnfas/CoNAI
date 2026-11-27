@@ -1,7 +1,7 @@
 import fs from 'fs';
-import { IMAGE_VIEW_PERMISSION, narrationForModel, type ChatExecutionContext, type StoredFileEntry } from '@conai/shared';
+import { narrationForModel, type ChatExecutionContext, type StoredFileEntry } from '@conai/shared';
 import type { McpRequester } from '../../mcp/context';
-import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { requesterHasRight, requireRequesterRight } from '../../middleware/featureAccess';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { EmoticonService } from '../emoticonService';
 import { FileStoreService, chatAttachmentOwner } from '../fileStoreService';
@@ -23,7 +23,7 @@ export const INLINE_ATTACHMENTS_TOTAL_BYTES = 32000;
 export function validateChatAttachments(requester: McpRequester, fileIds: unknown): StoredFileEntry[] {
   if (fileIds === undefined || (Array.isArray(fileIds) && fileIds.length === 0)) return [];
   const attachments = FileStoreService.validateAttachments(chatAttachmentOwner(requester.accountId), fileIds);
-  if (attachments.some(file => !file.chatAttachment)) requireRequesterPermission(requester, 'files.view');
+  if (attachments.some(file => !file.chatAttachment)) requireRequesterRight(requester, 'read');
   return attachments;
 }
 
@@ -89,9 +89,9 @@ export type ModelMediaAttachment = ChatMediaAttachment & { generation?: MediaGen
 
 type ImageCarrier = { attachments?: StoredFileEntry[]; mediaAttachments?: ModelMediaAttachment[] };
 
-/** Whether the account may see library media (images.view), as attaching it requires. */
+/** Whether the account may see library media (content.read), as attaching it requires. */
 function canViewLibraryMedia(requester: McpRequester) {
-  try { requireRequesterPermission(requester, IMAGE_VIEW_PERMISSION); return true; } catch { return false; }
+  return requesterHasRight(requester, 'read');
 }
 
 const MEDIA_GENERATION_FIELDS = ['ai_tool', 'model_name', 'prompt', 'negative_prompt', 'character_prompt_text', 'lora_models', 'sampler', 'scheduler', 'steps', 'cfg_scale', 'seed'] as const;
@@ -113,7 +113,7 @@ function mediaGenerationOf(compositeHash: string): MediaGeneration | null {
 
 /**
  * `items` with the generation settings saved with each (read-only, per request). Media above the model's content
- * rating ceiling, or an account without images.view, keeps the plain reference.
+ * rating ceiling, or an account without content.read, keeps the plain reference.
  */
 export function withMediaGeneration(items: ChatMediaAttachment[], profile: ContentRatingProfile, requester: McpRequester): ModelMediaAttachment[] {
   if (!items.length || !canViewLibraryMedia(requester)) return items;
@@ -148,7 +148,7 @@ function viewableMediaPath(compositeHash: string) {
 
 /**
  * The images attached to `messages`, loaded for a model that sees: library images (the account still holding
- * images.view) and image files of the account's file store, newest first, up to ATTACHED_IMAGE_LIMIT. Older ones stay
+ * content.read) and image files of the account's file store, newest first, up to ATTACHED_IMAGE_LIMIT. Older ones stay
  * references the model can open with view_images. Null for a model that cannot see. Images above the model's content
  * rating ceiling stay references too (view_images refuses them the same way).
  */

@@ -1,4 +1,3 @@
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,7 +27,6 @@ export function GenerationHistoryRecoveryPanel({
   handleAcknowledgeRunRecovery,
   handleRetryHistoryRecord,
 }: GenerationHistoryRecoveryPanelProps) {
-  const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
 
   return (
@@ -46,7 +44,7 @@ export function GenerationHistoryRecoveryPanel({
             size="icon-sm"
             variant="secondary"
             onClick={() => void handleRetryVisibleRecoveryRecords()}
-            disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
+            disabled={(isRetryingRunRecovery)}
             aria-busy={isRetryingRunRecovery || undefined}
             label={isRetryingRunRecovery
               ? t({ ko: '등록 중', en: 'Queueing' })
@@ -87,7 +85,7 @@ export function GenerationHistoryRecoveryPanel({
                 variant="ghost"
                 className="shrink-0"
                 onClick={() => void handleRetryHistoryRecord(record)}
-                disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
+                disabled={(isRetryingRunRecovery)}
                 data-no-select-drag="true"
                 aria-busy={isRetrying || undefined}
                 label={isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}

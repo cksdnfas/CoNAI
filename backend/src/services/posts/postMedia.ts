@@ -45,7 +45,7 @@ export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', own
   refs.forEach((item, position) => {
     let fileOwner: string | null = null;
     if (item.kind === 'file') {
-      if (!previous.has(item.ref)) requireKey(actor, 'files.view');
+      if (!previous.has(item.ref)) requireKey(actor, 'content.read');
       fileOwner = previous.get(item.ref) ?? ownerKey;
       if (!fileExists.get(item.ref)) throw new PostError(`보관함에 없는 파일이야: ${item.ref}`, 404);
     }

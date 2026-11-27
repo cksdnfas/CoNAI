@@ -36,7 +36,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
 
   const shared = await import('@conai/shared')
   const { getMcpToolScope } = await import('../src/mcp/context')
-  const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
+  const { toolRequirement } = await import('../src/mcp/toolAccess')
   const { createMcpServer } = await import('../src/mcp/server')
   const { catalogToolNames } = await import('../src/mcp/toolCatalog')
   const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
@@ -117,7 +117,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
     assert.ok('error' in guides.readAppGuide('CHAT', { section: 'no such heading at all', limit: 100 }))
 
     assert.equal(getMcpToolScope('get_app_guide'), 'read')
-    assert.deepEqual(TOOL_FEATURE_PERMISSIONS.get_app_guide, [])
+    assert.equal(toolRequirement('get_app_guide'), 'signedIn')
     const { client } = await connect({ scopes: ['read'], requester: admin })
     const contents = JSON.parse((await call(client, 'get_app_guide', {})).text)
     assert.ok(contents.guides.length > 10 && contents.guides.every((entry: Record<string, unknown>) => Object.keys(entry).join() === 'topic,title,sections'), 'the contents are topics, titles and section headings only')
@@ -140,13 +140,13 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
     const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
     for (const tool of ['delete_audio_group', 'delete_audio_folder', 'delete_audio_project']) {
-      assert.equal(getMcpToolScope(tool), 'organize')
-      assert.deepEqual(TOOL_FEATURE_PERMISSIONS[tool], ['audio.view', 'audio.edit'])
+      assert.equal(getMcpToolScope(tool), 'delete')
+      assert.equal(toolRequirement(tool), 'delete')
     }
     const project = audio.createAudioProject({ name: '숲' }, null)
     const folder = audio.createAudioFolder(project.id, { name: 'UI' })
     const group = audio.createAudioGroup(project.id, { name: '발소리', label: 'footstep_[00]', folder_id: folder.id })
-    const { client } = await connect({ scopes: ['read', 'organize'], requester: admin })
+    const { client } = await connect({ scopes: ['read', 'organize', 'delete'], requester: admin })
 
     const wrong = await call(client, 'delete_audio_group', { group_id: group.id, confirm_name: '바람' })
     assert.ok(wrong.error && /발소리/.test(wrong.text), 'a different name is refused')

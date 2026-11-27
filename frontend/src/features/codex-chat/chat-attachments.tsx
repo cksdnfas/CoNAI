@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactElement, type RefObject } from 'react'
 import { EyeOff, File, FolderOpen, Images, Paperclip, Upload, X } from 'lucide-react'
@@ -25,9 +26,9 @@ export function useChatAttach(allowPrivateUploads: boolean) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
   const permissions = auth.data?.permissionKeys ?? []
-  const canPickFiles = permissions.includes('files.view')
+  const canPickFiles = permissions.includes(CONTENT_PERMISSIONS.read)
   const canPickMedia = useImagePermissions().canViewImages
-  const canUpload = allowPrivateUploads && (permissions.includes('chat.use') || permissions.includes('chat.agent.use'))
+  const canUpload = allowPrivateUploads
   return { input, pickerOpen, setPickerOpen, mediaPickerOpen, setMediaPickerOpen, canUpload, canPickFiles, canPickMedia, available: canUpload || canPickFiles || canPickMedia }
 }
 export type ChatAttach = ReturnType<typeof useChatAttach>
@@ -95,9 +96,7 @@ function nameCapture(file: File, index: number, count: number) {
  * uploads are closed is swallowed so the browser does not open it in place of the app.
  */
 export function useChatFileDrop(chat: CodexChatApi, disabled: boolean) {
-  const auth = useAuthStatusQuery()
-  const permissions = auth.data?.permissionKeys ?? []
-  const enabled = !disabled && !chat.attachmentsUploading && (permissions.includes('chat.use') || permissions.includes('chat.agent.use'))
+  const enabled = !disabled && !chat.attachmentsUploading
   const [dragging, setDragging] = useState(false)
   const depth = useRef(0)
   const upload = (files: File[]) => { void chat.uploadAttachments(files.map((file, index) => nameCapture(file, index, files.length))) }

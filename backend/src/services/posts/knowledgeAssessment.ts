@@ -263,12 +263,12 @@ function auditEntry(actor:PostActor,row:AssessmentRow,currentHash:string):PostAs
   const latest=Boolean(db().prepare('SELECT 1 FROM post_assessment_heads WHERE logical_key=? AND event_id=?').get(row.logical_key,row.id));
   return {eventId:row.id,evaluator:row.evaluator,quality:row.quality,taskFit:row.actor_key===postActorAccountKey(actor)?row.task_fit:'unknown',contentVersion:row.content_version,
     currentContent:row.content_hash===currentHash,isLatest:latest,eventKind:row.event_kind,supersedesEventId:row.supersedes_event_id,reasonCode:row.reason_code,reason:row.reason,evidenceQuote:row.evidence_quote,
-    moderationReason:row.moderation_reason,canModerate:isHumanPostActor(actor)&&(actor.isAdmin||actor.keys.has('posts.knowledge.review'))&&latest&&row.evaluator!=='human'&&row.phase==='final',createdAt:row.created_at};
+    moderationReason:row.moderation_reason,canModerate:isHumanPostActor(actor)&&(actor.isAdmin||actor.keys.has('content.edit'))&&latest&&row.evaluator!=='human'&&row.phase==='final',createdAt:row.created_at};
 }
 
 export const KnowledgeAssessmentStore = {
   vote(actor: PostActor,postId: number,input: { contentVersion?: unknown; idempotencyKey?: unknown; quality?: unknown; taskFit?: unknown; reasonCode?: unknown; reason?: unknown; evidenceQuote?: unknown;searchReceiptToken?:unknown }) {
-    requireHumanPostActor(actor); requireKey(actor,'posts.evaluate');
+    requireHumanPostActor(actor);
     if (!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.',409);
     if(input.reasonCode==='scope_mismatch'||input.reasonCode==='task_unsuitable') {
       KnowledgeAssessmentStore.taskFit(actor,postId,{...input,taskFit:'unsuitable'});
@@ -305,7 +305,7 @@ export const KnowledgeAssessmentStore = {
   },
 
   taskFit(actor:PostActor,postId:number,input:{contentVersion?:unknown;searchReceiptToken?:unknown;taskFit?:unknown;idempotencyKey?:unknown;reasonCode?:unknown;reason?:unknown}):PostTaskFitFeedback {
-    requireHumanPostActor(actor);requireKey(actor,'posts.evaluate');
+    requireHumanPostActor(actor);
     if(!loadPostsSettings().knowledge.enabled) throw new PostError('지식 기능이 꺼져 있어.',409);
     const eventId=db().transaction(()=>{
       const {receipt,knowledge}=requireHumanSearchReceipt(actor,postId,input.searchReceiptToken);
@@ -330,7 +330,7 @@ export const KnowledgeAssessmentStore = {
   },
 
   moderate(actor:PostActor,postId:number,eventId:number,input:{action?:unknown;expectedHeadEventId?:unknown;reason?:unknown;idempotencyKey?:unknown;quality?:unknown;taskFit?:unknown}):PostAssessmentModerationResult {
-    requireHumanPostActor(actor);requireKey(actor,'posts.knowledge.review');
+    requireHumanPostActor(actor);requireKey(actor,'content.edit');
     const reason=typeof input.reason==='string'?input.reason.trim():'';
     if(!['invalidate','correct'].includes(String(input.action))||!reason||reason.length>4000||typeof input.idempotencyKey!=='string'||!input.idempotencyKey.trim()||input.idempotencyKey.length>160)
       throw new PostError('평가 정정 동작, 구체적인 사유와 멱등 키가 필요해.');

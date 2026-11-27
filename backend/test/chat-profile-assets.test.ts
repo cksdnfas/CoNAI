@@ -316,7 +316,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     images.db.prepare('UPDATE media_metadata SET rating_score = NULL WHERE composite_hash = ?').run(hash)
     RatingScoreModel.deleteTier(tier.id)
     const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
-    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'images.view') }))
+    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'content.read') }))
     assert.equal((await call('/profiles/:profileId/assets/:kind', { profileId: String(first.id), kind: 'avatar' })).status, 403)
     assert.equal((await call('/profiles')).body.data.find((profile: any) => profile.id === first.id).avatarHash, null)
   })
@@ -328,7 +328,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     const profile = ChatProfileStore.create({ name: 'Thumbnail access', engine: 'codex', avatar: legacy, avatarHash: asset.compositeHash, backgroundHash: asset.compositeHash, referenceHash: asset.compositeHash })
     const legacyProfile = ChatProfileStore.create({ name: 'Legacy thumbnail', engine: 'codex', avatar: legacy })
     const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
-    let permissions = bootstrap.permissionKeys.filter((key) => key !== 'images.view')
+    let permissions = bootstrap.permissionKeys.filter((key) => key !== 'content.read')
     sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: permissions }))
     const publicProfile = (await call('/profiles')).body.data.find((entry: any) => entry.id === profile.id)
     assert.equal(publicProfile.hasAvatar, true, 'chat access is enough to display the profile thumbnail')
@@ -349,7 +349,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     }
     assert.equal((await call('/profiles/:profileId/background', { profileId: String(profile.id) })).status, 403)
     // Library media by hash opens on the chat's own media route since the chat became the grant there
-    // (chat-result-delivery.test.ts); the profile's asset routes above stay behind images.view.
+    // (chat-result-delivery.test.ts); the profile's asset routes above stay behind content.read.
     assert.equal((await call('/media/:compositeHash/thumbnail', { compositeHash: asset.compositeHash })).status, 200)
     for (const id of [String(second.id), '999999', asset.compositeHash]) {
       assert.equal((await call('/profiles/:profileId/avatar-thumbnail', { profileId: id })).status, 404)
@@ -365,8 +365,6 @@ test('chat profile assets: library migration, access, imports and generation ref
       images.db.prepare('UPDATE media_metadata SET rating_score = NULL WHERE composite_hash = ?').run(asset.compositeHash)
       RatingScoreModel.deleteTier(tier.id)
     }
-    permissions = permissions.filter((key) => key !== 'chat.use' && key !== 'chat.agent.use')
-    assert.equal((await call('/profiles/:profileId/avatar-thumbnail', { profileId: String(legacyProfile.id) })).status, 403, 'chat access is still required')
   })
 
   await t.test('multipart upload uses the library/group and returns a hash without mutating a profile; bad bytes are rejected', async () => {
@@ -421,7 +419,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     const { FileStoreService } = await import('../src/services/fileStoreService')
     const { storedFilePath } = await import('../src/services/fileStorePaths')
     sub.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as any)
-    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ groupKeys: [], permissionKeys: ['files.view'] }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ groupKeys: [], permissionKeys: ['content.read'] }))
     const staged = path.join(root, 'temp', 'private.png')
     fs.writeFileSync(staged, png)
     const file = FileStoreService.upload('account:1', null, [{ path: staged, originalname: 'private.png', mimetype: 'image/png', size: png.length } as Express.Multer.File])[0]
@@ -573,7 +571,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { name: '설명 없음', modelSlotId: ModelSlotStore.ensure('source-test', 'small') }), /캐릭터 설명/)
     assert.equal((await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: {} })).status, 400)
     const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
-    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'images.view') }))
+    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'content.read') }))
     assert.equal((await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: { profile: { name: '권한 없음', engine: 'codex' } } })).status, 403)
     assert.equal(calls, 0)
   })

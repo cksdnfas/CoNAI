@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
@@ -132,10 +133,11 @@ function useAudioPermissions() {
   const auth = useAuthStatusQuery().data
   const has = (key: string) => !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, key))
   return {
-    canEdit: has('audio.edit'),
-    canGenerate: has('audio.edit') && has('generation.execute'),
-    canManageWorkflows: has('audio.edit'),
-    canAddWorkflow: has('audio.edit') && has('workflows.edit'),
+    canEdit: has(CONTENT_PERMISSIONS.edit),
+    canDelete: has(CONTENT_PERMISSIONS.delete),
+    canGenerate: has(CONTENT_PERMISSIONS.read),
+    canManageWorkflows: has(CONTENT_PERMISSIONS.edit),
+    canAddWorkflow: has(CONTENT_PERMISSIONS.edit),
   }
 }
 
@@ -725,8 +727,8 @@ function AudioPageContent() {
                 ) : null}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => setDialog('cleanup')}><Trash2 />{t({ ko: '후보 정리', en: 'Clean up takes' })}</DropdownMenuItem>
-            {!inbox ? (
+            {permissions.canDelete ? <DropdownMenuItem onSelect={() => setDialog('cleanup')}><Trash2 />{t({ ko: '후보 정리', en: 'Clean up takes' })}</DropdownMenuItem> : null}
+            {!inbox && permissions.canDelete ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onSelect={() => void removeGroup(group)}><Trash2 />{t({ ko: '효과음 삭제', en: 'Delete effect' })}</DropdownMenuItem>
@@ -775,6 +777,7 @@ function AudioPageContent() {
           filter={filter}
           onFilterChange={setFilter}
           canEdit={permissions.canEdit}
+          canDelete={permissions.canDelete}
           exporting={exportBusy}
           onNewProject={() => setDialog('project-new')}
           onEditProject={(entry) => { setEditingProject(entry); setDialog('project-edit') }}
@@ -1011,7 +1014,7 @@ function AudioPageContent() {
       />
       {group ? (
         <>
-          <AudioCommentsDialog open={dialog === 'comments'} group={group} canEdit={permissions.canEdit} onClose={() => setDialog(null)} onChanged={refreshCounts} />
+          <AudioCommentsDialog open={dialog === 'comments'} group={group} canEdit={permissions.canEdit} canDelete={permissions.canDelete} onClose={() => setDialog(null)} onChanged={refreshCounts} />
           <AudioCleanupDialog open={dialog === 'cleanup'} group={group} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setSelectedId(null); refreshAll() }} />
         </>
       ) : null}

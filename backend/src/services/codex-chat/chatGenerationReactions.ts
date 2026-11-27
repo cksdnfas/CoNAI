@@ -1,7 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { AuthAccount } from '../../models/AuthAccount'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
-import { chatProfileRequester } from './chatProfilePermissions'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import { previewImage } from '../imagePreview'
 import { libraryMediaAllowed } from '../contentRating'
@@ -126,7 +125,7 @@ export class ChatGenerationReactionService {
     }
     if (busy()) { this.whenIdle(threadId); return }
     try {
-      const requester = chatProfileRequester({ accountId: thread.account_id, accountType: thread.account_id === null ? null : AuthAccount.findById(thread.account_id)?.account_type ?? null }, { threadId, profileId: profile.id, kind: thread.kind })
+      const requester = { accountId: thread.account_id, accountType: thread.account_id === null ? null : AuthAccount.findById(thread.account_id)?.account_type ?? null }
       const jobs = db.prepare('SELECT j.id, j.status, j.failure_code, j.requested_by_account_id FROM chat_generation_links l JOIN generation_queue_jobs j ON j.id = l.job_id WHERE l.thread_id = ? AND l.reply_id = ? ORDER BY j.id').all(threadId, replyId) as Job[]
       if (jobs.some((job) => job.requested_by_account_id !== thread.account_id)) {
         this.transition(replyId, 'pending', 'skipped')
@@ -144,7 +143,7 @@ export class ChatGenerationReactionService {
         const sounds = images.length ? 0 : audioCandidatesByQueueJob([job.id]).get(job.id)?.length ?? 0
         lines.push(`Job #${job.id}: ${images.length ? `${images.length} image(s) attached` : sounds ? `${sounds} audio candidate(s) attached (reviewed in the audio tab)` : `failed: ${failureMessageOf(job.status, job.status === 'completed' ? 'no_image' : job.failure_code, audioOrderJobs.has(job.id) ? 'audio' : 'image')}`}`)
         if (!profile.visionEnabled) continue
-        try { requireRequesterPermission(requester, 'images.view') } catch { continue }
+        try { requireRequesterRight(requester, 'read') } catch { continue }
         for (const image of images) {
           if (isProfileAssetHidden(image.composite_hash)) continue
           const file = activeMediaFile(image.composite_hash)

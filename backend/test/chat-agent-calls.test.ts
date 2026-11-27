@@ -46,7 +46,7 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
   ExternalApiProvider.create({ provider_name: 'agent-test', display_name: 'Test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   updateChatSettings({ enabled: true })
   t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'guest' }) as never)
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'], groupKeys: [] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: [], groupKeys: [] }))
   const requester = { accountId: 1, accountType: 'guest' as const }
   const caller = ChatProfileStore.create({ name: 'Caller', engine: 'llm', providerName: 'agent-test', model: 'm', mcpEnabled: true, mcpScopes: ['read'] })
   const agent = ChatProfileStore.create({ name: 'Agent', engine: 'llm', providerName: 'agent-test', model: 'm', agentEnabled: true, agentDescription: 'Work', mcpEnabled: true, mcpScopes: ['read'] })
@@ -60,9 +60,11 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
   await t.test('non-agent and inaccessible profiles are refused', () => {
     const ordinary = ChatProfileStore.create({ name: 'Ordinary', engine: 'llm', providerName: 'agent-test', model: 'm' })
     assert.throws(() => callChatAgent(requester, chat, { agentProfileId: ordinary.id, instruction: 'work' }), /사용 가능한 에이전트/)
-    t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: [], groupKeys: [] }))
-    assert.throws(() => callChatAgent(requester, chat, { agentProfileId: agent.id, instruction: 'work' }), /사용 가능한 에이전트/)
-    t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'], groupKeys: [] }))
+    ChatProfileStore.update(agent.id, { allowedGroupKeys: ['admin'] })
+    try {
+      assert.deepEqual(usableChatAgents(requester, chat), [])
+      assert.throws(() => callChatAgent(requester, chat, { agentProfileId: agent.id, instruction: 'work' }), /사용 가능한 에이전트/)
+    } finally { ChatProfileStore.update(agent.id, { allowedGroupKeys: [] }) }
     assert.equal((db.prepare('SELECT COUNT(*) AS n FROM chat_agent_calls').get() as { n: number }).n, 0)
   })
 

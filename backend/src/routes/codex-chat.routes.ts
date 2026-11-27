@@ -1,4 +1,3 @@
-import { requireImagesView, canRequesterViewImages } from '../middleware/imageAccess'
 import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../config/runtimePaths'
@@ -11,7 +10,7 @@ import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
 import { automationRoomKinds, chatNotifyDefault, chatUnreadCount } from '../services/codex-chat/chatRoomWake'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { requireAdmin } from '../middleware/authMiddleware'
+import { requireAdmin, requireRead } from '../middleware/authMiddleware'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { checkedProfileFolder, createChatProfileFolder, deleteChatProfileFolder, listChatProfileFolders, profileFolderPaths, updateChatProfileFolder } from '../services/codex-chat/chatProfileFolders'
@@ -78,7 +77,7 @@ import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { chatAccessOf, isGroupThread, parseId, parseThreadId, requesterFrom, requireChatAccess, sendChatError, sendMergeError } from './codex-chat-route-helpers'
 import { CharacterLibraryError, characterId, characterSettingRow } from '../services/characterLibrary'
-import { requesterPermissionKeys } from '../middleware/featureAccess'
+import { requesterHasRight } from '../middleware/featureAccess'
 import chatLorebooksRouter from './codex-chat-lorebooks.routes'
 import chatAdminPresetsRouter from './codex-chat-admin-presets.routes'
 import chatAttachmentsRouter from './chat-attachments.routes'
@@ -172,7 +171,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
   const usable = (profile: ChatProfile) => profile.isEnabled && canUseChatProfile(access, profile)
   const paths = profileFolderPaths(profiles, usable)
   const hidden = hiddenProfileAssets(profiles)
-  const canViewLibrary = requesterPermissionKeys({ accountId, accountType: null }).includes('characters.view')
+  const canViewLibrary = requesterHasRight({ accountId, accountType: null }, 'read')
   res.json({
     success: true,
     data: ChatProfileStore.mapDirectory((profile) => ({
@@ -216,16 +215,16 @@ async function serveProfileAsset(req: Request, res: Response, kind: string, thum
   }
 }
 
-router.get('/profiles/:profileId/background', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'background')))
+router.get('/profiles/:profileId/background', requireChatAccess, requireRead, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'background')))
 
 /** Chat directory faces do not grant access to original assets or arbitrary library hashes. */
 router.get('/profiles/:profileId/avatar-thumbnail', requireChatAccess, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'avatar', true)))
 
 /** Only the selected profile's asset is served; the caller cannot supply an arbitrary hash. */
-router.get('/profiles/:profileId/assets/:kind', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, String(req.params.kind))))
+router.get('/profiles/:profileId/assets/:kind', requireChatAccess, requireRead, asyncHandler(async (req, res) => serveProfileAsset(req, res, String(req.params.kind))))
 
 /** GET /api/codex-chat/profiles/:profileId/emoticons — keyword → image of the profile's linked emoticon groups. */
-router.get('/profiles/:profileId/emoticons', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
+router.get('/profiles/:profileId/emoticons', requireChatAccess, requireRead, (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   if (!profile) {
@@ -238,7 +237,7 @@ router.get('/profiles/:profileId/emoticons', requireChatAccess, requireImagesVie
 /**
  * GET /api/codex-chat/profiles/:profileId/emoticons/:hash — the emoticon image. The shared image-view capability is required; only images of the profile's linked emoticon groups are served.
  */
-router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, requireRead, asyncHandler(async (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   const compositeHash = String(req.params.compositeHash ?? '')
@@ -262,7 +261,7 @@ function sendChatImageDetail(res: Response, compositeHash: string, urls: { scope
 
 /**
  * GET /api/codex-chat/media/:file — library media linked from chat text (`media:<hash>.<ext>`; the extension is
- * ignored). Every chat user may open media by hash here (the chat is the grant, not images.view), without waiting for
+ * ignored). Every chat user may open media by hash here (the chat is the grant, not content.read), without waiting for
  * postprocessing. The id is the pixel identity, so the response is cached for good.
  */
 router.get('/media/:file', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
@@ -301,7 +300,7 @@ router.get('/media/:compositeHash/image', requireChatAccess, (req: Request, res:
 })
 
 /** GET /api/codex-chat/assets/:name — an image copied in from a character card before card media went to the library. */
-router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/assets/:name', requireChatAccess, requireRead, asyncHandler(async (req: Request, res: Response) => {
   const file = chatAssetFile(String(req.params.name ?? ''))
   if (!file) {
     res.status(404).json({ success: false, error: 'Not found' })
@@ -966,13 +965,13 @@ const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize:
 const assetUpload = multer({ storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES), limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 1, fields: 2, parts: 4 } }).single('file')
 function uploadSettingId(req: Request) {
   if (req.body?.settingId === undefined) return undefined
-  if (!requesterPermissionKeys(requesterFrom(req)).includes('characters.edit')) throw new CharacterLibraryError('Permission required: characters.edit', 403)
+  if (!requesterHasRight(requesterFrom(req), 'edit')) throw new CharacterLibraryError('Permission required: edit', 403)
   const id = characterId(req.body.settingId)
   characterSettingRow(id)
   return id
 }
 
-router.post('/admin/profiles/appearance-draft', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+router.post('/admin/profiles/appearance-draft', requireAdmin, requireRead, asyncHandler(async (req, res) => {
   const controller = new AbortController()
   res.on('close', () => { if (!res.writableFinished) controller.abort() })
   try {
@@ -985,7 +984,7 @@ router.post('/admin/profiles/appearance-draft', requireAdmin, requireImagesView,
   }
 }))
 
-router.post('/admin/chat-assets/upload', requireAdmin, requireImagesView, (req, res, next) => {
+router.post('/admin/chat-assets/upload', requireAdmin, requireRead, (req, res, next) => {
   assetUpload(req, res, (error) => {
     if (error) { res.status(error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ success: false, error: '이미지 한 장을 골라줘. 최대 500MB야.' }); return }
     next()
@@ -999,12 +998,12 @@ router.post('/admin/chat-assets/upload', requireAdmin, requireImagesView, (req, 
   finally { if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {}) }
 }))
 
-router.post('/admin/chat-assets/url', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+router.post('/admin/chat-assets/url', requireAdmin, requireRead, asyncHandler(async (req, res) => {
   try { res.json({ success: true, data: await downloadProfileAsset(req.body?.url, String(req.body?.characterName ?? ''), uploadSettingId(req)) }) }
   catch (error) { sendChatError(res, error) }
 }))
 
-router.post('/admin/chat-assets/from-file-store', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+router.post('/admin/chat-assets/from-file-store', requireAdmin, requireRead, asyncHandler(async (req, res) => {
   try { res.json({ success: true, data: await importFileStoreProfileAsset(requesterFrom(req), req.body?.fileId, String(req.body?.characterName ?? ''), uploadSettingId(req)) }) }
   catch (error) { sendChatError(res, error) }
 }))
@@ -1692,7 +1691,7 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
 const withModelReady = (profile: ChatUserProfile) => ({ ...profile, modelReady: userWriterReady(profile) })
 
 router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) => {
-  const canViewImages = canRequesterViewImages(requesterFrom(req))
+  const canViewImages = requesterHasRight(requesterFrom(req), 'read')
   res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)).map((profile) => withModelReady(canViewImages ? profile : { ...profile, avatar: null })) })
 })
 

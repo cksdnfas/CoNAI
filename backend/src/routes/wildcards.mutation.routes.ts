@@ -4,11 +4,11 @@ import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { WildcardModel, WildcardCreateData, WildcardUpdateData } from '../models/Wildcard';
 import { WildcardService } from '../services/wildcardService';
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireEdit, requireDelete } from '../middleware/authMiddleware';
 
 const router = Router();
 
-router.post('/', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   try {
     const data: WildcardCreateData = req.body;
 
@@ -62,7 +62,7 @@ router.post('/', requirePermission('wildcards.edit'), asyncHandler(async (req: R
   }
 }));
 
-router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireEdit, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
@@ -113,7 +113,7 @@ router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req:
   }
 }));
 
-router.delete('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(req.params.id));
   const cascade = req.query.cascade === 'true';
 

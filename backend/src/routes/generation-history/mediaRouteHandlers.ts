@@ -13,8 +13,6 @@ import {
   streamBatchDownloadArchive,
 } from '../images/query-file-helpers';
 import { enrichImageWithFileView } from '../images/utils';
-import { requireImagesView } from '../../middleware/imageAccess';
-import { WorkflowModel } from '../../models/Workflow';
 import {
   authorizeHistoryRecordOrBlock,
   buildMissingHistoryFileWarning,
@@ -40,20 +38,6 @@ export async function handleHistoryBatchDownload(req: Request, res: Response) {
 
   const records = HistoryQueryRepository.findAllWithMetadata({ ids: uniqueHistoryIds, limit: uniqueHistoryIds.length })
     .filter((record) => canAccessHistoryRecord(req, record));
-  // Same read grant as one record: published workflow runs need no images.view, any other row does.
-  const publishedWorkflowIds = new Set<number>();
-  const needsImagesView = records.some((record) => {
-    if (typeof record.workflow_id !== 'number') return true;
-    if (publishedWorkflowIds.has(record.workflow_id)) return false;
-    if (!WorkflowModel.isPublicPage(record.workflow_id)) return true;
-    publishedWorkflowIds.add(record.workflow_id);
-    return false;
-  });
-  if (needsImagesView) {
-    let allowed = false;
-    requireImagesView(req, res, () => { allowed = true; });
-    if (!allowed) return;
-  }
   const compositeHashes = Array.from(new Set(records.map(getHistoryCompositeHash).filter((hash): hash is string => Boolean(hash))));
 
   if (compositeHashes.length === 0) {

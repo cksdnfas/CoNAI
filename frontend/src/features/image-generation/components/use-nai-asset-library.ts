@@ -57,9 +57,9 @@ export function useNaiAssetLibrary({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
-  const { canViewWorkflows, canUpdateWorkflows, canExecuteGeneration } = useFeaturePermissions()
+  const { canRead, canEdit } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
-  const canReadAssets = canViewWorkflows && canViewImages
+  const canReadAssets = canRead && canViewImages
   const confirm = useConfirm()
   const [isSavingAsset, setIsSavingAsset] = useState(false)
   const [assetSaveTarget, setAssetSaveTarget] = useState<AssetSaveTarget | null>(null)
@@ -119,7 +119,6 @@ export function useNaiAssetLibrary({
       refetchUserData?: boolean
     },
   ) => {
-    if (!canExecuteGeneration) { showSnackbar({ message: t({ ko: '인코딩은 생성 권한이 필요해.', en: 'Encoding requires generation permission.' }), tone: 'error' }); return null }
     const vibe = naiForm.vibes[index]
     if (!vibe?.image || encodingVibeIndex !== null) {
       return null
@@ -379,7 +378,7 @@ export function useNaiAssetLibrary({
 
   /** Save or update the currently targeted vibe/reference asset. */
   const handleConfirmAssetSave = async () => {
-    if (!canUpdateWorkflows || !canViewImages || !assetSaveTarget) {
+    if (!canEdit || !canViewImages || !assetSaveTarget) {
       return
     }
 

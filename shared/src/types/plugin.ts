@@ -68,7 +68,7 @@ export type PluginManifest = {
 export type PluginAppRequest = {
   id: string; pluginId: string; version: string; label: string; tool: string; arguments: Record<string, unknown>
   /** Trusted packages (a server module) also reach configure/backup/restore tools. */
-  scope: 'organize' | 'generate' | 'configure' | 'backup' | 'restore'
+  scope: 'organize' | 'delete' | 'generate' | 'configure' | 'backup' | 'restore'
   project?: { id: string; name: string }
   status: 'pending' | 'starting' | 'running' | 'completed' | 'failed' | 'cancelled'; jobId: string | null
   result?: unknown; error?: string; expiresAt: number
@@ -186,7 +186,7 @@ export type PluginLlmProfile = {
   /**
    * Where the look comes from: a character library setting (`synced`: `appearance` and the images are its live values;
    * otherwise the profile keeps a detached copy), or null for the profile's own look. Read the setting through the
-   * `get_character_setting` app tool or `/api/character-library` (both need `characters.view`).
+   * `get_character_setting` app tool or `/api/character-library` (both need `content.read`).
    */
   character: { settingId: number; synced: boolean } | null
   translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
@@ -210,7 +210,7 @@ export type PluginLlmProfile = {
    * What the account's own profile API gives. An administrator: every saved profile setting as the profile editor holds
    * it (persona prompt and sections, greetings, opening history, lore/summary/context/judge settings, style with its
    * blocks, model rows…). Any other account: the chat user's public profile view, image hashes and crop null without
-   * `images.view`. Image bytes are always left out: read them with `asset()`.
+   * `content.read`. Image bytes are always left out: read them with `asset()`.
    */
   details: Record<string, unknown>
   /** App-wide (Settings › 채팅 › 기억): keyword lore entries one selection keeps, best matches first. */

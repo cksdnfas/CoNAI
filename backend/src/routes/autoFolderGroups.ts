@@ -12,8 +12,7 @@ import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandle
 import { pipeFileToResponse } from './images/query-file-response-helpers';
 import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
-import { allowImagesView } from '../middleware/imageAccess';
-import { requirePermission } from '../middleware/authMiddleware';
+import { allowRead, requireEdit } from '../middleware/authMiddleware';
 import { getRequesterAccountId } from './requester-session-helpers';
 import { parseGroupPreviewBatchIds, sendGroupReadBadRequest } from './groups.read.routes';
 import { parsePositiveIntegerQuery } from './routeValidation';
@@ -21,8 +20,8 @@ import { parsePositiveIntegerQuery } from './routeValidation';
 const router = Router();
 router.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
-    allowImagesView(req, res, next);
-  } else requirePermission('images.edit')(req, res, next);
+    allowRead(req, res, next);
+  } else requireEdit(req, res, next);
 });
 
 /**

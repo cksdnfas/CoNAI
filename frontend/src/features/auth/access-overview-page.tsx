@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { ADMIN_PAGE_PERMISSION } from '@conai/shared'
 import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Wand, X, type LucideIcon } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -90,7 +91,7 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
           {t('accessOverviewPage.blockedTitle', { pageLabel })}
         </Text>
         <AlertDescription>
-          <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : t('accessOverviewPage.blockedHintSignedIn')}</p>
+          <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : resolvedPermissionKey === ADMIN_PAGE_PERMISSION ? t('accessOverviewPage.blockedHintAdminOnly') : t('accessOverviewPage.blockedHintSignedIn')}</p>
           {isAnonymous ? (
             <IconButton asChild size="icon-sm" className="mt-1" label={t('loginPage.signIn')}>
               <Link to={`/login?next=${encodeURIComponent(path)}`}>

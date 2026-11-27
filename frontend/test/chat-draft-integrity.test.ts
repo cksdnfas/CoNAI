@@ -43,7 +43,7 @@ test('chat-only profile avatars show thumbnails but never fall back to originals
   const profile = { id: 7, avatarHash: null, hasAvatar: true, avatarThumbnailUrl: '/api/codex-chat/profiles/7/avatar-thumbnail', assetVersion: 'v1' }
   const render = async (canViewImages: boolean) => {
     await act(async () => root.render(h(ImagePermissionsContext.Provider, {
-      value: resolveImagePermissions(canViewImages ? ['chat.use', 'images.view'] : ['chat.use'], true),
+      value: resolveImagePermissions(canViewImages ? ['content.read'] : [], true),
     }, h('div', null,
       h(ChatProfileAvatar, { name: 'Profile', engine: 'llm', profile }),
       h(ChatProfileImage, { src: '/api/images/unrelated/file', fallback: 'Restricted image' }),
@@ -77,7 +77,7 @@ test('a new chat sends the references and images picked while it was prepared, w
   const { CodexChatProvider } = await import('../src/features/codex-chat/codex-chat-provider')
   const { useCodexChat } = await import('../src/features/codex-chat/codex-chat-context')
   const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: [] })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
   const hash = 'a'.repeat(48)
   let sent = null as { text: string; mediaHashes: string[] } | null
@@ -129,7 +129,7 @@ test('a picked tool goes with the first message of a new chat, stays only when k
   const { CodexChatProvider } = await import('../src/features/codex-chat/codex-chat-provider')
   const { PENDING_DRAFT_KEY, codexChatComposerToolsQueryKey, useCodexChat } = await import('../src/features/codex-chat/codex-chat-context')
   const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: [] })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
   const bodies: Array<{ toolDirective?: unknown }> = []
   let refuse: { error: string; code?: string } | null = null
@@ -201,6 +201,9 @@ test('the tool picker lists only tools a scope offers, and names a plugin or out
   assert.equal(plugins.tools[0].label, 'acme_draw')
   assert.equal(chatToolLabel('p_acme_draw', t), plugins.tools[0].label)
   assert.equal(chatToolLabel('x_srv_lookup', t), outside.tools[0].label)
+  // Delete-scope tools sit in their own groups beside the organize ones, never in "Other".
+  const deletes = groupChatTools(['delete_images', 'delete_image_groups', 'delete_files', 'delete_audio_project'].map((name) => ({ name, description: '', scope: 'delete' as const })), t)
+  assert.deepEqual(deletes.map((group) => [group.id, group.tools.length]), [['image-delete', 2], ['file-delete', 1], ['audio-delete', 1]])
 })
 
 test('a saved chat setting is never reverted by a read sent before the save, and that read is sent again', { timeout: 10000 }, async () => {

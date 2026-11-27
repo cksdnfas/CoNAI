@@ -3,7 +3,7 @@ import path from 'path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
 import { runtimePaths } from '../config/runtimePaths';
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireDelete, requireEdit, requireRead } from '../middleware/authMiddleware';
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { createUploadStorage, wrapUploadMiddleware, MAX_MULTIPLE_UPLOAD_FILES } from '../middleware/upload';
 import { AudioLabelError } from '../services/audio/audioNaming';
@@ -80,6 +80,7 @@ import {
   saveAudioWorkflowBinding,
 } from '../services/audio/audioWorkflows';
 import {
+  audioOrderOwner,
   cancelAudioOrder,
   createAudioOrder,
   getAudioOrder,
@@ -88,18 +89,21 @@ import {
 } from '../services/audio/audioOrders';
 
 /**
- * /api/audio — the sound-effect workspace. Reads need `audio.view`, every change `audio.edit`.
+ * /api/audio — the sound-effect workspace. Reads need the read right, changes edit, removals delete. Ordering sounds is
+ * generation: any reader may order. Cancelling or retrying is for the order's owner, or anyone with edit.
  *
  * Authorized MCP tools share the same domain services and audio permissions.
  */
 const router = Router();
-router.use(requirePermission('audio.view'));
+router.use(requireRead);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 
-const edit = requirePermission('audio.edit');
+const edit = requireEdit;
 const AUDIO_INCOMING_DIR = path.join(runtimePaths.tempDir, 'audio-incoming');
 const accountId = (req: Request) => getRequesterAccountId(req);
 const param = (req: Request, name: string) => String(req.params[name] ?? '');
+const ownOrderOrEdit = (req: Request, res: Response, next: NextFunction) => (
+  audioOrderOwner(param(req, 'orderId')).requested_by_account_id === accountId(req) ? next() : edit(req, res, next));
 
 function importTarget(source: Record<string, unknown> | undefined): AudioImportTarget {
   const groupId = source?.groupId ?? source?.group_id;
@@ -129,7 +133,7 @@ router.get('/projects', (req, res) => res.json({ success: true, data: audioDirec
 router.post('/projects', edit, (req, res) => res.status(201).json({ success: true, data: createAudioProject(req.body ?? {}, accountId(req)) }));
 router.get('/projects/:projectId', (req, res) => res.json({ success: true, data: getAudioProject(param(req, 'projectId')) }));
 router.patch('/projects/:projectId', edit, (req, res) => res.json({ success: true, data: updateAudioProject(param(req, 'projectId'), req.body ?? {}) }));
-router.delete('/projects/:projectId', edit, asyncHandler(async (req, res) => {
+router.delete('/projects/:projectId', requireDelete, asyncHandler(async (req, res) => {
   res.json({ success: true, data: await deleteAudioProject(param(req, 'projectId')) });
 }));
 
@@ -140,7 +144,7 @@ router.post('/projects/:projectId/folders', edit, (req, res) => {
   res.status(201).json({ success: true, data: createAudioFolder(param(req, 'projectId'), req.body ?? {}) });
 });
 router.patch('/folders/:folderId', edit, (req, res) => res.json({ success: true, data: updateAudioFolder(param(req, 'folderId'), req.body ?? {}) }));
-router.delete('/folders/:folderId', edit, (req, res) => res.json({ success: true, data: deleteAudioFolder(param(req, 'folderId')) }));
+router.delete('/folders/:folderId', requireDelete, (req, res) => res.json({ success: true, data: deleteAudioFolder(param(req, 'folderId')) }));
 
 /* ------------------------------------------------------------------ groups */
 
@@ -156,7 +160,7 @@ router.post('/projects/:projectId/groups', edit, (req, res) => {
 });
 router.get('/groups/:groupId', (req, res) => res.json({ success: true, data: getAudioGroup(param(req, 'groupId')) }));
 router.patch('/groups/:groupId', edit, (req, res) => res.json({ success: true, data: updateAudioGroup(param(req, 'groupId'), req.body ?? {}) }));
-router.delete('/groups/:groupId', edit, asyncHandler(async (req, res) => {
+router.delete('/groups/:groupId', requireDelete, asyncHandler(async (req, res) => {
   res.json({ success: true, data: await deleteAudioGroup(param(req, 'groupId')) });
 }));
 router.get('/groups/:groupId/candidates', (req, res) => {
@@ -177,7 +181,7 @@ router.post('/groups/:groupId/comments', edit, (req, res) => {
 router.patch('/groups/:groupId/comments/:commentId', edit, (req, res) => {
   res.json({ success: true, data: updateAudioGroupComment(param(req, 'groupId'), param(req, 'commentId'), req.body ?? {}) });
 });
-router.delete('/groups/:groupId/comments/:commentId', edit, (req, res) => {
+router.delete('/groups/:groupId/comments/:commentId', requireDelete, (req, res) => {
   res.json({ success: true, data: deleteAudioGroupComment(param(req, 'groupId'), param(req, 'commentId')) });
 });
 router.patch('/groups/:groupId/comments/:commentId/status', edit, (req, res) => {
@@ -237,8 +241,8 @@ router.post('/import-file', edit, asyncHandler(async (req, res) => {
 router.post('/candidates/move', edit, (req, res) => {
   res.json({ success: true, data: moveAudioCandidates(req.body?.ids, String(req.body?.groupId ?? req.body?.group_id ?? '')) });
 });
-router.post('/candidates/delete', edit, (req, res) => res.json({ success: true, data: deleteAudioCandidates(req.body?.ids) }));
-router.post('/candidates/restore', edit, (req, res) => res.json({ success: true, data: restoreAudioCandidates(req.body?.ids) }));
+router.post('/candidates/delete', requireDelete, (req, res) => res.json({ success: true, data: deleteAudioCandidates(req.body?.ids) }));
+router.post('/candidates/restore', requireDelete, (req, res) => res.json({ success: true, data: restoreAudioCandidates(req.body?.ids) }));
 router.get('/candidates/:candidateId', (req, res) => res.json({ success: true, data: getAudioCandidate(param(req, 'candidateId')) }));
 
 /** Review: selected / rejected / pending plus the review memo. */
@@ -254,7 +258,6 @@ router.get('/candidates/:candidateId/file', (req, res, next) => {
 
 /* ------------------------------------------------------------------ generation */
 
-const generate = requirePermission('generation.execute');
 const workflowId = (req: Request) => {
   const id = Number(req.params.workflowId);
   if (!Number.isSafeInteger(id) || id <= 0) throw new AudioServiceError('잘못된 워크플로 ID야.');
@@ -269,13 +272,14 @@ router.put('/workflows/:workflowId/binding', edit, asyncHandler(async (req, res)
 router.post('/workflows/:workflowId/check', edit, asyncHandler(async (req, res) => {
   res.json({ success: true, data: await checkAudioWorkflowCompatibility(workflowId(req), { force: true }) });
 }));
-/** Registers the default Stable Audio 3 graph on the generation side, so it also needs workflows.edit. */
-router.post('/workflows/default', edit, requirePermission('workflows.edit'), asyncHandler(async (_req, res) => {
+/** Registers the default Stable Audio 3 graph on the generation side. */
+router.post('/workflows/default', edit, asyncHandler(async (_req, res) => {
   res.status(201).json({ success: true, data: await addDefaultStableAudioWorkflow() });
 }));
 
 /** POST /api/audio/orders { group_id, text, seconds, count, seed?, workflow_id?, request_key?, server_id?, server_tag? } */
-router.post('/orders', edit, generate, asyncHandler(async (req, res) => {
+// Orders are generating: signed in with the read right (router level). Cancel and retry: the owner, or edit.
+router.post('/orders', asyncHandler(async (req, res) => {
   const order = await createAudioOrder(req.body ?? {}, {
     accountId: accountId(req),
     accountType: getRequesterAccountType(req) ?? null,
@@ -287,10 +291,10 @@ router.get('/orders', (req, res) => {
   res.json({ success: true, data: listAudioOrders({ groupId: req.query.group_id ?? req.query.groupId, limit: req.query.limit, offset: req.query.offset }) });
 });
 router.get('/orders/:orderId', (req, res) => res.json({ success: true, data: getAudioOrder(param(req, 'orderId')) }));
-router.post('/orders/:orderId/cancel', edit, asyncHandler(async (req, res) => {
+router.post('/orders/:orderId/cancel', ownOrderOrEdit, asyncHandler(async (req, res) => {
   res.json({ success: true, data: await cancelAudioOrder(param(req, 'orderId')) });
 }));
-router.post('/orders/:orderId/jobs/:idx/retry', edit, generate, (req, res) => {
+router.post('/orders/:orderId/jobs/:idx/retry', ownOrderOrEdit, (req, res) => {
   const idx = Number(req.params.idx);
   if (!Number.isSafeInteger(idx) || idx < 0) throw new AudioServiceError('잘못된 순번이야.');
   res.json({ success: true, data: retryAudioOrderJob(param(req, 'orderId'), idx) });
@@ -299,7 +303,7 @@ router.post('/orders/:orderId/jobs/:idx/retry', edit, generate, (req, res) => {
 /* ------------------------------------------------------------------ editing */
 
 /** POST /api/audio/candidates/:id/preview — renders the edit to a temp WAV, streams it and removes it. */
-router.post('/candidates/:candidateId/preview', edit, cancellableAsyncHandler(async (req, res, signal) => {
+router.post('/candidates/:candidateId/preview', cancellableAsyncHandler(async (req, res, signal) => {
   const preview = await renderAudioEditPreview(param(req, 'candidateId'), req.body ?? {}, signal);
   try {
     if (signal.aborted) return;
@@ -328,7 +332,7 @@ router.get('/groups/:groupId/candidates/deletion', (req, res) => {
   res.json({ success: true, data: audioDeletionPlan(param(req, 'groupId'), req.query.scope, req.query.candidate_id ?? req.query.candidateId) });
 });
 /** POST /api/audio/groups/:id/candidates/delete { candidate_ids, include_selected } — soft delete of a frozen list. */
-router.post('/groups/:groupId/candidates/delete', edit, (req, res) => {
+router.post('/groups/:groupId/candidates/delete', requireDelete, (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   res.json({ success: true, data: deleteAudioGroupCandidates(param(req, 'groupId'), body.candidate_ids ?? body.candidateIds, body.include_selected === true || body.includeSelected === true) });
 });

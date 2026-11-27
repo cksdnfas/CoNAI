@@ -58,7 +58,7 @@ type ConfirmStep = { style: ArtStyle; positiveTargetId: string | null; negativeT
 /**
  * "스타일 불러오기": pick an art style and append its positive prompt (and negative, where the form has a place for it)
  * to the form. Its images (the style's own copies) go in only when the person turns them on. Hidden without
- * `characters.view`; images need `images.view`. Values are copied at that moment: nothing links the form to the style afterwards.
+ * the read right. Values are copied at that moment: nothing links the form to the style afterwards.
  */
 export function ArtStyleLoadButton({
   label,
@@ -74,7 +74,7 @@ export function ArtStyleLoadButton({
 }: ArtStyleLoadButtonProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [step, setStep] = useState<ConfirmStep | null>(null)
@@ -85,7 +85,7 @@ export function ArtStyleLoadButton({
     onLoadRef.current = onLoad
   })
 
-  if (!has('characters.view')) return null
+  if (!canRead) return null
   const buttonLabel = label ?? t({ ko: '스타일 불러오기', en: 'Load art style' })
   const imagesOf = (style: ArtStyle) => (canViewImages ? style.images : [])
   const referenceOptionsOf = (style: ArtStyle) => (imagesOf(style).length ? referenceTargets : [])

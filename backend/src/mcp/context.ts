@@ -186,7 +186,7 @@ export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: u
   }
 }
 
-export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
+export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'delete', 'backup', 'restore'];
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
   workspace_publish_resources: 'organize',
@@ -264,7 +264,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   edit_file_text: 'organize',
   rename_file: 'organize',
   move_files: 'organize',
-  delete_files: 'organize',
+  delete_files: 'delete',
   restore_file_version: 'organize',
   list_workflows: 'read',
   list_comfyui_servers: 'read',
@@ -335,14 +335,14 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   upload_image: 'organize',
   update_image_metadata: 'organize',
   tag_images: 'organize',
-  delete_images: 'organize',
-  restore_deleted_images: 'organize',
+  delete_images: 'delete',
+  restore_deleted_images: 'delete',
   add_images_to_group: 'organize',
   move_images_between_groups: 'organize',
   create_image_group: 'organize',
   update_image_group: 'organize',
   move_image_groups: 'organize',
-  delete_image_groups: 'organize',
+  delete_image_groups: 'delete',
   run_group_auto_collect: 'organize',
   remove_images_from_group: 'organize',
   move_prompts_between_groups: 'organize',
@@ -368,16 +368,16 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   import_audio: 'organize',
   set_audio_group_comment_status: 'organize',
   set_audio_candidate_review: 'organize',
-  delete_audio_candidate: 'organize',
+  delete_audio_candidate: 'delete',
   create_audio_group_comment: 'organize',
   update_audio_group_comment: 'organize',
-  delete_audio_group_comment: 'organize',
+  delete_audio_group_comment: 'delete',
   edit_audio_candidate: 'organize',
-  delete_unselected_audio_candidates: 'organize',
+  delete_unselected_audio_candidates: 'delete',
   // Whole effect / folder / project deletes require the general organize grant.
-  delete_audio_group: 'organize',
-  delete_audio_folder: 'organize',
-  delete_audio_project: 'organize',
+  delete_audio_group: 'delete',
+  delete_audio_folder: 'delete',
+  delete_audio_project: 'delete',
   export_audio_selected: 'organize',
   get_audio_download: 'read',
   list_audio_workflows: 'read',
@@ -419,7 +419,7 @@ export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member']);
 /**
  * Tools every chat whose model sees images has, whatever the profile's scopes and tool list and the account's chat
  * scopes (the vision switch still applies: isVisionTool). What they open is checked item by item instead: library media
- * needs images.view, a stored file its owner.
+ * needs content.read, a stored file its owner.
  */
 export const CHAT_VISION_BUILTIN_TOOLS = new Set(['view_media_frames']);
 
@@ -440,6 +440,11 @@ export function getMcpToolScope(toolName: string): McpHttpScope | null {
   if (isChatGenerationTool(toolName)) return 'generate';
   // An external MCP server's tools take the scope its administrator gave it, a plugin's the scope its module gave.
   return TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? findPluginServerTool(toolName)?.scope ?? null;
+}
+
+/** The native tools that have a scope. */
+export function nativeMcpToolNames(): string[] {
+  return Object.keys(TOOL_SCOPES);
 }
 
 /** Enumerate registered names without loading schemas, for an exact run-local grant union. */

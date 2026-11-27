@@ -70,13 +70,13 @@ export function registerWallpaperRuntimeActionRoutes(router: Router) {
 
   /**
    * Run the workflow schedule a saved quick-run widget points at. Only widgets an administrator saved into a
-   * preset can trigger a run, so a runtime key cannot start arbitrary work; the reader also needs
-   * generation.execute, and the schedule must run as the reader's account unless the reader is an administrator
+   * preset can trigger a run, so a runtime key cannot start arbitrary work; the reader must not be anonymous, and the
+   * schedule must run as the reader's account unless the reader is an administrator
    * (the same rule as "run now" on the schedule page).
    */
   router.post('/quick-run', asyncHandler(async (req: Request, res: Response) => {
     const access = getWallpaperRuntimeAccess(res);
-    if (access.isAnonymous || !access.permissionKeys.includes('generation.execute')) {
+    if (access.isAnonymous) {
       return sendWallpaperRuntimeForbidden(res);
     }
     const presetId = typeof req.body?.presetId === 'string' ? req.body.presetId : '';

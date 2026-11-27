@@ -1,9 +1,9 @@
+import { requireRead } from '../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express';
 import { ZipArchive } from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { requireImagesView } from '../middleware/imageAccess';
 import { userSettingsDb } from '../database/userSettingsDb';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
@@ -382,7 +382,7 @@ router.get('/:slug/artifacts/file', asyncHandler(async (req: Request, res: Respo
 }));
 
 /** GET /api/public-workflows/:slug/history */
-// Publishing grants viewing the page's results; images.view would also open the gallery pages. The list stays
+// Publishing grants viewing the page's results; content.read would also open the library. The list stays
 // requester-scoped (applyHistoryAccessScope), and artifacts are the folder the publisher chose to show.
 router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
@@ -458,7 +458,7 @@ router.delete('/:slug/history', asyncHandler(async (req: Request, res: Response)
 /**
  * POST /api/public-workflows/:slug/queue
  * Publishing the workflow is the grant: any signed-in account may queue it, bounded by the per-role queue limit
- * (0 forbids). The global generation.execute permission would also open the generation pages, so it is not required.
+ * (0 forbids). Generating needs only sign-in, so no permission is required here.
  */
 router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
@@ -511,7 +511,7 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
     const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData as Record<string, unknown>);
     if (validateComfyPromptData(markedFields, normalizedPromptData)) {
       let allowed = false;
-      requireImagesView(req, res, () => { allowed = true; });
+      requireRead(req, res, () => { allowed = true; });
       if (!allowed) return;
     }
     // PAYLOAD-3: store base64 image inputs once and keep only references in the payload.

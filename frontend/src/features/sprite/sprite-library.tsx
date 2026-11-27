@@ -22,7 +22,7 @@ export function LibraryMediaButtons({ kind, maxCount, onPick, initialHashes = []
   initialHashes?: string[]
 }) {
   const { t } = useI18n()
-  const { has } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -48,7 +48,7 @@ export function LibraryMediaButtons({ kind, maxCount, onPick, initialHashes = []
       <IconButton variant="ghost" size="icon-sm" label={kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Choose videos from the library' }) : t({ ko: '라이브러리에서 시트 고르기', en: 'Choose sheets from the library' })} onClick={() => setOpen(true)}>
         <Images />
       </IconButton>
-      {has('images.upload') ? (
+      {canEdit ? (
         <IconButton variant="ghost" size="icon-sm" disabled={uploading} label={t({ ko: '업로드', en: 'Upload' })} onClick={() => inputRef.current?.click()}>
           {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
         </IconButton>

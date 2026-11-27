@@ -91,9 +91,7 @@ export function useRefModLibrary() {
   const permissions = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const authStatus = useAuthStatusQuery().data
-  const canEdit = permissions.has('characters.edit')
-  const canBuild = canEdit && permissions.canExecuteGeneration
-  const canAddWorkflow = permissions.canUpdateWorkflows
+  const canEdit = permissions.canEdit
   const { params, query, searchText, setSearchText, update } = useLibraryLocation(REFMOD_ENTRIES_PAGE_SIZE, ['entry'])
   const sortParam = params.get('sort') as RefModEntrySort | null
   const sort: RefModEntrySort = sortParam && REFMOD_ENTRY_SORTS.includes(sortParam) ? sortParam : 'updated'
@@ -576,8 +574,7 @@ export function useRefModLibrary() {
 
   return {
     canEdit,
-    canBuild,
-    canAddWorkflow,
+    canDelete: permissions.canDelete,
     canViewImages,
     query, searchText, setSearchText, search,
     sort, serverFilter, concept, setListView,

@@ -25,9 +25,8 @@ import { validateComfyPromptData } from '../../services/prepareComfyPromptData';
 import { createMcpQueueImageGrant, createPluginPublicQueueImageGrant, createTrustedQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY, requireCurrentMcpKeyImagePermission } from '../../services/generation-queue/queueMcpImageGrant';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
-import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess';
+import { requesterHasRight, requireContextRight, requireRequesterRight } from '../../middleware/featureAccess';
 import { validateMcpToolArguments } from '../requestSecurity';
-import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { requireChatAssetGeneration } from '../../services/codex-chat/chatAssetAccess';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import type { McpRequester } from '../context';
@@ -55,7 +54,7 @@ async function describeJob(jobId: number, context: McpRequestContext) {
   const job = GenerationQueueModel.findListRecordById(jobId);
   if (!job) return null;
   requireMcpResourceOwner(context, job);
-  const histories = !context.requester || canRequesterViewImages(context.requester)
+  const histories = !context.requester || requesterHasRight(context.requester, 'read')
     ? HistoryQueryRepository.findAllWithMetadata({ queue_job_id: jobId, limit: 100 }) : [];
   const artifacts = context.baseUrl
     ? (await Promise.all(histories.map(async (history) => history.id && await historyWithinContextRating(context, history.id)
@@ -131,8 +130,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   if (hasRefModEntryRunKey(request_payload)) throw new Error('RefMod entry link is server-issued');
   let usesImages = false;
   let usesComfyLibrary = false;
-  const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
-  if (service_type === 'comfyui') requireContextPermission(context, 'workflows.view');
+  const requireManagedMedia = () => { usesImages = true; requireRequesterRight(context.requester, 'read'); };
   if (isChatMcpSource(context.source)) validateMcpToolArguments(input, requireManagedMedia);
   const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
   if (server_id != null && normalizedServerTag !== undefined) {
@@ -210,7 +208,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
         if (!context.keyId) throw new Error('Invalid MCP key authorization for queued image input');
         requireCurrentMcpKeyImagePermission(context.keyId);
       } else {
-        requireContextPermission(context, 'images.view');
+        requireContextRight(context, 'read');
       }
     }
     payload = externalizeQueueInputDataUrls({
@@ -222,8 +220,8 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
     } else if (usesComfyLibrary && !context.requester && context.keyGroup === undefined && context.source === undefined) {
       payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createTrustedQueueImageGrant('stdio', workflow_id, payload.prompt_data as Record<string, unknown>) };
     } else if (usesComfyLibrary && context.requester && context.source === 'plugin' && context.pluginPublicScope
-      && !canRequesterViewImages({ accountId: context.requester.accountId, accountType: context.requester.accountType })) {
-      // A shared plugin page lent images.view for this submit; the queue re-checks the share when the job runs.
+      && !requesterHasRight({ accountId: context.requester.accountId, accountType: context.requester.accountType }, 'read')) {
+      // A shared plugin page lent content.read for this submit; the queue re-checks the share when the job runs.
       payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createPluginPublicQueueImageGrant(context.pluginPublicScope, context.requester.accountId, workflow_id, payload.prompt_data as Record<string, unknown>) };
     }
   } else {
@@ -425,7 +423,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       }
       if (context.requester) {
         const identity = McpArtifactService.identity(artifact_id);
-        // Sprite frame ZIPs and audio exports check their owner (audio files: audio.view) inside refreshDescriptor.
+        // Sprite frame ZIPs and audio exports check their owner (audio files: content.read) inside refreshDescriptor.
         if (!identity || !['history', 'sprite-frames', 'audio', 'audio-export'].includes(identity.kind)) return errorResult('Artifact not accessible to this account');
         if (identity.kind === 'history') requireMcpResourceOwner(context, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true);
       }

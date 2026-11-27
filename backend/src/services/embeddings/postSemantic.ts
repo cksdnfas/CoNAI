@@ -47,7 +47,7 @@ const accessibleWhere = `FROM posts p JOIN post_knowledge k ON k.post_id = p.id
 
 /** Restrict the candidate set before vector ranking, including drafts and shared published posts. */
 function accessiblePosts(actor: PostActor): AccessiblePost[] {
-  requireKey(actor, 'posts.view')
+  requireKey(actor, 'content.read')
   return getUserSettingsDb().prepare(`SELECT p.id, k.content_hash ${accessibleWhere}`)
     .all(Number(actor.isAdmin), actor.accountId, actor.accountId) as AccessiblePost[]
 }
@@ -68,7 +68,7 @@ export function semanticPostCandidatesSync(actor: PostActor, vector: Float32Arra
 
 export async function semanticPostCandidates(actor: PostActor, query: string, signal?: AbortSignal, memo: PostSemanticMemo = {}, synchronous = false): Promise<Array<{ postId: number; score: number; contentHash: string }>> {
   if (!loadPostsSettings().knowledge.enabled || !embeddingFeatureOn('postSearch') || !query.trim() || embeddingFailure()) return []
-  requireKey(actor, 'posts.view')
+  requireKey(actor, 'content.read')
   if (!getUserSettingsDb().prepare(`SELECT 1 ${accessibleWhere} LIMIT 1`).get(Number(actor.isAdmin), actor.accountId, actor.accountId)) return []
   try {
     const vector = memo.vector === undefined ? await embedQuery(query.slice(0, 500), { waitMs: 1200, signal }) : memo.vector

@@ -141,7 +141,7 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
   /** Focus the prompt (a just-created effect). */
   autoFocus?: boolean
   canGenerate: boolean
-  /** audio.edit + workflows.edit: may register the default Stable Audio 3 workflow. */
+  /** The edit right: may register the default Stable Audio 3 workflow. */
   canAddWorkflow: boolean
   onOrdered: (order: AudioOrder) => void
   onPromptSaved: () => void

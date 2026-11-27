@@ -1,7 +1,7 @@
 import { isCodexChatCreationTool, type ChatToolCall } from '@conai/shared'
 import { chatGenerationToolName } from '../../mcp/context'
-import { requiredToolKeys } from '../../mcp/toolAccess'
-import { canUseChatProfile, resolveChatProfileToolGrant, type ChatAccess } from './codexChatAccess'
+import { accountMeetsTool } from '../../mcp/toolAccess'
+import { resolveChatProfileToolGrant, type ChatAccess } from './codexChatAccess'
 import type { ChatProfile } from './chatProfiles'
 import { ChatFlagError } from './chatFlags'
 
@@ -56,14 +56,12 @@ const IMAGE_TOOLS = ['generate_nai', 'generate_comfyui', 'submit_generation_job'
 
 /**
  * The orders this profile can carry out for this account: the tools each needs are in its grant, and the account
- * (with what the profile delegates in its chats, see chatProfileRequester) holds their feature keys, as the run's tool
- * listing requires. `choices` needs a direct chat (offer_choices is not offered in rooms) and, like offer_choices
+ * holds the rights their scopes need, as the run's tool listing requires. `choices` needs a direct chat (offer_choices is not offered in rooms) and, like offer_choices
  * itself, a profile with tools.
  */
 export function chatOrdersOf(profile: ChatProfile, access: ChatAccess, kind: 'direct' | 'group'): ChatOrderKind[] {
   const grant = resolveChatProfileToolGrant(profile, access)
-  const keys = new Set([...access.permissionKeys, ...(profile.mcpEnabled && canUseChatProfile(access, profile) ? profile.delegatedPermissions : [])])
-  const allows = (name: string) => (grant.toolAllowlist === null || grant.toolAllowlist.includes(name)) && requiredToolKeys(name).every((key) => keys.has(key))
+  const allows = (name: string) => (grant.toolAllowlist === null || grant.toolAllowlist.includes(name)) && accountMeetsTool(name, access.permissionKeys, access.isAdmin)
   const generates = grant.scopes.includes('generate')
   const draws = generates && ((profile.generationPresetIds.length > 0 && allows(chatGenerationToolName(0))) || IMAGE_TOOLS.some(allows))
   return CHAT_ORDER_KINDS.filter((order) => {

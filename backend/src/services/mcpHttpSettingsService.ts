@@ -10,7 +10,7 @@ import { writeJsonFileAtomic } from '../utils/jsonFile';
 const MCP_HTTP_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'mcp-http.json');
 const MCP_API_KEY_PREFIX = 'conai_mcp_';
 const MCP_KEY_ID_PREFIX = 'mcpkey_';
-export const MCP_HTTP_SCOPES: readonly McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
+export const MCP_HTTP_SCOPES: readonly McpHttpScope[] = ['read', 'generate', 'organize', 'delete', 'backup', 'restore'];
 
 type StoredMcpHttpSettings = McpHttpSettings & {
   signingSecret: string;

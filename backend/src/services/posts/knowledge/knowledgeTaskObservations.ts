@@ -14,7 +14,7 @@ const purposes:Record<string,PostKnowledgeTaskPurpose['kind']>={image:'image_gen
 export function beginKnowledgeOrderTask(requester:McpRequester,context:ChatExecutionContext,kind:string):void {
   if(!loadPostsSettings().knowledge.enabled||!purposes[kind]) return;
   const actor=currentKnowledgeActor(requester.accountId,context.profileId,'chat');
-  if(!actor.isAdmin&&!actor.keys.has('posts.view')) return;
+  if(!actor.isAdmin&&!actor.keys.has('content.read')) return;
   const purpose=purposes[kind];
   // Resolve the real provider/model later, immediately before the first tool call. A CLI default is not a model identity.
   context.knowledgeTaskPurpose={kind:purpose,source:'human_order',conditionKey:`order:${knowledgeHash(purpose)}`};
@@ -43,7 +43,7 @@ export function knowledgeTaskContext(context:KnowledgeExecutionContext,actor:Pos
   const execution=requireKnowledgeExecution(context);
   const empty:PostKnowledgeTaskContext={purpose:null,observations:[],goalOutcome:'unknown',evidenceAvailable:false};
   if(execution.trust!=='observed_execution'||actor.accountId!==execution.account_id) return empty;
-  requireKey(actor,'posts.view');requireKey(actor,'posts.evaluate');
+  requireKey(actor,'content.read');
   const task=db().prepare('SELECT purpose_kind,condition_key,expires_at FROM post_knowledge_tasks WHERE execution_id=?').get(context.executionId) as {purpose_kind:PostKnowledgeTaskPurpose['kind'];condition_key:string;expires_at:string}|undefined;
   if(!task||Date.parse(task.expires_at)<=Date.now()) return empty;
   const purpose:PostKnowledgeTaskPurpose={kind:task.purpose_kind,source:'human_order',conditionKey:task.condition_key};
@@ -51,13 +51,12 @@ export function knowledgeTaskContext(context:KnowledgeExecutionContext,actor:Pos
     JOIN chat_generation_links l ON l.job_id=j.id AND l.thread_id=b.thread_id AND l.reply_id=b.reply_id
     JOIN codex_chat_threads t ON t.id=b.thread_id WHERE b.execution_id=? AND t.account_id IS ? AND j.requested_by_account_id IS ? ORDER BY j.id LIMIT 5`)
     .all(context.executionId,execution.account_id,execution.account_id) as Array<{id:number;status:string;completed_at:string|null;service_type:string;bound_at:string}>;
-  if(!actor.isAdmin&&!actor.keys.has('images.view')&&!actor.keys.has('audio.view')) return {...empty,purpose};
+  if(!actor.isAdmin&&!actor.keys.has('content.read')) return {...empty,purpose};
   const audioJobs=audioOrderGroupsByQueueJob(jobs.map(job=>job.id));
   const audio=audioCandidatesByQueueJob(jobs.map(job=>job.id));
   const observations:PostKnowledgeTaskContext['observations']=[];
   for(const job of jobs) {
     const operation=audioJobs.has(job.id)?'audio_generation':'image_generation';
-    if(!actor.isAdmin&&!actor.keys.has(operation==='audio_generation'?'audio.view':'images.view')) continue;
     const imageCount=operation==='image_generation'?(db().prepare(`SELECT COUNT(*) AS count FROM api_generation_history
       WHERE queue_job_id=? AND requested_by_account_id IS ? AND generation_status='completed' AND composite_hash IS NOT NULL`).get(job.id,execution.account_id) as {count:number}).count:0;
     const artifactCount=operation==='audio_generation'?audio.get(job.id)?.length??0:imageCount;

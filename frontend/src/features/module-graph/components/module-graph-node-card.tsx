@@ -87,7 +87,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
   const actions = useModuleGraphNodeActions()
   const variantModules = useModuleGraphVariantModules()
   const executionLocked = useModuleGraphExecutionLock()
-  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { drag, debugMode, liftedLink } = useModuleGraphCanvasContext()
   const updateNodeInternals = useUpdateNodeInternals()
   const { module } = data
@@ -175,20 +175,20 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
     >
       <NodeToolbar isVisible={selected && !dragging ? undefined : false} position={Position.Top} offset={8}>
         <div className={cn(floatingSurfaceClassName, 'nodrag flex items-center gap-0.5 rounded-lg p-0.5')}>
-          <IconButton size="icon-xs" variant="ghost" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
+          <IconButton size="icon-xs" variant="ghost" disabled={executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
             <Play />
           </IconButton>
-          <IconButton size="icon-xs" variant="ghost" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, true)} label={t({ ko: '캐시 무시하고 다시 실행', en: 'Rerun, ignoring the cache' })}>
+          <IconButton size="icon-xs" variant="ghost" disabled={executionLocked} onClick={() => actions.execute(id, true)} label={t({ ko: '캐시 무시하고 다시 실행', en: 'Rerun, ignoring the cache' })}>
             <RotateCcw />
           </IconButton>
           <span className="mx-0.5 h-4 w-px bg-line" aria-hidden />
-          <IconButton size="icon-xs" variant="ghost" disabled={!canUpdateWorkflows} onClick={() => actions.duplicate(id)} label={t({ ko: '복제 (Ctrl+D)', en: 'Duplicate (Ctrl+D)' })}>
+          <IconButton size="icon-xs" variant="ghost" disabled={!canEdit} onClick={() => actions.duplicate(id)} label={t({ ko: '복제 (Ctrl+D)', en: 'Duplicate (Ctrl+D)' })}>
             <Copy />
           </IconButton>
-          <IconButton size="icon-xs" variant="ghost" active={data.disabled === true} disabled={!canUpdateWorkflows} onClick={() => actions.toggleDisabled(id)} label={data.disabled === true ? t({ ko: '켜기', en: 'Turn on' }) : t({ ko: '끄기', en: 'Turn off' })}>
+          <IconButton size="icon-xs" variant="ghost" active={data.disabled === true} disabled={!canEdit} onClick={() => actions.toggleDisabled(id)} label={data.disabled === true ? t({ ko: '켜기', en: 'Turn on' }) : t({ ko: '끄기', en: 'Turn off' })}>
             <Power />
           </IconButton>
-          <IconButton size="icon-xs" variant="destructive-ghost" disabled={!canUpdateWorkflows} onClick={() => actions.remove(id)} label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })}>
+          <IconButton size="icon-xs" variant="destructive-ghost" disabled={!canEdit} onClick={() => actions.remove(id)} label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })}>
             <Trash2 />
           </IconButton>
           <IconButton
@@ -234,7 +234,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
             title={nodeLabel === baseLabel ? nodeLabel : `${nodeLabel}\n${baseLabel}`}
             onDoubleClick={(event) => {
               event.stopPropagation()
-              if (canUpdateWorkflows) setIsRenaming(true)
+              if (canEdit) setIsRenaming(true)
             }}
           >
             {headerLabel}
@@ -246,7 +246,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
             aria-label={t({ ko: '{family} 변형', en: '{family} variant' }, { family: t(family.label) })}
             title={t(variant.label)}
             value={variant.id}
-            disabled={!canUpdateWorkflows || executionLocked}
+            disabled={!canEdit || executionLocked}
             onMouseDown={stopNodeEvent}
             onPointerDown={stopNodeEvent}
             onKeyDown={stopNodeEvent}

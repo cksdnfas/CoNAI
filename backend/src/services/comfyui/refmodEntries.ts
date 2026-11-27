@@ -552,7 +552,7 @@ async function normalizeDirectorSources(entry: { id: number; name: string; folde
       let source: ReturnType<typeof getComfyMediaUploadInput>;
       let mimeType: unknown;
       if (typeof payload.composite_hash === 'string' && payload.composite_hash) {
-        if (!actor.canViewImages) throw new RefModEntryError('라이브러리 이미지를 쓰려면 images.view 권한이 필요해.', 403);
+        if (!actor.canViewImages) throw new RefModEntryError('라이브러리 이미지를 쓰려면 읽기 권한(content.read)이 필요해.', 403);
         const libraryFile = visibleLibraryFile(payload.composite_hash);
         if (!libraryFile) throw new RefModEntryError('라이브러리에서 이미지를 찾을 수 없어.', 404);
         source = { filePath: resolveUploadsPath(libraryFile.original_file_path), fileName: path.basename(libraryFile.original_file_path) };

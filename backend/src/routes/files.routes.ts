@@ -1,8 +1,7 @@
 import fs from 'fs';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
-import { requirePermission } from '../middleware/authMiddleware';
-import { requireImagesView } from '../middleware/imageAccess';
+import { requireRead, requireEdit, requireDelete } from '../middleware/authMiddleware';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId } from '../services/fileStoreService';
@@ -15,11 +14,9 @@ import type { FileWriteSource } from '@conai/shared';
 import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = Router();
-router.use(requirePermission('files.view'));
+router.use(requireRead);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 
-/** `requirePermission` refreshed the session's keys just before this, so they are current for the whole request. */
-const has = (req: Request, permissionKey: string) => req.session?.permissionKeys?.includes(permissionKey) === true;
 // The account identifies the writer; it does not select a private file store.
 const owner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
 const id = (req: Request) => parseFileId(req.params.id) as string;
@@ -48,11 +45,11 @@ router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreSe
 router.get('/search', cancellableAsyncHandler(async (req, res, signal) => {
   res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50), undefined, { semantic: true, signal }) });
 }));
-router.post('/folders', requirePermission('files.edit'), (req, res) => {
+router.post('/folders', requireEdit, (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
 });
 /** POST /api/files/text — a new text document (name must be free and end in a text extension). */
-router.post('/text', requirePermission('files.edit'), (req, res) => {
+router.post('/text', requireEdit, (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.writeText(owner(req), parseFileId(req.body?.parentId, true), req.body?.name, textBody(req), { create: true, source: editorSource(req) }) });
 });
 
@@ -82,7 +79,7 @@ const uploadPaths = (value: unknown): unknown => {
 };
 
 /** POST /api/files/upload?parentId= — `files` (1~20); optional `paths` recreates a folder tree under parentId. */
-router.post('/upload', requirePermission('files.edit'), (req, res, next) => {
+router.post('/upload', requireEdit, (req, res, next) => {
   // Validate the destination before receiving bytes, then recheck it inside the commit transaction.
   FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), 0, 1);
   ensureFileStoreDirectories();
@@ -100,15 +97,15 @@ router.post('/upload', requirePermission('files.edit'), (req, res, next) => {
   }
 }));
 
-router.post('/move', requirePermission('files.edit'), (req, res) => {
+router.post('/move', requireEdit, (req, res) => {
   FileStoreService.move(owner(req), req.body?.ids, parseFileId(req.body?.parentId, true));
   res.json({ success: true });
 });
-router.post('/delete', requirePermission('files.delete'), (req, res) => {
+router.post('/delete', requireDelete, (req, res) => {
   FileStoreService.delete(owner(req), req.body?.ids);
   res.json({ success: true });
 });
-router.patch('/:id', requirePermission('files.edit'), (req, res) => {
+router.patch('/:id', requireEdit, (req, res) => {
   res.json({ success: true, data: FileStoreService.rename(owner(req), id(req), req.body?.name, allowAnyType(req)) });
 });
 router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreService.get(owner(req), id(req)) }));
@@ -127,7 +124,7 @@ router.get('/:id/edit', (req, res) => {
   res.json({ success: true, data: FileStoreService.readEditableText(owner(req), id(req)) });
 });
 /** PUT /api/files/:id/text — replace the revision the editor opened (same id). */
-router.put('/:id/text', requirePermission('files.edit'), (req, res) => {
+router.put('/:id/text', requireEdit, (req, res) => {
   const revision = req.body?.expectedRevision;
   if (typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new FileStoreError('최신 파일을 다시 연 뒤 저장해줘.', 428);
   res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req), { source: editorSource(req), expectedRevision: revision }) });
@@ -148,7 +145,7 @@ router.get('/:id/revisions/:revisionId', (req, res) => {
   res.json({ success: true, data: { revision: FileStoreRevisions.find(fileOwner, entry.id, String(req.params.revisionId)), text } });
 });
 /** POST /api/files/:id/revisions/:revisionId/restore — put that text back (the current one is kept as a version). */
-router.post('/:id/revisions/:revisionId/restore', requirePermission('files.edit'), (req, res) => {
+router.post('/:id/revisions/:revisionId/restore', requireEdit, (req, res) => {
   res.json({ success: true, data: FileStoreService.restoreRevision(owner(req), id(req), String(req.params.revisionId), { via: 'restore', accountId: getRequesterAccountId(req) }) });
 });
 /** Safe inline media and inert text; sendFile handles single byte ranges (206/416) and HEAD. */
@@ -156,11 +153,6 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
   const mime = await filePreviewMime(entry, filePath);
   if (!mime) throw new FileStoreError('미리 볼 수 없는 형식이야.', 415);
-  if (/^(image|video)\//.test(mime)) {
-    let allowed = false;
-    requireImagesView(req, res, () => { allowed = true; });
-    if (!allowed) return;
-  }
   res.setHeader('Content-Type', mime);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(entry.name)}`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -176,7 +168,7 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
   });
 }));
 /** GET /api/files/:id/thumbnail — cached, bounded image/video WebP for the icon view and picker. */
-router.get('/:id/thumbnail', requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:id/thumbnail', asyncHandler(async (req, res) => {
   const store = owner(req);
   const { entry, filePath } = FileStoreService.resolveFile(store, id(req));
   const cached = await getFileThumbnail(store, entry, filePath);
@@ -187,12 +179,6 @@ router.get('/:id/thumbnail', requireImagesView, asyncHandler(async (req, res) =>
 }));
 router.get('/:id/download', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
-  const mime = await filePreviewMime(entry, filePath);
-  if (mime && /^(image|video)\//.test(mime)) {
-    let allowed = false;
-    requireImagesView(req, res, () => { allowed = true; });
-    if (!allowed) return;
-  }
   // Even HTML and SVG are inert downloads; never expose the private root with express.static.
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('X-Content-Type-Options', 'nosniff');

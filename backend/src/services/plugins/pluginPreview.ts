@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import { requirePluginInstance, pluginTokenSchema, type PluginCaller } from './pluginHost'
 import { resolvePluginMediaReference } from './pluginWorkspace'
 import { packageFile } from './pluginRegistry'
@@ -33,7 +33,7 @@ async function mediaFile(reference: unknown, caller: PluginCaller, scope: Plugin
   const media = await resolvePluginMediaReference(reference, caller.requester, scope)
   const mimeType = media.entry.mimeType ?? ''
   if (!MEDIA.test(mimeType)) throw new PluginError('미리보기에는 이미지·영상·오디오만 연결할 수 있어.', 415)
-  if (!mimeType.startsWith('audio/') && caller.requester.accountId !== null) requireRequesterPermission(publicScopeRequester(caller.requester, scope, 'media.read'), 'images.view')
+  if (!mimeType.startsWith('audio/') && caller.requester.accountId !== null) requireRequesterRight(publicScopeRequester(caller.requester, scope, 'media.read'), 'read')
   return { media, mimeType }
 }
 /** A new preview, or with `token` the same address with new contents, so a page can redraw it as it is edited. */

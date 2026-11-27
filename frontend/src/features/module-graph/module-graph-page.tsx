@@ -68,7 +68,7 @@ function WorkflowPageFallback() {
 
 function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceProps) {
   const { t, formatNumber } = useI18n()
-  const { isAdmin, canUpdateWorkflows } = useFeaturePermissions()
+  const { isAdmin, canEdit } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const reactFlow = useReactFlow()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -366,7 +366,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     dirty: isDirty, currentSnapshot, editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
     nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
     setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
-    canSave: canUpdateWorkflows, save: handleSaveGraph,
+    canSave: canEdit, save: handleSaveGraph,
   })
 
   useChatPageRegistration(workflowView === 'browse' ? {
@@ -916,8 +916,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
 }
 
 export function ModuleWorkflowWorkspace({ isWideLayout }: ModuleWorkflowWorkspaceProps) {
-  const { canViewWorkflows } = useFeaturePermissions()
-  if (!canViewWorkflows) return <FeaturePermissionNotice permission="workflows.view" />
+  const { canRead } = useFeaturePermissions()
+  if (!canRead) return <FeaturePermissionNotice />
   return (
     <ReactFlowProvider>
       <ModuleWorkflowWorkspaceInner isWideLayout={isWideLayout} />

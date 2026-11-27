@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
-import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginMediaPickOptions, type PluginMediaPickItem, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
+import { CONTENT_PERMISSIONS, copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginMediaPickOptions, type PluginMediaPickItem, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -92,7 +92,7 @@ export function PluginPage() {
   const discardDraft = async () => !hasDraft || await confirm({ title: t({ ko: '지금 초안과 검토를 닫고 다시 열까?', en: 'Discard current drafts and reopen?' }) })
   if (plugins.isPending) return <LoadingState />
   if (!page || !definition) return <ErrorState description={shared && plugin ? t({ ko: '공용으로 열린 페이지가 아니야.', en: 'This page is not shared.' }) : t({ ko: '플러그인이 없거나 꺼져 있어.', en: 'The plugin is unavailable or disabled.' })} />
-  const canFiles = hasAuthPermission(auth.data?.permissionKeys, 'files.view')
+  const canFiles = hasAuthPermission(auth.data?.permissionKeys, CONTENT_PERMISSIONS.read)
   // Only pages that declare the file types they open need a host file picker; other plugins manage their own inputs.
   const usesFiles = canFiles && page.accepts.length > 0
   const fileCount = files ? files.split(',').filter(Boolean).length : 0

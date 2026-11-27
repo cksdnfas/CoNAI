@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { BookmarkPlus } from 'lucide-react'
@@ -30,7 +31,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
   const value = normalizeTextSegmentSpreadsheetText(kind === 'positive' ? prompt : negativePrompt).trim()
   const label = t({ ko: '프롬프트 프리셋으로 저장', en: 'Save as prompt preset' })
 
-  if (!hasAuthPermission(permissions, 'prompts.edit')) {
+  if (!hasAuthPermission(permissions, CONTENT_PERMISSIONS.edit)) {
     return null
   }
 

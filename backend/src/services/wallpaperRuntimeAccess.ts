@@ -4,6 +4,7 @@ import { WallpaperRuntimeToken } from '../models/WallpaperRuntimeToken';
 import { clearSessionAuthAccess, hasConfiguredAuth } from './auth/sessionAccess';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 import { AuthAccessControlService } from './authAccessControlService';
+import { CONTENT_PERMISSIONS, type ContentRight } from '@conai/shared';
 
 const RUNTIME_PAGE_PERMISSION = 'page.wallpaper.runtime.view';
 
@@ -105,7 +106,7 @@ export function dropRevokedWallpaperKeyLogin(req: Request, _res: Response, next:
 /** True when the request rides a live runtime key session whose reader may view images. */
 export function wallpaperRuntimeSessionGrantsImageView(req: Request): boolean {
   const access = resolveTokenAccess(req);
-  return access !== null && access.permissionKeys.includes('images.view');
+  return access !== null && access.permissionKeys.includes(CONTENT_PERMISSIONS.read);
 }
 
 export function getWallpaperRuntimeAccess(res: Response): WallpaperRuntimeAccess {
@@ -149,10 +150,10 @@ export function requireWallpaperRuntimeAdmin(_req: Request, res: Response, next:
 }
 
 /** Narrow a runtime read to readers holding one feature permission. */
-export function requireWallpaperRuntimePermission(permissionKey: string) {
+export function requireWallpaperRuntimeRight(right: ContentRight) {
   return (_req: Request, res: Response, next: NextFunction): void => {
     const access = getWallpaperRuntimeAccess(res);
-    if (!access.permissionKeys.includes(permissionKey)) {
+    if (!access.permissionKeys.includes(CONTENT_PERMISSIONS[right])) {
       sendWallpaperRuntimeForbidden(res);
       return;
     }

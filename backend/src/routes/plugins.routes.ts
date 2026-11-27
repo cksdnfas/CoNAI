@@ -154,7 +154,7 @@ router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(a
   if (!action || !(action.surfaces as string[]).includes(input.surface)) { res.status(404).json({ error: '이 화면에 없는 플러그인 버튼이야.' }); return }
   res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester, signal) })
 }))
-// plugins.view, or a page an administrator shared: openPluginInstance checks it and every later call rechecks it.
+// page.extensions.view, or a page an administrator shared: openPluginInstance checks it and every later call rechecks it.
 router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
   const input = z.object({ files: z.array(z.string()).max(20) }).strict().parse(req.body)
   res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req)) })

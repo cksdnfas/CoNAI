@@ -1,5 +1,4 @@
-import { requirePermission } from '../middleware/authMiddleware';
-import { requireImagesView } from '../middleware/imageAccess';
+import { requireRead } from '../middleware/authMiddleware';
 import fs from 'fs';
 import path from 'path';
 import { Router, type Request, type Response } from 'express';
@@ -68,7 +67,7 @@ function parseWorkflowInputAsset(req: Request, res: Response, next: (error?: unk
   });
 }
 
-router.post('/', orPublicWorkflow(requirePermission('generation.execute')), parseWorkflowInputAsset, asyncHandler(async (req: Request, res: Response) => {
+router.post('/', parseWorkflowInputAsset, asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ success: false, error: 'A media file is required' });
   }
@@ -86,7 +85,7 @@ router.post('/', orPublicWorkflow(requirePermission('generation.execute')), pars
   }
 }));
 
-router.get('/:assetId', orPublicWorkflow(requireImagesView), asyncHandler(async (req: Request, res: Response) => {
+router.get('/:assetId', orPublicWorkflow(requireRead), asyncHandler(async (req: Request, res: Response) => {
   const assetId = String(req.params.assetId || '');
   const absolutePath = resolveWorkflowInputAssetPath(assetId);
   if (!absolutePath || !fs.existsSync(absolutePath)) {
@@ -100,7 +99,7 @@ router.get('/:assetId', orPublicWorkflow(requireImagesView), asyncHandler(async 
   return streamRangeFile(req, res, absolutePath, mimeType);
 }));
 
-router.delete('/:assetId', orPublicWorkflow(requirePermission('generation.execute')), (req: Request, res: Response) => {
+router.delete('/:assetId', (req: Request, res: Response) => {
   const removed = markWorkflowInputAssetForDeletion(String(req.params.assetId || ''));
   return res.json({ success: true, data: { removed } });
 });

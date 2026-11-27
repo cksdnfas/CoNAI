@@ -576,7 +576,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     const { semanticPostCandidates, postSemanticStatus } = await import('../src/services/embeddings/postSemantic')
     const { updatePostsSettings } = await import('../src/services/posts/postsSettings')
     const owner = { accountId: 1, isAdmin: true, keys: new Set<string>(), profileId: null, origin: 'human' as const }
-    const reader = { accountId: 2, isAdmin: false, keys: new Set(['posts.view']), profileId: null, origin: 'human' as const }
+    const reader = { accountId: 2, isAdmin: false, keys: new Set(['content.read']), profileId: null, origin: 'human' as const }
     let publicPost = PostStore.create(owner, { title: '겨울 여행 지식', body: '설원에서 늑대를 피해 이끼를 찾아갔다.' })
     let privatePost = PostStore.create(owner, { title: '비공개 계획', body: '설원 늑대 이끼 늑대 늑대', status: 'hidden' })
     publicPost = KnowledgeStore.patch(owner, publicPost.id, { expectedRevision: publicPost.revision, enabled: true })
@@ -666,7 +666,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     const { KnowledgeAssessmentStore } = await import('../src/services/posts/knowledgeAssessment')
     const { updatePostsSettings } = await import('../src/services/posts/postsSettings')
     const owner = { accountId: 1,isAdmin: true,keys: new Set<string>(),profileId: null,origin: 'human' as const }
-    const reader = { accountId: 2,isAdmin: false,keys: new Set(['posts.view','posts.evaluate']),profileId: null,origin: 'human' as const }
+    const reader = { accountId: 2,isAdmin: false,keys: new Set(['content.read']),profileId: null,origin: 'human' as const }
     semanticIndexer.stop()
     settingsService.updateEmbeddingSettings({ postSearch: true })
     updatePostsSettings({ knowledge: { rankingEnabled: true } })

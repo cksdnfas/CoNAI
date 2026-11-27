@@ -4,8 +4,6 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { getActiveFileOrBlock, type ImageDownloadType } from '../images/query-file-helpers';
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
-import { requireImagesView } from '../../middleware/imageAccess';
-import { WorkflowModel } from '../../models/Workflow';
 import { parsePagination, parsePositiveInteger } from '../routeValidation';
 import type { GenerationHistoryFilterOptions, ServiceType } from '../../types/generationHistory';
 
@@ -156,10 +154,7 @@ export function canAccessHistoryRecord(
     && record.requested_by_account_type === requesterAccountType;
 }
 
-/**
- * Owner check plus the read grant for one history row. A run of a published workflow is viewable by its owner without
- * images.view: publishing is the grant, and images.view would also open the gallery pages.
- */
+/** One history row is the requester's own (or the requester is an administrator); no other right is needed. */
 export function authorizeHistoryRecordOrBlock(
   req: Request,
   res: Response,
@@ -169,14 +164,7 @@ export function authorizeHistoryRecordOrBlock(
     res.status(403).json({ success: false, error: 'Not allowed to access this generation history item' });
     return false;
   }
-
-  if (typeof record.workflow_id === 'number' && WorkflowModel.isPublicPage(record.workflow_id)) {
-    return true;
-  }
-
-  let allowed = false;
-  requireImagesView(req, res, () => { allowed = true; });
-  return allowed;
+  return true;
 }
 
 export function getHistoryCompositeHash(record: { actual_composite_hash?: string | null }) {

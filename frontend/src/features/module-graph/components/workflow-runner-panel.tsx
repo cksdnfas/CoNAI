@@ -77,10 +77,10 @@ export function WorkflowRunnerPanel({
   onDelete,
   onValidationIssueSelect,
 }: WorkflowRunnerPanelProps) {
-  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit, canDelete } = useFeaturePermissions()
   const { t } = useI18n()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
-  const runDisabled = !canExecuteGeneration || !canExecute || isExecuting
+  const runDisabled = !canExecute || isExecuting
   useWorkflowRunnerChatPage({ graph: selectedGraph, definitions: inputDefinitions, values: inputValues, change: onInputValueChange, clear: onInputValueClear, enabled: true, canRun: !runDisabled, run: onExecute, running: isExecuting, refresh: onRefreshRuns, recentRuns })
   // The slot is rendered by the workspace in the same commit, so look it up after mount.
   const stickyBarTarget = usePortalTargetById(stickyBarTargetId)
@@ -137,7 +137,7 @@ export function WorkflowRunnerPanel({
           </PopoverContent>
         </Popover>
         <span className="flex-1" />
-        <IconButton variant="ghost" size="icon-sm" onClick={onEdit} disabled={!canUpdateWorkflows} label={t({ ko: '노드 편집', en: 'Edit nodes' })}>
+        <IconButton variant="ghost" size="icon-sm" onClick={onEdit} disabled={!canEdit} label={t({ ko: '노드 편집', en: 'Edit nodes' })}>
           <PenSquare />
         </IconButton>
         <DropdownMenu>
@@ -147,11 +147,11 @@ export function WorkflowRunnerPanel({
             </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem disabled={!canUpdateWorkflows} onSelect={onDuplicate}><Copy />{t({ ko: '복제', en: 'Duplicate' })}</DropdownMenuItem>
+            <DropdownMenuItem disabled={!canEdit} onSelect={onDuplicate}><Copy />{t({ ko: '복제', en: 'Duplicate' })}</DropdownMenuItem>
             <DropdownMenuItem onSelect={onExport}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
-            <DropdownMenuItem disabled={!canUpdateWorkflows} onSelect={onMove}><FolderInput />{t({ ko: '폴더 이동', en: 'Move to folder' })}</DropdownMenuItem>
+            <DropdownMenuItem disabled={!canEdit} onSelect={onMove}><FolderInput />{t({ ko: '폴더 이동', en: 'Move to folder' })}</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" disabled={!canUpdateWorkflows} onSelect={onDelete}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" disabled={!canDelete} onSelect={onDelete}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

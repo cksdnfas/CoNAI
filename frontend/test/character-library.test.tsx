@@ -89,7 +89,7 @@ test('gallery drafts save both lists with the revision, merge unrelated writes a
   const render = () => root.render(h(QueryClientProvider, { client },
     h(I18nProvider, null, h(ConfirmProvider, null,
       h(SnackbarContext.Provider, { value: { showSnackbar: ({ message }) => messages.push(message), closeSnackbar: () => {} } },
-        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(canViewImages ? ['images.view'] : [], true) }, h(Probe)))))))
+        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(canViewImages ? ['content.read'] : [], true) }, h(Probe)))))))
   try {
     await act(async () => { render() })
     assert.equal(editor.ready, true)

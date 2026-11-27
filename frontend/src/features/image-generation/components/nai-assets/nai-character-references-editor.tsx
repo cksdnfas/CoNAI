@@ -59,7 +59,7 @@ export function NaiCharacterReferencesEditor({
   library,
 }: NaiCharacterReferencesEditorProps) {
   const { t } = useI18n()
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const v5 = isNaiV5Model(model)
   const [isOpen, setIsOpen] = useState(defaultOpen)
@@ -182,7 +182,7 @@ export function NaiCharacterReferencesEditor({
                     label: t({ ko: '라이브러리에 저장', en: 'Save to library' }),
                     icon: Save,
                     onSelect: () => onSave(index),
-                    disabled: !canUpdateWorkflows || !canViewImages || !reference.image,
+                    disabled: !canEdit || !canViewImages || !reference.image,
                   } : null,
                   {
                     key: 'remove',

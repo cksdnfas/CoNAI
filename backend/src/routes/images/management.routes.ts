@@ -5,7 +5,7 @@ import { ImageMetadataEditError, ImageMetadataEditService } from '../../services
 import { ImageManagementService } from '../../services/imageManagementService';
 import { successResponse, errorResponse } from '@conai/shared';
 import { enrichImageWithFileView } from './utils';
-import { requireImageAction } from '../../middleware/imageAccess';
+import { requireDelete } from '../../middleware/authMiddleware';
 import { SystemFolderError } from '../../services/systemFolderService';
 
 const router = Router();
@@ -95,7 +95,7 @@ router.delete('/bulk', asyncHandler(async (req: Request, res: Response) => {
   return res.json(successResponse(result));
 }));
 
-router.post('/restore', requireImageAction('images.delete'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/restore', requireDelete, asyncHandler(async (req: Request, res: Response) => {
   try {
     return res.json(successResponse(await ImageManagementService.restoreDeletedImages(req.body?.names)));
   } catch (error) {

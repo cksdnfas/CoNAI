@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express'
+import type { Request, RequestHandler, Response } from 'express'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
@@ -144,6 +144,13 @@ export function findScheduleWorkflowContextOrRespond(res: Response, scheduleId: 
   }
 
   return { schedule, workflow }
+}
+
+/** A schedule is its saver's own: they may change or remove it; anyone else needs the given right (edit or delete). */
+export const scheduleOwnerOr = (right: RequestHandler): RequestHandler => (req, res, next) => {
+  const runAs = GraphWorkflowScheduleModel.findById(Number(req.params.scheduleId))?.run_as_account_id ?? null
+  if (runAs !== null && runAs === getRequesterAccountId(req)) return next()
+  right(req, res, next)
 }
 
 /**

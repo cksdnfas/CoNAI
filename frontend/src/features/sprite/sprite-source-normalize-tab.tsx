@@ -22,7 +22,7 @@ import { useSpriteSourceNormalizeChatPage } from './use-sprite-chat-page'
 
 export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
   const { t } = useI18n()
-  const { has } = useFeaturePermissions()
+  const { canRead } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const wide = useDesktopPageLayout()
   const [hashes, setHashes] = useState<string[]>([])
@@ -45,7 +45,7 @@ export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
     onCancelled: () => setJobId(null),
   })
   const running = starting || Boolean(jobId)
-  const canRun = has('images.edit') && hashes.length > 0 && !running
+  const canRun = canRead && hashes.length > 0 && !running
   const update = (patch: Partial<SpriteSourceNormalizeOptions>) => setOptions((current) => ({ ...current, ...patch }))
   const run = async (save: boolean) => {
     setStarting(true)
@@ -59,7 +59,7 @@ export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
       setStarting(false)
     }
   }
-  useSpriteSourceNormalizeChatPage({ active, hashes, setHashes, options, setOptions, groupPath, setGroupPath, running, canRun, canSave: has('images.upload'), run, cancel: job.cancel, result })
+  useSpriteSourceNormalizeChatPage({ active, hashes, setHashes, options, setOptions, groupPath, setGroupPath, running, canRun, canSave: canRead, run, cancel: job.cancel, result })
   const numberField = (key: 'tolerance' | 'workSize' | 'canvasSize' | 'bottomMargin' | 'scale' | 'offsetX' | 'offsetY', label: string, min?: number, step = 1) => (
     <MiniField label={label}><NumberStepperInput value={options[key]} min={min} max={key === 'scale' ? 1 : undefined} step={step} onValueCommit={(value) => update({ [key]: Number(value) })} /></MiniField>
   )
@@ -107,7 +107,7 @@ export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
       <SpriteActionBar>
         <span className="flex-1" />
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <Button size="sm" variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)}>
+        <Button size="sm" variant="default" disabled={!canRun} onClick={() => void run(true)}>
           {running ? <LoaderCircle className="animate-spin" /> : null}
           {t({ ko: '저장', en: 'Save' })}
         </Button>

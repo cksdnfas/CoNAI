@@ -33,7 +33,7 @@ test('ComfyUI media inputs reject client paths while trusted references remain u
   const admin = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(admin)
   const guest = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('generator', 'unused', 'guest')").run().lastInsertRowid)
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'generator', permissionKeys: ['generation.execute', 'workflows.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'generator', permissionKeys: [] })
   AuthPermissionGroup.addAccountMembership(group.id, guest)
   invalidateConfiguredAuthCache()
 
@@ -106,9 +106,9 @@ test('ComfyUI media inputs reject client paths while trusted references remain u
     getAbortReason: () => null,
   } as any
   const graphNode = { id: 'target', input_values: { image: { storagePath: secret } } } as any
-  await assert.rejects(executeLoadImageFromReference(graphContext, graphNode, {} as any, { composite_hash: 'a'.repeat(48) }), /images.view/)
-  await assert.rejects(executeRandomImageFromLibrary(graphContext, graphNode, {} as any), /images.view/)
-  await assert.rejects(executeRandomVideoFromLibrary(graphContext, graphNode, {} as any), /images.view/)
+  await assert.rejects(executeLoadImageFromReference(graphContext, graphNode, {} as any, { composite_hash: 'a'.repeat(48) }), /content.read/)
+  await assert.rejects(executeRandomImageFromLibrary(graphContext, graphNode, {} as any), /content.read/)
+  await assert.rejects(executeRandomVideoFromLibrary(graphContext, graphNode, {} as any), /content.read/)
   const directModule = { name: 'direct', template_defaults: { workflow_json: {}, marked_fields: fields, api_endpoint: 'http://127.0.0.1:1' } } as any
   await assert.rejects(executeComfyModule(graphContext, graphNode, directModule, graphNode.input_values), /경로/)
   const queuedModule = { name: 'queued', source_workflow_id: workflowId, template_defaults: {} } as any

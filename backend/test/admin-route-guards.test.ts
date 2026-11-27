@@ -60,7 +60,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   const addAccount = (name: string, type: 'admin' | 'guest') => Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES (?, 'unused', ?)").run(name, type).lastInsertRowid)
   const adminId = addAccount('admin-test', 'admin')
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'viewer', permissionKeys: ['images.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'viewer', permissionKeys: ['content.read'] })
   const guestId = addAccount('viewer', 'guest')
   const otherId = addAccount('viewer-2', 'guest')
   AuthPermissionGroup.addAccountMembership(group.id, guestId)
@@ -102,7 +102,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
     const personal = { path: '/settings', kind: 'settings' as const, resourceId: 'mine' }
     assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.save'), /내 설정/)
     assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.mcp_server'), /내 설정/)
-    const chatGroup = AuthPermissionGroup.createCustomGroup({ name: 'personal-settings', permissionKeys: ['chat.use'] })
+    const chatGroup = AuthPermissionGroup.createCustomGroup({ name: 'personal-settings', permissionKeys: ['page.chat.view'] })
     AuthPermissionGroup.addAccountMembership(chatGroup.id, guestId)
     assert.doesNotThrow(() => requireChatPageAccess(guest, personal))
     assert.doesNotThrow(() => requireChatPageActionAccess(guest, personal, 'settings.user_profile'))
@@ -125,13 +125,14 @@ test('maintenance routes are admin-only and search history is per account', { ti
     }
   })
 
-  await t.test('page settings require explicit grants, bound fields, current revisions and live access', async () => {
+  await t.test('page settings are for administrators, bound to their fields and current revisions', async () => {
     const url = '/api/page-settings/image-save'
     assert.equal((await call(url, 0)).status, 401)
-    assert.equal((await call(url, guestId)).status, 403)
-    const delegated = AuthPermissionGroup.createCustomGroup({ name: 'media-settings', permissionKeys: ['settings.media.manage'] })
-    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
-    const initial = await call(url, guestId)
+    const everyRight = AuthPermissionGroup.createCustomGroup({ name: 'every-right', permissionKeys: ['content.read', 'content.edit', 'content.delete'] })
+    AuthPermissionGroup.addAccountMembership(everyRight.id, guestId)
+    assert.equal((await call(url, guestId)).status, 403, 'no right opens shared settings')
+    AuthPermissionGroup.removeAccountMembership(everyRight.id, guestId)
+    const initial = await call(url, adminId)
     assert.equal(initial.status, 200)
     const { values, revision } = initial.body.data
     assert.deepEqual(Object.keys(initial.body.data).sort(), ['revision', 'values'])
@@ -139,61 +140,55 @@ test('maintenance routes are admin-only and search history is per account', { ti
     assert.equal('llm' in values, false)
     assert.equal((await call('/api/settings', guestId)).status, 403)
     assert.equal((await call('/api/page-settings/chat', guestId)).status, 403)
-    assert.equal((await call('/api/page-settings/tagger/check-dependencies', guestId, 'POST')).status, 403)
-    assert.equal((await call(url, guestId, 'PUT', { quality: 80 })).status, 428)
-    assert.equal((await call(url, guestId, 'PUT', { quality: '80' }, { 'If-Match': revision })).status, 400)
-    assert.equal((await call(url, guestId, 'PUT', { pythonPath: 'forbidden' }, { 'If-Match': revision })).status, 400)
+    assert.equal((await call('/api/page-settings/tagger/check-dependencies', adminId, 'POST')).status, 403)
+    assert.equal((await call(url, adminId, 'PUT', { quality: 80 })).status, 428)
+    assert.equal((await call(url, adminId, 'PUT', { quality: '80' }, { 'If-Match': revision })).status, 400)
+    assert.equal((await call(url, adminId, 'PUT', { pythonPath: 'forbidden' }, { 'If-Match': revision })).status, 400)
     const quality = values.quality === 80 ? 81 : 80
-    const saved = await call(url, guestId, 'PUT', { quality }, { 'If-Match': revision })
+    const saved = await call(url, adminId, 'PUT', { quality }, { 'If-Match': revision })
     assert.equal(saved.status, 200)
     assert.equal(saved.body.data.values.quality, quality)
     assert.notEqual(saved.body.data.revision, revision)
-    assert.equal((await call(url, guestId, 'PUT', { quality: 90 }, { 'If-Match': revision })).status, 409)
+    assert.equal((await call(url, adminId, 'PUT', { quality: 90 }, { 'If-Match': revision })).status, 409)
     const native = await call('/api/settings', adminId)
     assert.equal(native.body.data.imageSave.quality, quality)
     assert.equal(native.body.data.imageSave.maxWidth, values.maxWidth)
     assert.equal((await call('/api/settings/image-save', adminId, 'PUT', { quality: 90 }, { 'If-Match': revision })).status, 409, 'a stale native settings draft cannot overwrite a modal save')
     // A change made through the existing settings tab also invalidates an open modal's version.
     assert.equal((await call('/api/settings/image-save', adminId, 'PUT', { quality: 79 })).status, 200)
-    assert.equal((await call(url, guestId, 'PUT', { quality: 91 }, { 'If-Match': saved.body.data.revision })).status, 409)
-    const latest = (await call(url, guestId)).body.data
-    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
-    assert.equal((await call(url, guestId)).status, 403)
+    assert.equal((await call(url, adminId, 'PUT', { quality: 91 }, { 'If-Match': saved.body.data.revision })).status, 409)
+    const latest = (await call(url, adminId)).body.data
     assert.equal((await call(url, guestId, 'PUT', { quality: 92 }, { 'If-Match': latest.revision })).status, 403)
     const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
     const requester = { accountId: guestId, accountType: 'guest' as const }
+    const admin = { accountId: adminId, accountType: 'admin' as const }
     const page = { path: '/', kind: 'page_settings' as const, resourceId: 'thumbnail' }
     assert.throws(() => requireChatPageAccess(requester, page))
     assert.throws(() => requireChatPageActionAccess(requester, page, 'page_settings.save'))
-    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
-    requireChatPageAccess(requester, page)
-    requireChatPageActionAccess(requester, page, 'page_settings.save')
-    assert.throws(() => requireChatPageAccess(requester, { ...page, resourceId: 'general' }))
-    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
+    requireChatPageAccess(admin, page)
+    requireChatPageActionAccess(admin, page, 'page_settings.save')
   })
 
-  await t.test('native and delegated revisions cover hidden settings without disclosing them', async () => {
-    const delegated = AuthPermissionGroup.createCustomGroup({ name: 'shared-settings-revision', permissionKeys: ['settings.library.manage', 'settings.appearance.manage'] })
-    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
+  await t.test('native and page-settings revisions cover hidden settings without disclosing them', async () => {
     const initial = (await call('/api/settings', adminId)).body.data
-    const general = (await call('/api/page-settings/general', guestId)).body.data
+    const general = (await call('/api/page-settings/general', adminId)).body.data
     const protection = { ...initial.general.deleteProtection, enabled: !initial.general.deleteProtection.enabled }
     assert.equal((await call('/api/settings/general', adminId, 'PUT', { deleteProtection: protection })).status, 200)
     assert.equal((await call('/api/settings/general', adminId, 'PUT', { deleteProtection: initial.general.deleteProtection }, { 'If-Match': initial.pageSettingsRevisions.general })).status, 409)
-    assert.equal((await call('/api/page-settings/general', guestId, 'PUT', { enableGallery: !general.values.enableGallery }, { 'If-Match': general.revision })).status, 409)
-    const latestGeneral = (await call('/api/page-settings/general', guestId)).body.data
+    assert.equal((await call('/api/page-settings/general', adminId, 'PUT', { enableGallery: !general.values.enableGallery }, { 'If-Match': general.revision })).status, 409)
+    const latestGeneral = (await call('/api/page-settings/general', adminId)).body.data
     assert.equal('deleteProtection' in latestGeneral.values, false)
-    assert.equal((await call('/api/page-settings/general', guestId, 'PUT', { enableGallery: !latestGeneral.values.enableGallery }, { 'If-Match': latestGeneral.revision })).status, 200)
+    assert.equal((await call('/api/page-settings/general', adminId, 'PUT', { enableGallery: !latestGeneral.values.enableGallery }, { 'If-Match': latestGeneral.revision })).status, 200)
     assert.deepEqual((await call('/api/settings', adminId)).body.data.general.deleteProtection, protection)
 
-    const appearance = (await call('/api/page-settings/appearance', guestId)).body.data
+    const appearance = (await call('/api/page-settings/appearance', adminId)).body.data
     const native = (await call('/api/settings', adminId)).body.data
     assert.equal((await call('/api/settings/appearance', adminId, 'PUT', { customPrimaryColor: '#123456' })).status, 200)
     assert.equal((await call('/api/settings/appearance', adminId, 'PUT', { customPrimaryColor: native.appearance.customPrimaryColor }, { 'If-Match': native.pageSettingsRevisions.appearance })).status, 409)
-    assert.equal((await call('/api/page-settings/appearance', guestId, 'PUT', { themeMode: 'dark' }, { 'If-Match': appearance.revision })).status, 409)
-    const latestAppearance = (await call('/api/page-settings/appearance', guestId)).body.data
+    assert.equal((await call('/api/page-settings/appearance', adminId, 'PUT', { themeMode: 'dark' }, { 'If-Match': appearance.revision })).status, 409)
+    const latestAppearance = (await call('/api/page-settings/appearance', adminId)).body.data
     assert.equal('customPrimaryColor' in latestAppearance.values, false)
-    assert.equal((await call('/api/page-settings/appearance', guestId, 'PUT', { themeMode: 'dark' }, { 'If-Match': latestAppearance.revision })).status, 200)
+    assert.equal((await call('/api/page-settings/appearance', adminId, 'PUT', { themeMode: 'dark' }, { 'If-Match': latestAppearance.revision })).status, 200)
     assert.equal((await call('/api/settings', adminId)).body.data.appearance.customPrimaryColor, '#123456')
     const runtimeSnapshot = (await call('/api/settings', adminId)).body.data
     const { settingsService } = await import('../src/services/settingsService')
@@ -202,7 +197,6 @@ test('maintenance routes are admin-only and search history is per account', { ti
     assert.equal((await call('/api/settings/ai-runtime', adminId, 'PUT', { cpuThreads: runtimeSnapshot.aiRuntime.cpuThreads }, { 'If-Match': runtimeSnapshot.pageSettingsRevisions['ai-runtime'] })).status, 409)
     assert.equal((await call('/api/settings/tagger', adminId, 'PUT', { pythonPath: runtimeSnapshot.tagger.pythonPath }, { 'If-Match': runtimeSnapshot.pageSettingsRevisions.tagger })).status, 400)
     assert.equal((await call('/api/settings', adminId)).body.data.aiRuntime.cpuThreads, cpuThreads)
-    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
   })
 
   await t.test('immediate group colors do not invalidate a general draft or get overwritten by it', async () => {
@@ -348,22 +342,21 @@ test('maintenance routes are admin-only and search history is per account', { ti
     assert.ok(!chatPageActionAllowed('/upload', 'settings.mcp_http'), 'the old admin actions are not opened to other pages')
   })
 
-  await t.test('revoking a grant during a worker dependency check prevents the deferred settings write', async () => {
+  await t.test('demoting the administrator during a worker dependency check prevents the deferred settings write', async () => {
     const { settingsService } = await import('../src/services/settingsService')
     const { imageTaggerService } = await import('../src/services/imageTaggerService')
     settingsService.updateTaggerSettings({ enabled: false, model: 'vit' })
-    const analysis = AuthPermissionGroup.createCustomGroup({ name: 'analysis-settings', permissionKeys: ['settings.analysis.manage'] })
-    AuthPermissionGroup.addAccountMembership(analysis.id, guestId)
-    const initial = (await call('/api/page-settings/tagger', guestId)).body.data
+    const managerId = addAccount('settings-manager', 'admin')
+    const initial = (await call('/api/page-settings/tagger', managerId)).body.data
     let started!: () => void
     let release!: () => void
     const entered = new Promise<void>((resolve) => { started = resolve })
     const released = new Promise<void>((resolve) => { release = resolve })
     const check = t.mock.method(imageTaggerService, 'checkPythonDependencies', async () => { started(); await released; return { available: true, message: 'ready' } })
-    const pending = call('/api/page-settings/tagger', guestId, 'PUT', { enabled: true }, { 'If-Match': initial.revision })
+    const pending = call('/api/page-settings/tagger', managerId, 'PUT', { enabled: true }, { 'If-Match': initial.revision })
     try {
       await Promise.race([entered, pending.then(() => { throw new Error('The request never reached the dependency check') })])
-      AuthPermissionGroup.removeAccountMembership(analysis.id, guestId)
+      auth.prepare("UPDATE auth_accounts SET account_type = 'guest' WHERE id = ?").run(managerId)
       release()
       assert.equal((await pending).status, 403)
       assert.equal(settingsService.loadSettings().tagger.enabled, false)
@@ -371,7 +364,6 @@ test('maintenance routes are admin-only and search history is per account', { ti
       release()
       await pending
       check.mock.restore()
-      AuthPermissionGroup.removeAccountMembership(analysis.id, guestId)
     }
   })
 
@@ -404,7 +396,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   })
 
   await t.test('a prompt viewer cannot install or check shared Danbooru database releases', async () => {
-    const promptGroup = AuthPermissionGroup.createCustomGroup({ name: 'prompt-viewer', permissionKeys: ['prompts.view'] })
+    const promptGroup = AuthPermissionGroup.createCustomGroup({ name: 'prompt-viewer', permissionKeys: ['content.read'] })
     const promptViewer = addAccount('prompt-viewer', 'guest')
     AuthPermissionGroup.addAccountMembership(promptGroup.id, promptViewer)
     assert.equal((await call('/api/danbooru-browser/summary', promptViewer)).status, 200)

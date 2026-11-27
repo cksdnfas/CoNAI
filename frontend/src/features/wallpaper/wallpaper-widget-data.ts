@@ -89,7 +89,7 @@ function syncWorkflowActivityRefreshTimer(refetch: () => void) {
  */
 export function useWallpaperWorkflowActivityQuery(scope: string, refreshIntervalMs: number) {
   const queryClient = useQueryClient()
-  // The execution topic needs workflows.view, so a live stream may not carry these events; keep the net fairly tight.
+  // The execution topic needs the read right, so a live stream may not carry these events; keep the net fairly tight.
   const effectiveIntervalMs = useRefetchInterval(refreshIntervalMs, 30_000)
 
   useEffect(() => {

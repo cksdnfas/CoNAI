@@ -1,6 +1,6 @@
 import { Router, type ErrorRequestHandler } from 'express';
-import { isPageSettingsScope, pageSettingsPatch, pageSettingsPermission } from '@conai/shared';
-import { requirePermission } from '../middleware/authMiddleware';
+import { isPageSettingsScope, pageSettingsPatch } from '@conai/shared';
+import { requireAdmin } from '../middleware/authMiddleware';
 import { readPageSettings, verifyPageSettingsWrite } from '../services/pageSettings';
 import { updatePostsSettings } from '../services/posts/postsSettings';
 import { updateChatSettings } from '../services/codex-chat/chatSettings';
@@ -13,12 +13,13 @@ import { appearanceSettingsRoutes } from './settings/appearance.routes';
 
 const router = Router();
 // Reuse the existing native handlers, including their validation, side effects and worker notifications.
-// Only exact allowlisted GET/PUT resources reach them; admin tools and subroutes stay inaccessible.
+// Only exact allowlisted GET/PUT resources reach them; admin tools and subroutes stay inaccessible. Page settings
+// belong to administrators.
 router.use((req, res, next) => {
   const scope = req.path.slice(1);
   if (!isPageSettingsScope(scope)) { res.status(403).json({ success: false, error: '이 경로에서는 허용하지 않는 설정 작업이야.' }); return; }
   if (!['GET', 'PUT'].includes(req.method)) { res.status(405).json({ success: false, error: '지원하지 않는 설정 작업이야.' }); return; }
-  const authorize = requirePermission(pageSettingsPermission(scope));
+  const authorize = requireAdmin;
   authorize(req, res, () => {
     res.setHeader('Cache-Control', 'no-store');
     if (req.method === 'GET') { res.json({ success: true, data: readPageSettings(scope) }); return; }

@@ -11,8 +11,8 @@ export * from './utils/index';
 
 // Export all constants
 export * from './constants/index';
-export { IMAGE_VIEW_PERMISSION } from './constants/imagePermissions';
-export { PERMISSION_CATALOG, PERMISSION_KEYS, CHAT_DELEGATABLE_PERMISSION_KEYS, PAGE_PERMISSION_RULES, withPagePermissions, type PermissionKey, type PermissionSection, type PagePermissionKey } from './constants/permissions';
+
+export { PERMISSION_CATALOG, PERMISSION_KEYS, ADMIN_PAGE_PERMISSION, IMAGE_DETAIL_PAGE_PERMISSION, METADATA_EDITOR_PAGE_PERMISSION, CONTENT_PERMISSIONS, resolvePermissionKeys, hasContentRight, scopeRequirement, type PermissionKey, type PermissionSection, type ContentRight } from './constants/permissions';
 
 // Version info
 export const VERSION = '26.11.22';

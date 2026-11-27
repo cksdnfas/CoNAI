@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
-import { IMAGE_VIEW_PERMISSION, PERMISSION_CATALOG, PERMISSION_KEYS, type PermissionKey } from '@conai/shared';
+import { PERMISSION_CATALOG, PERMISSION_KEYS } from '@conai/shared';
+import { carryChatAgentAudience } from './chatPermissionsV3Migration';
 
 const ANONYMOUS_GUEST_SIGNUP_SEED_KEY = 'anonymous_guest_signup_enabled_v1';
 
@@ -38,10 +39,11 @@ const DEFAULT_PERMISSION_CATALOG = PERMISSION_CATALOG.map((permission) => ({
 }));
 
 /**
- * Old keys folded into each catalog key once (`permissions_v2`). A group keeps an ability when it held any of the old
- * keys behind it; page keys are not listed because pages are now derived from these features.
+ * Old keys folded into each v2 catalog key once (`permissions_v2`). A group keeps an ability when it held any of the old
+ * keys behind it. permissions_v3 then turns the v2 keys into pages and the three basic rights; until it has run, these
+ * rows are created so older databases still convert through every step.
  */
-export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = {
+export const PERMISSIONS_V2_SOURCES: Record<string, readonly string[]> = {
   // Explicit delegation only: content edit rights never turn into shared-settings rights.
   'settings.library.manage': [],
   'settings.appearance.manage': [],
@@ -84,6 +86,35 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   // Pages used to open for every signed-in account; plugins_view_v1 keeps that until an administrator turns it off.
   'plugins.view': [],
   'auth.guest.create': ['auth.guest.create'],
+};
+
+/** The only v2 keys a signed-out visitor could use. */
+const V2_VISITOR_KEYS = ['images.view', 'auth.guest.create'];
+
+/** The menu pages v2 keys opened (`PAGE_PERMISSION_RULES` until permissions_v3), kept only to convert them. */
+const V2_PAGE_RULES: Record<string, { all?: readonly string[]; any?: readonly string[] }> = {
+  'page.home.view': { all: ['images.view'] },
+  'page.groups.view': { all: ['images.view'] },
+  'page.wallpaper.view': { all: ['images.view'] },
+  'page.wallpaper.runtime.view': { all: ['images.view'] },
+  'page.upload.view': { all: ['images.upload'] },
+  'page.audio.view': { all: ['audio.view'] },
+  'page.prompts.view': { all: ['prompts.view'] },
+  'page.wildcards.view': { all: ['wildcards.view'] },
+  'page.characters.view': { all: ['characters.view'] },
+  'page.generation.view': { any: ['generation.execute', 'workflows.view'] },
+  'page.sprite.view': { all: ['images.view', 'images.edit'] },
+  'page.files.view': { all: ['files.view'] },
+  'page.posts.view': { all: ['posts.view'] },
+  'page.chat.view': { any: ['chat.use', 'chat.agent.use'] },
+  'page.extensions.view': { all: ['plugins.view'] },
+};
+
+/** Any v2 view key reads, any edit or upload key edits, a delete key deletes. */
+const V2_RIGHT_SOURCES: Record<string, readonly string[]> = {
+  'content.read': ['images.view', 'prompts.view', 'wildcards.view', 'characters.view', 'workflows.view', 'files.view', 'audio.view', 'posts.view'],
+  'content.edit': ['images.edit', 'images.upload', 'prompts.edit', 'wildcards.edit', 'characters.edit', 'workflows.edit', 'files.edit', 'audio.edit', 'posts.knowledge.review'],
+  'content.delete': ['images.delete', 'files.delete'],
 };
 
 /** Seed built-in permission groups and the initial permission catalog. */
@@ -136,6 +167,11 @@ export function seedAccessControlDefaults(db: Database.Database): void {
       permission.description,
     );
   }
+  if (!db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get('permissions_v3')) {
+    for (const key of Object.keys(PERMISSIONS_V2_SOURCES)) {
+      upsertPermission.run(key, key.slice(0, key.lastIndexOf('.')), key.slice(key.lastIndexOf('.') + 1), 'v2 key; permissions_v3 converts it.');
+    }
+  }
 
   // Older one-time conversions still run first on databases that predate them; they read the old keys.
   splitLegacyFilesManagePermission(db);
@@ -145,8 +181,6 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   migrateIndependentFeaturePermissions(db);
   migrateChatDiagnosticsPermissions(db);
   migratePermissionsV2(db);
-  removeUncataloguedPermissions(db);
-  grantAllCatalogPermissionsToAdminGroup(db);
   db.transaction(() => {
     const key = 'character_library_permissions_v1';
     if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(key)) return;
@@ -160,7 +194,67 @@ export function seedAccessControlDefaults(db: Database.Database): void {
     db.prepare('INSERT INTO auth_seed_state(seed_key) VALUES (?)').run(key);
   })();
   grantPluginsViewToGuestGroupOnce(db);
+  migratePermissionsV3(db);
+  removeUncataloguedPermissions(db);
+  grantAllCatalogPermissionsToAdminGroup(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+/**
+ * v2 keys become the menu pages they opened plus the three basic rights, once per auth database. Pages are worked out
+ * on what a group resolves to (its parents, and for a custom group also the guest group every account carries), and
+ * a group stores only what its parent does not already give. Shared-settings grants become administrator-only.
+ */
+export function migratePermissionsV3(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'permissions_v3';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    const groups = db.prepare('SELECT id, group_key, parent_group_id FROM auth_permission_groups ORDER BY priority, id').all() as Array<{ id: number; group_key: string; parent_group_id: number | null }>;
+    const byId = new Map(groups.map((group) => [group.id, group]));
+    const direct = new Map<number, string[]>();
+    for (const row of db.prepare(`SELECT gp.group_id, p.permission_key FROM auth_group_permissions gp
+      JOIN auth_permissions p ON p.id = gp.permission_id WHERE gp.allowed = 1 ORDER BY p.permission_key`).all() as Array<{ group_id: number; permission_key: string }>) {
+      direct.set(row.group_id, [...(direct.get(row.group_id) ?? []), row.permission_key]);
+    }
+    const resolved = (id: number | null, seen = new Set<number>()): string[] => {
+      const group = id === null ? undefined : byId.get(id);
+      if (!group || seen.has(group.id)) return [];
+      seen.add(group.id);
+      return [...(direct.get(group.id) ?? []), ...resolved(group.parent_group_id, seen)];
+    };
+    const toV3 = (v2Keys: string[]) => {
+      const held = new Set(v2Keys);
+      return new Set([
+        ...Object.entries(V2_PAGE_RULES).filter(([, rule]) => (rule.all ?? []).every((key) => held.has(key)) && (!rule.any || rule.any.some((key) => held.has(key)))).map(([page]) => page),
+        ...Object.entries(V2_RIGHT_SOURCES).filter(([, sources]) => sources.some((key) => held.has(key))).map(([right]) => right),
+        ...(held.has('auth.guest.create') ? ['auth.guest.create'] : []),
+      ]);
+    };
+    const guestKeys = resolved(groups.find((group) => group.group_key === 'guest')?.id ?? null);
+    const visitorKeys = new Set<string>(PERMISSION_CATALOG.filter((permission) => 'anonymous' in permission).map((permission) => permission.key));
+    // Agent chat needed chat.agent.use: the agent profiles that named no audience keep the groups that held it, unless the
+    // guest group (every account) did. user.db applies it at startup (migrateChatPermissionsV3).
+    const agentGroups = groups.filter((group) => !['anonymous', 'guest', 'admin'].includes(group.group_key) && resolved(group.id).includes('chat.agent.use'));
+    carryChatAgentAudience(db, { everyone: guestKeys.includes('chat.agent.use'), groups: ['admin', ...agentGroups.map((group) => group.group_key)] });
+    const catalog = JSON.stringify(PERMISSION_KEYS);
+    const clear = db.prepare(`DELETE FROM auth_group_permissions WHERE group_id = ? AND permission_id IN (SELECT id FROM auth_permissions WHERE permission_key IN (SELECT value FROM json_each(?)))`);
+    const grant = db.prepare('INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed) SELECT ?, id, 1 FROM auth_permissions WHERE permission_key = ?');
+    console.log('🔐 Permissions converted to pages and read/edit/delete (permissions_v3):');
+    for (const group of groups) {
+      if (group.group_key === 'admin') continue;
+      const carried = group.group_key === 'anonymous' || group.group_key === 'guest' ? [] : guestKeys;
+      const inherited = toV3([...resolved(group.parent_group_id), ...carried]);
+      const after = [...toV3([...resolved(group.id), ...carried])]
+        .filter((key) => !inherited.has(key) && (group.group_key !== 'anonymous' || visitorKeys.has(key))).sort();
+      // Stored page keys from before v2 never counted; pages come only from the keys above.
+      clear.run(group.id, catalog);
+      for (const key of after) grant.run(group.id, key);
+      const before = direct.get(group.id) ?? [];
+      const settings = before.filter((key) => /^settings\..+\.manage$/.test(key));
+      console.log(`  - ${group.group_key}: [${before.join(', ')}] → [${after.join(', ')}]${settings.length ? ` (administrator-only now: ${settings.join(', ')})` : ''}`);
+    }
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
 }
 
 /** Plugin pages were open to every signed-in account; the guest group (inherited by all accounts) keeps that once, later edits stay. */
@@ -197,7 +291,7 @@ export function migratePermissionsV2(db: Database.Database): void {
     for (const [key, sources] of Object.entries(PERMISSIONS_V2_SOURCES)) grant.run(key, JSON.stringify(sources));
     // Signed-out visitors can only use anonymous keys; anything else on the anonymous group only reached signed-in
     // accounts through inheritance, so it moves to the guest group that every account inherits.
-    const visitorKeys = JSON.stringify(PERMISSION_CATALOG.filter((permission) => 'anonymous' in permission).map((permission) => permission.key));
+    const visitorKeys = JSON.stringify(V2_VISITOR_KEYS);
     const memberOnly = `SELECT gp.permission_id FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id
       WHERE gp.group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous') AND gp.allowed = 1
         AND p.permission_key NOT IN (SELECT value FROM json_each(?))`;
@@ -206,8 +300,8 @@ export function migratePermissionsV2(db: Database.Database): void {
     db.prepare(`DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous')
       AND permission_id IN (${memberOnly})`).run(visitorKeys);
     // One line per group so an administrator can review what each group can do after the conversion.
-    const catalog = new Set<string>(PERMISSION_KEYS);
-    console.log(`🔐 Permissions converted to the ${PERMISSION_CATALOG.length}-key catalog (permissions_v2):`);
+    const catalog = new Set(Object.keys(PERMISSIONS_V2_SOURCES));
+    console.log(`🔐 Permissions converted to the ${catalog.size}-key catalog (permissions_v2):`);
     for (const [group, after] of grantsByGroup()) {
       console.log(`  - ${group}: [${(before.get(group) ?? []).join(', ')}] → [${after.filter((key) => catalog.has(key)).join(', ')}]`);
     }
@@ -257,7 +351,7 @@ export function migrateImageViewPermission(db: Database.Database): void {
       JOIN auth_permissions legacy ON legacy.id = gp.permission_id
       JOIN auth_permissions image_permission ON image_permission.permission_key = ?
       WHERE gp.allowed = 1 AND legacy.permission_key IN (${LEGACY_IMAGE_VIEW_PERMISSION_KEYS.map(() => '?').join(', ')})
-    `).run(IMAGE_VIEW_PERMISSION, ...LEGACY_IMAGE_VIEW_PERMISSION_KEYS);
+    `).run('images.view', ...LEGACY_IMAGE_VIEW_PERMISSION_KEYS);
     db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
   }).immediate();
 }

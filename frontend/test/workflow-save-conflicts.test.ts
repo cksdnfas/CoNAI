@@ -259,7 +259,7 @@ test('schedule editor keeps its reviewed revisions and draft when the schedule c
   const savingStates: boolean[] = []
   const renderPanel = () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
     h(SnackbarContext.Provider, { value: snackbar }, h(FeaturePermissionsContext.Provider, {
-      value: resolveFeaturePermissions(['generation.execute', 'workflows.edit'], true),
+      value: resolveFeaturePermissions(['content.read', 'content.edit'], true),
     }, h(TooltipProvider, null, h(ModuleWorkflowSchedulesPanel, {
     schedules: listedSchedules as never, workflows: [{ id: 7, name: 'workflow' }], workflowNameById: new Map([[7, 'workflow']]),
     covers: {}, isMutating: false, onSavingChange: (saving) => savingStates.push(saving),

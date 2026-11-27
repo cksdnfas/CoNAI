@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
-import { requirePermission } from '../middleware/authMiddleware'
+import { requireRead, requireEdit, requireDelete } from '../middleware/authMiddleware'
 import { cancellableAsyncHandler, asyncHandler } from '../middleware/asyncHandler'
 import { getRequesterAccountId } from './requester-session-helpers'
 import { requireFileStoreOwner, requireFileStoreAction } from '../services/fileStoreAccess'
@@ -9,14 +9,14 @@ import { workspaceIdSchema, workspaceListSchema, workspaceReadSchema, workspaceA
 import { CodexChatService } from '../services/codex-chat/codexChatService'
 
 const router = Router()
-router.use(requirePermission('files.view'))
+router.use(requireRead)
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
 const requester = (req: Request) => ({ accountId: getRequesterAccountId(req), accountType: req.session?.accountType ?? null })
 const owner = (req: Request) => requireFileStoreOwner(requester(req))
 const projectId = (req: Request) => workspaceIdSchema.parse(req.params.id)
 const threadId = (req: Request) => z.coerce.number().int().positive().parse(req.params.threadId)
 router.get('/', (req, res) => res.json({ success: true, data: WorkspaceService.list(owner(req), z.coerce.number().int().min(0).max(1000000).parse(req.query.offset ?? 0)) }))
-router.post('/', requirePermission('files.edit'), asyncHandler(async (req, res) => {
+router.post('/', requireEdit, asyncHandler(async (req, res) => {
   const input = z.object({ name: z.string().trim().min(1).max(100), guidelines: z.string().max(64000).default('') }).parse(req.body)
   res.status(201).json({ success: true, data: await WorkspaceService.create(requireFileStoreAction(requester(req), 'organize'), input.name, input.guidelines) })
 }))
@@ -29,7 +29,7 @@ router.put('/threads/:threadId', asyncHandler(async (req, res) => {
   res.json({ success: true, data: WorkspaceService.setChatProject(owner(req), thread, input.projectId, input.mode) })
 }))
 router.get('/:id', (req, res) => res.json({ success: true, data: WorkspaceService.get(owner(req), projectId(req)) }))
-router.patch('/:id', requirePermission('files.edit'), asyncHandler(async (req, res) => {
+router.patch('/:id', requireEdit, asyncHandler(async (req, res) => {
   const input = workspaceUpdateSchema.parse(req.body)
   const account = requester(req)
   res.json({ success: true, data: await WorkspaceService.update(requireFileStoreAction(account, 'organize'), projectId(req), input, () => { requireFileStoreAction(account, 'organize') }) })
@@ -54,13 +54,13 @@ router.post('/:id/search', cancellableAsyncHandler(async (req, res, signal) => {
   res.json({ success: true, data: await WorkspaceService.search(owner(req), projectId(req), input.query, input.offset, signal) })
 }))
 router.get('/:id/changes', (req, res) => res.json({ success: true, data: WorkspaceService.changes(owner(req), projectId(req)) }))
-router.post('/:id/apply', requirePermission('files.edit'), cancellableAsyncHandler(async (req, res, signal) => {
+router.post('/:id/apply', requireEdit, cancellableAsyncHandler(async (req, res, signal) => {
   const input = workspaceApplySchema.parse(req.body)
   const account = requester(req)
   // The screen is the one place the project guidelines file may be written (chats and plugins may not).
   res.json({ success: true, data: await WorkspaceService.apply(requireFileStoreAction(account, 'organize'), projectId(req), input.requestId, input.operations, () => { requireFileStoreAction(account, 'organize') }, signal, { guidelines: true }) })
 }))
-router.post('/:id/delete', requirePermission('files.edit'), requirePermission('files.delete'), cancellableAsyncHandler(async (req, res, signal) => {
+router.post('/:id/delete', requireDelete, cancellableAsyncHandler(async (req, res, signal) => {
   const input = workspaceDeleteSchema.parse(req.body)
   const account = requester(req)
   const operations = input.targets.map(item => ({ kind: 'delete' as const, target: item.target, expectedRevision: item.expectedRevision }))

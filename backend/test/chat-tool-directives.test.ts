@@ -35,7 +35,7 @@ test('composer selections stay inside the chat grant and apply only to their use
   const stranger = Number(auth.prepare("INSERT INTO auth_accounts (username,password_hash,account_type) VALUES ('directive-other','unused','guest')").run().lastInsertRowid)
   for (const account of [owner, stranger]) auth.prepare("INSERT INTO auth_account_group_memberships(account_id,group_id) SELECT ?,id FROM auth_permission_groups WHERE group_key='guest'").run(account)
   auth.prepare("DELETE FROM auth_group_permissions WHERE group_id=(SELECT id FROM auth_permission_groups WHERE group_key='guest')").run()
-  auth.prepare("INSERT INTO auth_group_permissions(group_id,permission_id,allowed) SELECT g.id,p.id,1 FROM auth_permission_groups g,auth_permissions p WHERE g.group_key='guest' AND p.permission_key IN ('chat.use','files.view')").run()
+  auth.prepare("INSERT INTO auth_group_permissions(group_id,permission_id,allowed) SELECT g.id,p.id,1 FROM auth_permission_groups g,auth_permissions p WHERE g.group_key='guest' AND p.permission_key IN ('content.read')").run()
   invalidateConfiguredAuthCache()
   invalidateResolvedAuthAccessCache()
   const requester = { accountId: owner, accountType: 'guest' as const }
@@ -80,8 +80,7 @@ test('composer selections stay inside the chat grant and apply only to their use
   const first = ChatGenerationPresetStore.create({ name: 'First preset', kind: 'nai', instruction: 'First guide' })
   const second = ChatGenerationPresetStore.create({ name: 'Second preset', kind: 'nai', instruction: 'Second guide' })
   const unlinked = ChatGenerationPresetStore.create({ name: 'Unlinked', kind: 'nai' })
-  const delegatedPermissions = ['generation.execute', 'images.view', 'files.view'] as const
-  const profile = ChatProfileStore.create({ name: 'Selections', engine: 'llm', providerName: 'directives', model: 'm', mcpEnabled: true, mcpScopes: ['read'], generationPresetIds: [second.id, first.id], delegatedPermissions: [...delegatedPermissions], contextTokens: 8192, summaryEnabled: false })
+  const profile = ChatProfileStore.create({ name: 'Selections', engine: 'llm', providerName: 'directives', model: 'm', mcpEnabled: true, mcpScopes: ['read'], generationPresetIds: [second.id, first.id], contextTokens: 8192, summaryEnabled: false })
   const threadId = CodexChatStore.createThread(owner, 'Selections', 'llm', profile.id)
   const sendPath = `/api/codex-chat/threads/${threadId}/messages`
   const get = (query: string, account = owner) => fetch(`${origin}/api/codex-chat/${query}`, { headers: account ? { 'x-test-account': String(account) } : {} })
@@ -92,7 +91,7 @@ test('composer selections stay inside the chat grant and apply only to their use
   }
   const modelText = (request: RequestBody) => request.messages.map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n')
 
-  await t.test('lists exactly owned/profile grants, including delegated permissions, with strict query and group boundaries', async () => {
+  await t.test('lists exactly owned/profile grants with strict query and group boundaries', async () => {
     const byProfile = await get(`composer-tools?profileId=${profile.id}`)
     assert.equal(byProfile.status, 200)
     const expectedPresets = [
@@ -115,16 +114,13 @@ test('composer selections stay inside the chat grant and apply only to their use
       assert.equal(response.status, status)
       assert.equal((await response.json()).code, undefined)
     }
-    ChatProfileStore.update(profile.id, { delegatedPermissions: ['files.view'] })
-    assert.deepEqual((await (await get(`composer-tools?profileId=${profile.id}`)).json()).data.presets, [])
-    ChatProfileStore.update(profile.id, { delegatedPermissions: [...delegatedPermissions] })
     const groupId = ChatGroupStore.create(owner, 'Group', [profile.id], profile.id)
     assert.deepEqual((await (await get(`composer-tools?threadId=${groupId}`)).json()).data, { presets: [], tools: [] })
     const groupSend = await send({ presetId: first.id }, `/api/codex-chat/threads/${groupId}/messages`)
     assert.equal(groupSend.status, 400)
     assert.deepEqual(await groupSend.json(), { success: false, error: '도구 지시는 1:1 채팅에서만 사용할 수 있어.', code: 'tool_directive_unavailable' })
     assert.deepEqual(CodexChatStore.listMessages(groupId), [])
-    const codex = ChatProfileStore.create({ name: 'Codex restricted', engine: 'codex' })
+    const codex = ChatProfileStore.create({ name: 'Codex restricted', engine: 'codex', allowedGroupKeys: ['admin'] })
     const forbidden = await get(`composer-tools?profileId=${codex.id}`)
     assert.equal(forbidden.status, 403)
     await forbidden.arrayBuffer()
@@ -143,12 +139,23 @@ test('composer selections stay inside the chat grant and apply only to their use
     }
     for (const { url, extra, status, error } of [
       { url: sendPath, extra: { text: 'x'.repeat(20001) }, status: 400, error: 'Message is longer than 20000 characters' },
-      { url: sendPath, extra: { mediaHashes: ['a'.repeat(48)] }, status: 403, error: '앱 미디어 접근 권한이 없어.' },
       { url: '/api/codex-chat/threads/99999999/messages', extra: {}, status: 404, error: '채팅을 찾을 수 없어.' },
     ]) {
       const response = await send({ presetId: first.id }, url, extra)
       assert.equal(response.status, status)
       assert.deepEqual(await response.json(), { success: false, error })
+    }
+    // Library media in a message needs the read right.
+    const readRight = "(SELECT id FROM auth_permission_groups WHERE group_key='guest'), (SELECT id FROM auth_permissions WHERE permission_key='content.read')"
+    auth.prepare(`DELETE FROM auth_group_permissions WHERE (group_id, permission_id) = (${readRight})`).run()
+    invalidateResolvedAuthAccessCache()
+    try {
+      const response = await send({ presetId: first.id }, sendPath, { mediaHashes: ['a'.repeat(48)] })
+      assert.equal(response.status, 403)
+      assert.deepEqual(await response.json(), { success: false, error: '앱 미디어 접근 권한이 없어.' })
+    } finally {
+      auth.prepare(`INSERT OR IGNORE INTO auth_group_permissions(group_id, permission_id, allowed) VALUES (${readRight}, 1)`).run()
+      invalidateResolvedAuthAccessCache()
     }
     assert.equal(requests.length, count)
     assert.deepEqual(CodexChatStore.listMessages(threadId), [])

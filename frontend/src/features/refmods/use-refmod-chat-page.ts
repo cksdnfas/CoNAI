@@ -38,7 +38,7 @@ const terms = (value: ChatPageData | undefined) => {
  */
 export function useRefModChatPage(library: RefModLibrary) {
   const { t } = useI18n()
-  const { editor, canEdit, canBuild, loadMore, presence } = library
+  const { editor, canEdit, canDelete, loadMore, presence } = library
   const { base, latest, draft, ready, activeForm } = editor
   const visible = library.visibleEntries
   const listed = visible?.slice(-ENTRY_LIMIT) ?? []
@@ -185,10 +185,10 @@ export function useRefModChatPage(library: RefModLibrary) {
           ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA·SnapRef 노드 입력', en: 'Edit H3, LoRA or SnapRef inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 소스는 media.attach로 넣어.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; add new sources with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
           ...media.actions,
           pageAction('refmod.save', t({ ko: 'RefMod 저장', en: 'Save RefMod' }), t({ ko: '열린 RefMod의 지금 초안을 저장해. 소스는 RefMod 파일로 복사돼.', en: 'Save the open RefMod’s draft; sources are copied into the RefMod’s own files.' }), pageObject({}), 'save'),
-          ...(base ? [pageAction('refmod.delete', t({ ko: 'RefMod 삭제', en: 'Delete RefMod' }), t({ ko: '등록된 RefMod는 파일함을 유지한 채 미등록으로 옮기고, 미등록 항목은 원본 파일·실행 기록까지 영구 삭제해.', en: 'Moves a registered RefMod to Unregistered keeping its files, or permanently deletes an unregistered RefMod with its files and run records.' }), pageObject({}), 'save')] : []),
+          ...(base && canDelete ? [pageAction('refmod.delete', t({ ko: 'RefMod 삭제', en: 'Delete RefMod' }), t({ ko: '등록된 RefMod는 파일함을 유지한 채 미등록으로 옮기고, 미등록 항목은 원본 파일·실행 기록까지 영구 삭제해.', en: 'Moves a registered RefMod to Unregistered keeping its files, or permanently deletes an unregistered RefMod with its files and run records.' }), pageObject({}), 'save')] : []),
         ] : []),
       ] : []),
-      ...(canBuild && buildIds.length ? [pageAction('refmod.build', t({ ko: 'RefMod 만들기', en: 'Build RefMod' }), t({ ko: '대표 ComfyUI 서버에서 RefMod를 만들어. 열린 RefMod에 저장하지 않은 변경이 있으면 먼저 저장해. buildBlock이 있는 항목은 거절돼.', en: 'Build a RefMod on the default ComfyUI server; an open RefMod with unsaved changes is saved first. Entries with a buildBlock are refused.' }), pageObject({ entryId: pageChoice(buildIds) }, ['entryId']), 'save')] : []),
+      ...(buildIds.length ? [pageAction('refmod.build', t({ ko: 'RefMod 만들기', en: 'Build RefMod' }), t({ ko: '대표 ComfyUI 서버에서 RefMod를 만들어. 열린 RefMod에 저장하지 않은 변경이 있으면 먼저 저장해. buildBlock이 있는 항목은 거절돼.', en: 'Build a RefMod on the default ComfyUI server; an open RefMod with unsaved changes is saved first. Entries with a buildBlock are refused.' }), pageObject({ entryId: pageChoice(buildIds) }, ['entryId']), 'save')] : []),
     ],
     apply: applyInputs,
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {

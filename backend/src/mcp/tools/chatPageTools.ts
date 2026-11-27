@@ -31,7 +31,7 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
         // tokens and, cut at the tool output limit, might still not reach the operation that was wanted.
         const page = knowledgePageForExecution(context, live())
         requireChatPageAccess(requester, page)
-        const offered = chatPageView(requester, page, contextContentLimit(context)).actions ?? []
+        const offered = chatPageView(requester, page, contextContentLimit(context), context.scopes).actions ?? []
         const found = offered.filter((action) => actions.includes(action.id))
         const missing = actions.filter((id) => !found.some((action) => action.id === id))
         return pageResult({ revision: page.revision, actions: found, ...(missing.length ? { missing, available: offered.map((action) => action.id) } : {}) })
@@ -44,7 +44,7 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
       const viewKey = notePageViewShown(context, page, limit)
       // The whole screen: a page operation after it needs none of its own (takePageViewFolded).
       takePageViewFolded(context.chatContext!.threadId)
-      return { ...pageResult({ ...chatPageView(requester, page, limit), ...(fresh ? {} : { note: 'The tab did not answer; this is the last screen it reported.' }) }), ...(viewKey ? { structuredContent: viewKey } : {}) }
+      return { ...pageResult({ ...chatPageView(requester, page, limit, context.scopes), ...(fresh ? {} : { note: 'The tab did not answer; this is the last screen it reported.' }) }), ...(viewKey ? { structuredContent: viewKey } : {}) }
     } catch (error) { return pageFailure(error) }
   })
 
@@ -64,7 +64,7 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
       const next = shown(await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'fields', changes: validated }, { commandId, signal: chatPageReplySignal(context) }))
       const limit = contextContentLimit(context)
       const filled = { status: 'filled', fields: validated.map((change) => change.label) }
-      const view = pageOperationView(requester, page, next, limit, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ ...filled, page: null }))
+      const view = pageOperationView(requester, page, next, limit, context.scopes, takePageViewFolded(context.chatContext!.threadId), pageViewRoom({ ...filled, page: null }))
       const viewKey = notePageViewShown(context, next, limit, view)
       const label = validated.map((change) => change.label).join(', ')
       return { ...pageResult({ ...filled, page: view.page }), structuredContent: { pageOperation: { commandId, tier: 'draft', label }, ...viewKey } }

@@ -582,6 +582,6 @@ function ComfyGenerationPanelContent({
 
 /** Workflow data is a feature, independent of the generation page's navigation grant. */
 export function ComfyGenerationPanel(props: ComfyGenerationPanelProps) {
-  const { canViewWorkflows } = useFeaturePermissions()
-  return canViewWorkflows ? <ComfyGenerationPanelContent {...props} /> : <FeaturePermissionNotice permission="workflows.view" />
+  const { canRead } = useFeaturePermissions()
+  return canRead ? <ComfyGenerationPanelContent {...props} /> : <FeaturePermissionNotice />
 }

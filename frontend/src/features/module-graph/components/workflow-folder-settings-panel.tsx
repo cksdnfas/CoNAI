@@ -1,6 +1,7 @@
 import { PenSquare } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Inset } from '@/components/ui/inset'
@@ -60,6 +61,7 @@ export function WorkflowFolderSettingsPanel({
   onDeleteWorkflow,
 }: WorkflowFolderSettingsPanelProps) {
   const { locale, t } = useI18n()
+  const { canDelete } = useFeaturePermissions()
   const [workflowFolderId, setWorkflowFolderId] = useState<number | null>(() => selectedWorkflow?.folder_id ?? null)
   const [revision, setRevision] = useState(selectedWorkflow?.revision)
   const [folderName, setFolderName] = useState(() => selectedFolder?.name ?? t({ ko: '루트', en: 'Root' }))
@@ -138,7 +140,7 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {onDeleteWorkflow ? (
+            {onDeleteWorkflow && canDelete ? (
               <Button size="sm" variant="destructive-ghost" onClick={() => void onDeleteWorkflow()}>{t({ ko: '삭제', en: 'Delete' })}</Button>
             ) : null}
             {onEditWorkflow ? (
@@ -190,7 +192,7 @@ export function WorkflowFolderSettingsPanel({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="destructive-ghost" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder}>{t({ ko: '삭제', en: 'Delete' })}</Button>
+                <Button size="sm" variant="destructive-ghost" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder || !canDelete}>{t({ ko: '삭제', en: 'Delete' })}</Button>
                 <span className="flex-1" />
                 <Button type="button" size="xs" variant="default" onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
               </div>

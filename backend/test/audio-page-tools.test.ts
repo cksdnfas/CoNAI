@@ -35,7 +35,7 @@ test('audio page: connected pages preserve authorized tools and audio adds its b
   const { createMcpServer } = await import('../src/mcp/server')
   const { catalogToolNames } = await import('../src/mcp/toolCatalog')
   const { CHAT_PAGE_KIND_TOOLS, getMcpToolScope } = await import('../src/mcp/context')
-  const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
+  const { toolRequirement } = await import('../src/mcp/toolAccess')
   const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
@@ -49,7 +49,7 @@ test('audio page: connected pages preserve authorized tools and audio adds its b
   // Every page-kind tool is a real, classified tool.
   for (const tool of CHAT_PAGE_KIND_TOOLS.audio ?? []) {
     assert.ok(getMcpToolScope(tool), `${tool} has a scope`)
-    assert.notEqual(TOOL_FEATURE_PERMISSIONS[tool], undefined, `${tool} has a feature permission`)
+    assert.notEqual(toolRequirement(tool), undefined, `${tool} has an account requirement`)
   }
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })

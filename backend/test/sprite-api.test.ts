@@ -51,10 +51,11 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     return id
   }
   const adminId = account('admin', 'admin')
-  const readerId = account('reader', 'guest', ['images.view'])
-  const editorId = account('editor', 'guest', ['images.view', 'images.edit'])
-  const makerId = account('maker', 'guest', ['images.view', 'images.edit', 'images.upload'])
-  const otherMakerId = account('other-maker', 'guest', ['images.view', 'images.edit', 'images.upload'])
+  const readerId = account('reader', 'guest', ['content.read'])
+  const editorId = account('editor', 'guest', ['content.read', 'content.edit'])
+  const makerId = account('maker', 'guest', ['content.read', 'content.edit', 'content.delete'])
+  const otherMakerId = account('other-maker', 'guest', ['content.read', 'content.edit'])
+  const outsiderId = account('outsider', 'guest', [])
   invalidateConfiguredAuthCache()
 
   const express = (await import('express')).default
@@ -99,17 +100,14 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
   const videoHash = video.compositeHash
   const extractBody = { videoHash, options: { intervalSeconds: 0.25 }, save: true }
 
-  await t.test('routes require images.view / images.edit / images.upload', async () => {
+  await t.test('routes need the read right; new copies need nothing more', async () => {
     assert.equal((await call('GET', `/api/sprite/videos/${videoHash}/info`, undefined)).status, 401)
     const info = await call('GET', `/api/sprite/videos/${videoHash}/info`, readerId)
     assert.equal(info.status, 200)
     assert.deepEqual([info.json.data.width, info.json.data.height, info.json.data.frameCount], [128, 128, 24])
-    assert.equal((await call('POST', '/api/sprite/extract', readerId, extractBody)).status, 403, 'running needs images.edit')
-    assert.equal((await call('POST', '/api/sprite/extract', editorId, extractBody)).status, 403, 'saving needs images.upload')
-    assert.equal((await call('POST', '/api/sprite/extract-batch', editorId, { videoHashes: [videoHash] })).status, 403)
-    assert.equal((await call('POST', '/api/sprite/normalize', readerId, { sheets: [] })).status, 403)
-    assert.equal((await call('POST', '/api/sprite/animation', readerId, {})).status, 403)
-    assert.equal((await call('POST', '/api/sprite/builds/00000000-0000-4000-8000-000000000000/save', editorId, {})).status, 403)
+    assert.equal((await call('POST', '/api/sprite/extract', readerId, { ...extractBody, videoHash: 'f'.repeat(48) })).status, 404, 'a reader reaches the job (unknown video)')
+    assert.notEqual((await call('POST', '/api/sprite/normalize', readerId, { sheets: [] })).status, 403)
+    assert.notEqual((await call('POST', '/api/sprite/animation', readerId, {})).status, 403)
     assert.equal((await call('POST', '/api/sprite/extract', editorId, { ...extractBody, save: false, videoHash: 'f'.repeat(48) })).status, 404, 'unknown video')
     const bad = await call('POST', '/api/sprite/extract', editorId, { ...extractBody, save: false, options: { keyColors: ['#FF00FF', '#00FF00'], despill: true } })
     assert.equal(bad.status, 422)
@@ -206,7 +204,7 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     assert.equal(((await readSpriteSettings(animJob.result.saved.compositeHash)) as Record<string, string>).kind, 'sprite-animation')
   })
 
-  await t.test('presets are one shared list; edit needs images.edit', async () => {
+  await t.test('presets are one shared list; changes need edit, removal delete', async () => {
     assert.equal((await call('POST', '/api/sprite/presets', readerId, { name: 'denied' })).status, 403)
     const created = await call('POST', '/api/sprite/presets', editorId, { name: '게임A · 걷기', options: { sampleCount: 14, keyColors: ['#5BE459'], despill: false, columns: 3 }, output: { zip: true, groupPath: '스프라이트/게임A' } })
     assert.equal(created.status, 201, JSON.stringify(created.json))
@@ -220,6 +218,7 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     assert.deepEqual([renamed.json.data.name, renamed.json.data.options.sampleCount, renamed.json.data.options.columns], ['게임A · 공격', 20, 0], 'options are replaced, not merged')
     assert.deepEqual(renamed.json.data.output, preset.output, 'output kept when not sent')
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, readerId)).status, 403)
+    assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, editorId)).status, 403, 'editing does not include removal')
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 200)
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 404)
   })
@@ -347,9 +346,10 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
         await session.close()
       }
     }
-    assert.deepEqual(await names(readerId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'])
-    assert.deepEqual(await names(editorId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'], 'builders need images.upload too')
-    assert.deepEqual(await names(makerId), ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets', 'normalize_sprite_sources'])
+    const allSprite = ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets', 'normalize_sprite_sources']
+    assert.deepEqual(await names(outsiderId), [], 'no read, no sprite tools')
+    assert.deepEqual(await names(readerId), allSprite, 'building makes new copies: read is enough')
+    assert.deepEqual(await names(makerId), allSprite)
     assert.ok(!(await names(makerId, 'codex-chat')).includes('wait_sprite_job'), 'chat replies never block on a job')
 
     const maker = await connect(makerId)

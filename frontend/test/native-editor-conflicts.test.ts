@@ -33,7 +33,7 @@ test('native preset and wildcard editors retain their draft and read revision ac
   const { LoraAutoCollectModal } = await import('../src/features/image-generation/components/lora-auto-collect-modal')
   const scans: import('../src/lib/api-wildcards').LoraScanRequest[] = []
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } })
-  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, permissionKeys: ['prompts.edit', 'wildcards.edit'] })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, permissionKeys: ['content.read', 'content.edit'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'ko' } })
   client.setQueryData(['global-appearance-settings'], {})
   client.setQueryData(['wildcards', 'lora-scan-log'], null)
@@ -78,7 +78,7 @@ test('native preset and wildcard editors retain their draft and read revision ac
   const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
   const render = async (view: 'preset' | 'wildcard' | 'lora') => {
     const panel = view === 'preset'
-      ? h(PromptPresetPanel, { toolbarProps: { view: 'presets', promptType: 'positive', canViewWildcards: true, onChangeView: () => {} } })
+      ? h(PromptPresetPanel, { toolbarProps: { view: 'presets', promptType: 'positive', canRead: true, onChangeView: () => {} } })
       : view === 'wildcard' ? h(WildcardGenerationPanel, { refreshNonce: 0 })
         : h(LoraAutoCollectModal, { open: true, onClose: () => {}, onSubmit: async input => { scans.push(input) } })
     await act(async () => {

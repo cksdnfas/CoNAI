@@ -71,6 +71,7 @@ export function AudioSidebar({
   filter,
   onFilterChange,
   canEdit,
+  canDelete,
   exporting,
   onNewProject,
   onEditProject,
@@ -109,6 +110,7 @@ export function AudioSidebar({
   filter: AudioSidebarFilter
   onFilterChange: (value: AudioSidebarFilter) => void
   canEdit: boolean
+  canDelete: boolean
   exporting: boolean
   onNewProject: () => void
   onEditProject: (project: AudioProject) => void
@@ -298,7 +300,7 @@ export function AudioSidebar({
               {canEdit ? <DropdownMenuItem onSelect={() => startDraft({ kind: 'folder' })}><FolderPlus />{t({ ko: '그룹 추가', en: 'Add group' })}</DropdownMenuItem> : null}
               {canEdit ? <DropdownMenuItem onSelect={() => onEditProject(project)}><Pencil />{t({ ko: '프로젝트 수정', en: 'Edit project' })}</DropdownMenuItem> : null}
               <DropdownMenuItem disabled={exporting} onSelect={() => onExportProject(project)}><Download />{t({ ko: '채택본 전체 내보내기', en: 'Export all adopted takes' })}</DropdownMenuItem>
-              {canEdit ? (
+              {canDelete ? (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={() => onDeleteProject(project)}><Trash2 />{t({ ko: '프로젝트 삭제', en: 'Delete project' })}</DropdownMenuItem>
@@ -357,8 +359,7 @@ export function AudioSidebar({
                     entries={[
                       { key: 'add', icon: Plus, label: t({ ko: '효과음 추가', en: 'Add effect' }), onSelect: () => startDraft({ kind: 'effect', folderId: folder.id }) },
                       { key: 'rename', icon: Pencil, label: t({ ko: '이름 바꾸기', en: 'Rename' }), onSelect: () => startDraft({ kind: 'rename', folderId: folder.id }, folder.name) },
-                      '-',
-                      { key: 'delete', icon: Trash2, label: t({ ko: '그룹 삭제', en: 'Delete group' }), destructive: true, onSelect: () => onDeleteFolder(folder) },
+                      ...(canDelete ? ['-' as const, { key: 'delete', icon: Trash2, label: t({ ko: '그룹 삭제', en: 'Delete group' }), destructive: true, onSelect: () => onDeleteFolder(folder) }] : []),
                     ]}
                   >
                     <SidebarItem

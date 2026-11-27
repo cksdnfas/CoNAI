@@ -33,7 +33,7 @@ export function NaiAssetSaveModal({
   onSave,
 }: NaiAssetSaveModalProps) {
   const { t } = useI18n()
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { canViewImages } = useImagePermissions()
   const effectiveSubmitLabel = submitLabel ?? t('image-generation.components.nai.asset.save.modal.save')
 
@@ -53,7 +53,7 @@ export function NaiAssetSaveModal({
           />
         </Field>
 
-        <EditorFooter onSave={onSave} canSave={canUpdateWorkflows && canViewImages && name.trim().length > 0} saving={isSaving} saveLabel={effectiveSubmitLabel} />
+        <EditorFooter onSave={onSave} canSave={canEdit && canViewImages && name.trim().length > 0} saving={isSaving} saveLabel={effectiveSubmitLabel} />
       </ModalBody>
     </Modal>
   )

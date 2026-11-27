@@ -61,13 +61,13 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
   onChange: (hashes: string[]) => void
 }) {
   const { t } = useI18n()
-  const { has } = useFeaturePermissions()
+  const { canEdit } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const [picking, setPicking] = useState(false)
   const [uploading, setUploading] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const canUpload = has('images.upload')
+  const canUpload = canEdit
   const infos = useQueries({ queries: hashes.map((hash) => ({ queryKey: ['sprite-video-info', hash], queryFn: () => getSpriteVideoInfo(hash), retry: false, staleTime: 5 * 60_000 })) })
 
   const append = (next: string[]) => {

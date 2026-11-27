@@ -10,9 +10,9 @@ import type { McpRequester } from '../../mcp/context'
 import { attachedImagesOf, chatContentWithAttachments, inlineTextsForChat, loadAttachedImages, type AttachedImages } from './chatAttachments'
 import { contextSource } from './chatContextDiagnostics'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
-import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatGroupStore } from './chatGroupStore'
 import { PAGE_VIEW_KEY, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
+import { chatProfileScopes } from './codexChatAccess'
 import { profileContentLimit } from './chatContentRating'
 import type { ChatProfile } from './chatProfiles'
 import { buildReplyContext } from './chatReplyContext'
@@ -122,7 +122,7 @@ export async function buildClaudeSessionTurn(params: {
   const runtime = params.runtime ?? 'claude'
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
-  const workspaces = chatWorkspaces(chatProfileRequester(requester, attachmentContext), threadId, profile.id)
+  const workspaces = chatWorkspaces(requester, threadId, profile.id)
   // Plugins may rewrite it; a changed system prompt starts a new session (systemHash).
   const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
@@ -140,10 +140,10 @@ export async function buildClaudeSessionTurn(params: {
   const state = pendingBlockState(thread, profile, history, sent, undefined, params.historySource)
   const rejected = pendingRejectedLore(threadId, profile, sent)
   const outcomes = pendingGenerationOutcomes(threadId, earlier, sent, params.historySource ? { source: params.historySource, before: latest?.id } : undefined)
-  const pageReference = pendingPageReference(params.page, requester, sent, profileContentLimit(profile))
+  const pageReference = pendingPageReference(params.page, requester, sent, profileContentLimit(profile), chatProfileScopes(profile))
   const cards = pendingProposalOutcomes(threadId, sent)
   const agentResults = latest ? pendingAgentResults(threadId, latest.id, sent, { recap: !resumeId || Boolean(recap) }) : { text: '', keys: [] }
-  const mediaRequester = chatProfileRequester(requester, { threadId, profileId: profile.id, kind: 'direct', page: params.page })
+  const mediaRequester = requester
   const [generated, images, attachmentTexts] = await Promise.all([
     pendingGeneratedImages(profile, mediaRequester, threadId, sent),
     latest ? loadAttachedImages(profile, mediaRequester, [latest], attachmentContext) : null,
@@ -222,7 +222,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const runtime = params.runtime ?? 'claude'
   const user = userPersonaForThread(thread)
   // The room's and the member's projects come with workspace tools in a room too (see buildClaudeSessionTurn).
-  const workspaces = chatWorkspaces(chatProfileRequester(requester, attachmentContext), thread.id, profile.id)
+  const workspaces = chatWorkspaces(requester, thread.id, profile.id)
   const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user }), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
   const dir = claudeMemberSessionDir(thread.id, profile.id, runtime)
@@ -237,7 +237,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const rejected = pendingRejectedLore(thread.id, profile, sent)
   const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
   const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit, params.history)
-  const mediaRequester = chatProfileRequester(requester, { threadId: thread.id, profileId: profile.id, kind: 'group' })
+  const mediaRequester = requester
   const [generated, attachmentTexts, attachedImages] = await Promise.all([
     pendingGeneratedImages(profile, mediaRequester, thread.id, sent),
     params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown, attachmentContext),

@@ -1,3 +1,4 @@
+import { CONTENT_PERMISSIONS } from '@conai/shared'
 import { useRef, useState } from 'react'
 import { ChatProfileGroups } from './chat-profile-groups'
 import { Crown, FileUp, FolderOpen, HardDriveUpload, X } from 'lucide-react'
@@ -39,7 +40,7 @@ export function ChatProfilePicker({ profiles, layout, disabled, onPick, onPickGr
   const [picked, setPicked] = useState<number[]>([])
   const healthOf = useChatHealth()
   const importRef = useRef<HTMLInputElement>(null)
-  const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes('files.view') === true && onImportFiles !== undefined
+  const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes(CONTENT_PERMISSIONS.read) === true && onImportFiles !== undefined
   /** The file store picker, opened in the chat backup folder when there is one; undefined while closed. */
   const [filePickerAt, setFilePickerAt] = useState<string | null | undefined>(undefined)
   const openFilePicker = async () => {

@@ -11,7 +11,7 @@ import { ChatResearchExecution, requireResearchProfile } from '../codex-chat/cha
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { beginDirectReply } from '../codex-chat/chatReplies'
 import { generateLlmGroupReply } from '../codex-chat/llmChatService'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireRequesterRight } from '../../middleware/featureAccess'
 import fs from 'node:fs'
 import path from 'node:path'
 import { piChatPrivateRoot } from '../codex-chat/piChatCompletion'
@@ -136,7 +136,7 @@ export async function discardPluginProfileRun(pluginId: string, requester: McpRe
 /** Read only the replies created by this run; generated media/job references can finish after the model's text. */
 export function refreshPluginProfileRun(run: PluginProfileRun, requester: McpRequester): PluginProfileRun {
   if (!CodexChatStore.findThread(run.threadId, requester.accountId)) throw new PluginError('프로필 실행 대화를 찾을 수 없어.', 404)
-  if (run.research) requireRequesterPermission(requester, 'posts.view')
+  if (run.research) requireRequesterRight(requester, 'read')
   const replies = run.messageIds.flatMap(id => { const reply = CodexChatStore.findMessage(run.threadId, id); return reply ? [reply] : [] })
   const { tools, summaryToolsTruncated: toolsTruncated } = automationResults(replies)
   return { ...run, tools, toolsTruncated }
@@ -154,7 +154,7 @@ export async function runPluginProfile(params: {
     signal.throwIfAborted()
     if (input.research) {
       const runtime = requireResearchProfile(profile)
-      requireRequesterPermission(requester, 'posts.view')
+      requireRequesterRight(requester, 'read')
       const research = new ChatResearchExecution(input.research, runtime)
       const roomKey = `${key}:research:${sha256(JSON.stringify([input.research.slotId, input.research.activityId, input.requestId]))}`
       const room = await ensureAutomationRoom(requester, profile.id, roomKey, `${pluginName} · ${profile.name} · Research`)
@@ -163,7 +163,7 @@ export async function runPluginProfile(params: {
       const delivery = beginDirectReply(room, profile.id, [], CodexChatStore.findMessage(room.id, userId) ?? null, signal, () => {})
       let piDir: string | undefined
       const validate = () => {
-        requireRequesterPermission(requester, 'posts.view')
+        requireRequesterRight(requester, 'read')
         research.validateSources(requester, profile.id)
       }
       const controller = new AbortController()

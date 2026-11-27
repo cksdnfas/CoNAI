@@ -19,8 +19,8 @@ function text(value: unknown, max: number, empty = false): string {
 const CHAT_ADMIN_PATHS = ['/chat/profiles', '/chat/resources', '/chat/llm', '/chat/routines', '/chat/judge']
 
 /**
- * The one app route → page key map, read by route guards, the access page and chat page links. Page keys are derived
- * from feature keys (see PAGE_PERMISSION_RULES); an empty key means any signed-in account, null an unknown route.
+ * The one app route → page key map, read by route guards, the access page and chat page links. Groups are granted page
+ * keys (settings follows the administrator role); an empty key means any signed-in account, null an unknown route.
  */
 export function chatPagePermission(path: string): string | null {
   const [pathname, query = ''] = path.split('?')

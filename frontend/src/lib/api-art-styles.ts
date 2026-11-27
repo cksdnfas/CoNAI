@@ -74,11 +74,11 @@ export function deleteArtStyle(styleId: number, revision?: number) {
 export function bulkArtStyles(input: ArtStyleBulkInput) {
   return requestApiData<ArtStyleBulkResult>(`${BASE}/bulk`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
-/** One of a style's own image copies (images.view). */
+/** One of a style's own image copies (the read right). */
 export function artStyleImageUrl(styleId: number, fileId: string) {
   return buildApiUrl(`${BASE}/${styleId}/files/${encodeURIComponent(fileId)}`)
 }
-/** A WebP thumbnail of a style's image (images.view). */
+/** A WebP thumbnail of a style's image (the read right). */
 export function artStyleThumbnailUrl(styleId: number, fileId: string) {
   return buildApiUrl(`${BASE}/${styleId}/files/${encodeURIComponent(fileId)}/thumbnail`)
 }

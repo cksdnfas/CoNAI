@@ -1,6 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
-import { requireImagesView } from '../middleware/imageAccess';
+import { requireAdmin, requireEdit, requireRead } from '../middleware/authMiddleware';
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, parseFileId } from '../services/fileStoreService';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
@@ -16,19 +15,14 @@ import { KnowledgeProposalStore } from '../services/posts/knowledge/knowledgePro
 import { KnowledgeEvaluationStore } from '../services/posts/knowledge/knowledgeEvaluation';
 
 /**
- * /api/posts — the posts board. Reading needs `posts.view`; writing posts `posts.write`, comments `posts.comment`,
- * calling bots `posts.summon`. Categories and settings are for administrators. Visibility (drafts, hidden) and
- * ownership are checked in the store.
+ * /api/posts — the posts board. Reading needs the read right; writing posts and comments, voting and calling bots are
+ * any reader's own; reviewing knowledge needs edit. Categories and settings are for administrators. Visibility
+ * (drafts, hidden) and ownership are checked in the store.
  */
 const router = Router();
-router.use(requirePermission('posts.view'));
+router.use(requireRead);
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 
-const write = requirePermission('posts.write');
-const comment = requirePermission('posts.comment');
-const summon = requirePermission('posts.summon');
-const evaluate = requirePermission('posts.evaluate');
-const review = requirePermission('posts.knowledge.review');
 const id = (req: Request, name = 'id') => {
   const value = Number(req.params[name]);
   if (!Number.isSafeInteger(value) || value < 1) throw new PostError('잘못된 ID야.');
@@ -53,7 +47,7 @@ router.delete('/categories/:id', requireAdmin, (req, res) => {
 router.get('/tags', (req, res) => res.json({ success: true, data: PostTagStore.list(Number(req.query.limit ?? 200)) }));
 
 router.get('/knowledge/search-status', (req,res) => res.json({ success: true,data: postSemanticStatus(actorFromRequest(req)) }));
-router.get('/knowledge/review-queue', review, cancellableAsyncHandler(async (req, res, signal) => {
+router.get('/knowledge/review-queue', requireEdit, cancellableAsyncHandler(async (req, res, signal) => {
   try {
     const data = await KnowledgeStore.reviewQueue(actorFromRequest(req), req.query, { signal });
     if (!signal.aborted) res.json({ success: true, data });
@@ -63,17 +57,17 @@ router.get('/knowledge/review-queue', review, cancellableAsyncHandler(async (req
 }));
 router.get('/knowledge/evaluations/status', (req,res) => res.json({ success: true,data: KnowledgeEvaluationStore.status(actorFromRequest(req)) }));
 router.get('/knowledge/proposals', (req,res) => res.json({ success: true,data: KnowledgeProposalStore.list(actorFromRequest(req),req.query) }));
-router.post('/knowledge/proposals', write, (req,res) => res.status(201).json({ success: true,data: KnowledgeProposalStore.create(actorFromRequest(req),req.body ?? {}) }));
+router.post('/knowledge/proposals', (req,res) => res.status(201).json({ success: true,data: KnowledgeProposalStore.create(actorFromRequest(req),req.body ?? {}) }));
 router.get('/knowledge/proposals/:proposalId', (req,res) => res.json({ success: true,data: KnowledgeProposalStore.get(actorFromRequest(req),String(req.params.proposalId)) }));
-router.post('/knowledge/proposals/:proposalId/apply', write, (req,res) => res.json({ success: true,data: KnowledgeProposalStore.apply(actorFromRequest(req),String(req.params.proposalId),req.body ?? {}) }));
-router.post('/knowledge/proposals/:proposalId/reject', write, (req,res) => res.json({ success: true,data: KnowledgeProposalStore.reject(actorFromRequest(req),String(req.params.proposalId),req.body ?? {}) }));
+router.post('/knowledge/proposals/:proposalId/apply', (req,res) => res.json({ success: true,data: KnowledgeProposalStore.apply(actorFromRequest(req),String(req.params.proposalId),req.body ?? {}) }));
+router.post('/knowledge/proposals/:proposalId/reject', (req,res) => res.json({ success: true,data: KnowledgeProposalStore.reject(actorFromRequest(req),String(req.params.proposalId),req.body ?? {}) }));
 
 /** Profiles the requester may call with @ (enabled, allowed for the account, summoning switched on). */
-router.get('/mentionable', summon, (req, res) => res.json({ success: true, data: PostBotRuns.mentionable(actorFromRequest(req)) }));
+router.get('/mentionable', (req, res) => res.json({ success: true, data: PostBotRuns.mentionable(actorFromRequest(req)) }));
 router.post('/runs/:id/cancel', (req, res) => res.json({ success: true, data: PostBotRuns.cancel(actorFromRequest(req), id(req)) }));
 
-router.patch('/comments/:id', comment, (req, res) => res.json({ success: true, data: PostCommentStore.update(actorFromRequest(req), id(req), req.body ?? {}) }));
-router.delete('/comments/:id', comment, (req, res) => {
+router.patch('/comments/:id', (req, res) => res.json({ success: true, data: PostCommentStore.update(actorFromRequest(req), id(req), req.body ?? {}) }));
+router.delete('/comments/:id', (req, res) => {
   PostCommentStore.remove(actorFromRequest(req), id(req));
   res.json({ success: true });
 });
@@ -87,43 +81,43 @@ router.get('/', cancellableAsyncHandler(async (req, res, signal) => {
     if (!signal.aborted || error !== signal.reason) throw error;
   }
 }));
-router.post('/', write, (req, res) => res.status(201).json({ success: true, data: PostStore.create(actorFromRequest(req), req.body ?? {}) }));
+router.post('/', (req, res) => res.status(201).json({ success: true, data: PostStore.create(actorFromRequest(req), req.body ?? {}) }));
 router.get('/:id', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req), id(req)) }));
 router.get('/:id/topic-evaluation', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req),id(req)).topicEvaluation }));
-router.post('/:id/topic-evaluation', write, (req, res) => res.status(202).json({ success: true, data: PostStore.requestTopicEvaluation(actorFromRequest(req),id(req),req.body ?? {}).topicEvaluation }));
-router.patch('/:id', write, (req, res) => res.json({ success: true, data: PostStore.update(actorFromRequest(req), id(req), req.body ?? {}) }));
-router.delete('/:id', write, (req, res) => {
+router.post('/:id/topic-evaluation', (req, res) => res.status(202).json({ success: true, data: PostStore.requestTopicEvaluation(actorFromRequest(req),id(req),req.body ?? {}).topicEvaluation }));
+router.patch('/:id', (req, res) => res.json({ success: true, data: PostStore.update(actorFromRequest(req), id(req), req.body ?? {}) }));
+router.delete('/:id', (req, res) => {
   PostStore.remove(actorFromRequest(req), id(req), req.body ?? {});
   res.json({ success: true });
 });
-router.get('/:id/revisions', write, (req, res) => res.json({ success: true, data: req.query.detail === 'summary'
+router.get('/:id/revisions', (req, res) => res.json({ success: true, data: req.query.detail === 'summary'
   ? PostStore.revisionSummaries(actorFromRequest(req), id(req)) : PostStore.revisions(actorFromRequest(req), id(req)) }));
-router.get('/:id/revisions/:revision', write, (req, res) => {
+router.get('/:id/revisions/:revision', (req, res) => {
   const [revision] = PostStore.revisions(actorFromRequest(req), id(req), id(req, 'revision'));
   if (!revision) throw new PostError('이전 판을 찾을 수 없어.', 404);
   res.json({ success: true, data: revision });
 });
-router.patch('/:id/knowledge', write, (req,res) => res.json({ success: true,data: KnowledgeStore.patch(actorFromRequest(req),id(req),req.body ?? {}) }));
+router.patch('/:id/knowledge', (req,res) => res.json({ success: true,data: KnowledgeStore.patch(actorFromRequest(req),id(req),req.body ?? {}) }));
 router.get('/:id/links', (req,res) => res.json({ success: true,data: KnowledgeStore.links(actorFromRequest(req),id(req)) }));
-router.get('/:id/knowledge/versions', write, (req,res) => res.json({ success: true,data: KnowledgeStore.versions(actorFromRequest(req),id(req)) }));
-router.post('/:id/knowledge/versions/:contentVersion/restore', write, (req,res) => res.json({ success: true,data: KnowledgeStore.restoreVersion(actorFromRequest(req),id(req),id(req,'contentVersion'),req.body ?? {}) }));
+router.get('/:id/knowledge/versions', (req,res) => res.json({ success: true,data: KnowledgeStore.versions(actorFromRequest(req),id(req)) }));
+router.post('/:id/knowledge/versions/:contentVersion/restore', (req,res) => res.json({ success: true,data: KnowledgeStore.restoreVersion(actorFromRequest(req),id(req),id(req,'contentVersion'),req.body ?? {}) }));
 router.get('/:id/knowledge/export', (req,res) => res.json({ success: true,data: KnowledgeStore.export(actorFromRequest(req),id(req)) }));
 router.get('/:id/quality', (req,res) => res.json({ success: true,data: getKnowledgeQuality(actorFromRequest(req),id(req)) }));
-router.put('/:id/vote', evaluate, (req,res) => res.json({ success: true,data: KnowledgeAssessmentStore.vote(actorFromRequest(req),id(req),req.body ?? {}) }));
-router.delete('/:id/vote', evaluate, (req,res) => res.json({ success: true,data: KnowledgeAssessmentStore.withdraw(actorFromRequest(req),id(req),req.body ?? {}) }));
+router.put('/:id/vote', (req,res) => res.json({ success: true,data: KnowledgeAssessmentStore.vote(actorFromRequest(req),id(req),req.body ?? {}) }));
+router.delete('/:id/vote', (req,res) => res.json({ success: true,data: KnowledgeAssessmentStore.withdraw(actorFromRequest(req),id(req),req.body ?? {}) }));
 router.get('/:id/task-fit', (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.ownTaskFit(actorFromRequest(req),id(req),req.query.searchReceiptToken)}));
-router.put('/:id/task-fit', evaluate, (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.taskFit(actorFromRequest(req),id(req),req.body??{})}));
+router.put('/:id/task-fit', (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.taskFit(actorFromRequest(req),id(req),req.body??{})}));
 router.get('/:id/assessments', (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.history(actorFromRequest(req),id(req),req.query)}));
-router.post('/:id/assessments/:eventId/moderate', review, (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.moderate(actorFromRequest(req),id(req),id(req,'eventId'),req.body??{})}));
-router.post('/:id/permanent-delete/preview', write, (req,res) => res.json({success:true,data:KnowledgeStore.permanentDeletePreview(actorFromRequest(req),id(req),req.body??{})}));
-router.post('/:id/permanent-delete', write, (req,res) => res.json({success:true,data:KnowledgeStore.permanentDelete(actorFromRequest(req),id(req),req.body??{})}));
+router.post('/:id/assessments/:eventId/moderate', requireEdit, (req,res) => res.json({success:true,data:KnowledgeAssessmentStore.moderate(actorFromRequest(req),id(req),id(req,'eventId'),req.body??{})}));
+router.post('/:id/permanent-delete/preview', (req,res) => res.json({success:true,data:KnowledgeStore.permanentDeletePreview(actorFromRequest(req),id(req),req.body??{})}));
+router.post('/:id/permanent-delete', (req,res) => res.json({success:true,data:KnowledgeStore.permanentDelete(actorFromRequest(req),id(req),req.body??{})}));
 router.post('/:id/review', (req,res) => res.json({ success: true,data: KnowledgeStore.review(actorFromRequest(req),id(req),req.body ?? {}) }));
-router.post('/:id/trash', write, (req,res) => {
+router.post('/:id/trash', (req,res) => {
   KnowledgeStore.trash(actorFromRequest(req),id(req),req.body ?? {});
   res.json({ success: true });
 });
-router.post('/:id/restore', write, (req,res) => res.json({ success: true,data: KnowledgeStore.restore(actorFromRequest(req),id(req),req.body ?? {}) }));
-router.post('/:id/evaluations', review, (req,res) => res.status(202).json({ success: true,data: KnowledgeEvaluationStore.request(actorFromRequest(req),id(req),req.body ?? {}) }));
+router.post('/:id/restore', (req,res) => res.json({ success: true,data: KnowledgeStore.restore(actorFromRequest(req),id(req),req.body ?? {}) }));
+router.post('/:id/evaluations', requireEdit, (req,res) => res.status(202).json({ success: true,data: KnowledgeEvaluationStore.request(actorFromRequest(req),id(req),req.body ?? {}) }));
 router.get('/:id/evaluations', (req,res) => res.json({ success: true,data: KnowledgeEvaluationStore.list(actorFromRequest(req),id(req)) }));
 router.post('/:id/evaluations/:requestId/cancel', (req,res) => res.json({ success: true,data: KnowledgeEvaluationStore.cancel(actorFromRequest(req),id(req),String(req.params.requestId)) }));
 
@@ -140,11 +134,10 @@ router.get('/:id/comments', (req, res) => {
     before: parseJson(req.query.before), focusIds: parseJson(req.query.focusIds) });
   res.json({ success: true, data: { ...page, runs: PostBotRuns.list(actor, postId) } });
 });
-router.post('/:id/comments', comment, (req, res) => res.status(201).json({ success: true, data: PostCommentStore.create(actorFromRequest(req), id(req), req.body ?? {}) }));
+router.post('/:id/comments', (req, res) => res.status(201).json({ success: true, data: PostCommentStore.create(actorFromRequest(req), id(req), req.body ?? {}) }));
 
 /**
  * A file store file a post embeds, readable by whoever can read the post: the post grants it, not the file store.
- * Images and videos still need `images.view`, as everywhere else.
  */
 function embeddedFile(req: Request) {
   const fileId = parseFileId(req.params.fileId) as string;
@@ -157,13 +150,6 @@ function embeddedFile(req: Request) {
   return { owner, ...FileStoreService.resolveFile(owner, fileId) };
 }
 
-async function mediaGate(req: Request, res: Response, mime: string | null) {
-  if (!mime || !/^(image|video)\//.test(mime)) return true;
-  let allowed = false;
-  requireImagesView(req, res, () => { allowed = true; });
-  return allowed;
-}
-
 router.get('/:id/files/:fileId', (req, res) => {
   const { entry } = embeddedFile(req);
   res.json({ success: true, data: entry });
@@ -172,7 +158,6 @@ router.get('/:id/files/:fileId/view', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = embeddedFile(req);
   const mime = await filePreviewMime(entry, filePath);
   if (!mime) throw new PostError('미리 볼 수 없는 형식이야.', 415);
-  if (!await mediaGate(req, res, mime)) return;
   res.setHeader('Content-Type', mime);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(entry.name)}`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -185,7 +170,7 @@ router.get('/:id/files/:fileId/view', asyncHandler(async (req, res, next) => {
     } else next(error);
   });
 }));
-router.get('/:id/files/:fileId/thumbnail', requireImagesView, asyncHandler(async (req, res) => {
+router.get('/:id/files/:fileId/thumbnail', asyncHandler(async (req, res) => {
   const { owner, entry, filePath } = embeddedFile(req);
   const cached = await getFileThumbnail(owner, entry, filePath);
   res.setHeader('Content-Type', 'image/webp');
@@ -194,7 +179,6 @@ router.get('/:id/files/:fileId/thumbnail', requireImagesView, asyncHandler(async
 }));
 router.get('/:id/files/:fileId/download', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = embeddedFile(req);
-  if (!await mediaGate(req, res, await filePreviewMime(entry, filePath))) return;
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.download(filePath, entry.name, { dotfiles: 'allow' }, (error) => { if (error && !res.headersSent) next(error); });

@@ -74,7 +74,7 @@ function RefModMemberCard({ member, showMedia }: { member: MiniMaxH3RefModRecord
   )
 }
 
-/** Every retained source of a CoNAI-made RefMod, in export order; the media itself needs `images.view`. */
+/** Every retained source of a CoNAI-made RefMod, in export order; the media itself needs the read right. */
 export function RefModMemberGrid({ members }: { members: MiniMaxH3RefModRecordMember[] }) {
   const { canViewImages } = useImagePermissions()
   return (
@@ -89,7 +89,7 @@ function RefModRecordDetails({ record }: { record: MiniMaxH3RefModRecord }) {
   const confirm = useConfirm()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canDelete } = useFeaturePermissions()
   const [isDeleting, setIsDeleting] = useState(false)
   const summary = [record.concept_type, record.description, formatDateTime(record.created_at)].filter(Boolean).join(' · ')
 
@@ -120,7 +120,7 @@ function RefModRecordDetails({ record }: { record: MiniMaxH3RefModRecord }) {
     <div className="space-y-3">
       <Text variant="caption">{summary}</Text>
       {record.members.length > 0 ? <RefModMemberGrid members={record.members} /> : <Text variant="caption">{t(`${K}.sources.empty`)}</Text>}
-      {canUpdateWorkflows ? (
+      {canDelete ? (
         <div className="flex justify-end">
           <Button size="xs" variant="destructive-ghost" disabled={isDeleting} aria-busy={isDeleting} onClick={() => void handleDelete()}>
             {t(`${K}.sources.delete`)}
@@ -180,7 +180,7 @@ const PICK_PAGE_SIZE = 50
 
 /**
  * "CoNAI에서 만든 RefMod": the RefMod entries as the library lists them (same rows), in pick mode. Only the list
- * endpoint is read, so generation-only accounts and published-workflow pages can use it; without images.view the member
+ * endpoint is read, so accounts without the read right and published-workflow pages can use it; without it the member
  * squares are kind icons.
  */
 export function MiniMaxH3RefModRecordsDialog({ open, canPick, libraryEntries = [], onPick, onClose }: MiniMaxH3RefModRecordsDialogProps) {

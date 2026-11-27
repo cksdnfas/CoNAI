@@ -171,7 +171,7 @@ test('graph input copies are retained only by committed jobs and queue orphans a
   await t.test('graph jobs do not occupy role slots or allow a client to forge the origin', async (sub) => {
     sub.mock.method(GenerationQueueService, 'waitForTerminalJob', async () => ({ status: 'failed', failure_message: 'queue stopped' } as any))
     const auth = getAuthDb()
-    const group = AuthPermissionGroup.createCustomGroup({ name: 'limited graph', permissionKeys: ['generation.execute', 'workflows.view'] })
+    const group = AuthPermissionGroup.createCustomGroup({ name: 'limited graph', permissionKeys: ['content.read'] })
     const accountId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('limited', 'unused', 'guest')").run().lastInsertRowid)
     auth.prepare('INSERT INTO auth_account_group_memberships (account_id, group_id) VALUES (?, ?)').run(accountId, group.id)
     const roleWorkflow = { id: workflowId, public_queue_role_limits: JSON.stringify({ [group.group_key]: 1 }) }

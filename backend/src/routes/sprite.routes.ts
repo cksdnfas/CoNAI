@@ -1,8 +1,8 @@
 import fs from 'fs'
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { errorResponse, successResponse } from '@conai/shared'
 import { cancellableAsyncHandler } from '../middleware/asyncHandler'
-import { requirePermission } from '../middleware/authMiddleware'
+import { requireDelete, requireEdit, requireRead } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
 import { isSpriteError } from '../services/sprite/spriteErrors'
 import { readSpriteSettings } from '../services/sprite/spriteLibrary'
@@ -31,26 +31,13 @@ import { createSpritePreset, deleteSpritePreset, listSpritePresets, updateSprite
 
 /**
  * /api/sprite — sprite sheets from library videos (extract, re-layout, save, frame ZIP), sheet normalisation and
- * sheet → animation. Inputs are library composite hashes; viewing needs images.view, running images.edit, and saving
- * into the library images.upload as well.
+ * sheet → animation. Inputs are library composite hashes. Reading them is all it needs: results are new copies.
+ * Presets are shared data (edit, delete).
  */
 const router = Router()
 
-const VIEW = 'images.view'
-const EDIT = 'images.edit'
-const UPLOAD = 'images.upload'
-
 function requester(req: Request): SpriteRequester {
   return { accountId: getRequesterAccountId(req) ?? null, accountType: isAdminRequest(req) ? 'admin' : (getRequesterAccountType(req) ?? null) }
-}
-
-/** images.upload as well, but only when the request asks to save into the library. */
-function requireUploadWhenSaving(req: Request, res: Response, next: NextFunction): void {
-  if (req.body?.save) {
-    requirePermission(UPLOAD)(req, res, next)
-    return
-  }
-  next()
 }
 
 function handle(run: (req: Request, res: Response, signal: AbortSignal) => Promise<unknown>) {
@@ -114,12 +101,12 @@ async function sendFile(res: Response, file: string, fileName: string, mimeType:
   }))
 }
 
-router.get('/videos/:hash/info', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/videos/:hash/info', requireRead, handle(async (req, res) => {
   res.json(successResponse(await probeLibraryVideo(String(req.params.hash))))
 }))
 
 /** A still of the video at `t` seconds (PNG), when the browser cannot play the file. */
-router.get('/videos/:hash/frame', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/videos/:hash/frame', requireRead, handle(async (req, res) => {
   const png = await renderVideoFrame(String(req.params.hash), numberQuery(req.query.t) ?? 0, numberQuery(req.query.size) ?? 1024)
   res.setHeader('Content-Type', 'image/png')
   res.setHeader('Cache-Control', 'private, max-age=300')
@@ -127,24 +114,24 @@ router.get('/videos/:hash/frame', requirePermission(VIEW), handle(async (req, re
 }))
 
 /** Extraction presets: one list shared by every account. */
-router.get('/presets', requirePermission(VIEW), handle(async (_req, res) => {
+router.get('/presets', requireRead, handle(async (_req, res) => {
   res.json(successResponse(listSpritePresets()))
 }))
 
-router.post('/presets', requirePermission(EDIT), handle(async (req, res) => {
+router.post('/presets', requireEdit, handle(async (req, res) => {
   res.status(201).json(successResponse(createSpritePreset(req.body ?? {}, requester(req).accountId)))
 }))
 
-router.put('/presets/:id', requirePermission(EDIT), handle(async (req, res) => {
+router.put('/presets/:id', requireEdit, handle(async (req, res) => {
   res.json(successResponse(updateSpritePreset(String(req.params.id), req.body ?? {}, requester(req).accountId)))
 }))
 
-router.delete('/presets/:id', requirePermission(EDIT), handle(async (req, res) => {
+router.delete('/presets/:id', requireDelete, handle(async (req, res) => {
   deleteSpritePreset(String(req.params.id))
   res.json(successResponse({ deleted: true }))
 }))
 
-router.post('/extract', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
+router.post('/extract', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = await startExtractJob({
     videoHash: String(body.videoHash ?? ''),
@@ -157,7 +144,7 @@ router.post('/extract', requirePermission(EDIT), requireUploadWhenSaving, handle
   res.status(202).json(successResponse(job))
 }))
 
-router.post('/extract-batch', requirePermission(EDIT), requirePermission(UPLOAD), handle(async (req, res) => {
+router.post('/extract-batch', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = await startExtractBatchJob({
     videoHashes: Array.isArray(body.videoHashes) ? body.videoHashes.map(String) : [],
@@ -171,28 +158,28 @@ router.post('/extract-batch', requirePermission(EDIT), requirePermission(UPLOAD)
 }))
 
 /** Per-video states of a running batch (null when the run is long finished). */
-router.get('/batches/:jobId/items', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/batches/:jobId/items', requireRead, handle(async (req, res) => {
   res.json(successResponse(getExtractBatchItems(String(req.params.jobId), requester(req))))
 }))
 
 /** Finish the current video, then end the batch. */
-router.post('/batches/:jobId/stop', requirePermission(EDIT), handle(async (req, res) => {
+router.post('/batches/:jobId/stop', requireRead, handle(async (req, res) => {
   requestExtractBatchStop(String(req.params.jobId), requester(req))
   res.json(successResponse({ stopping: true }))
 }))
 
-router.get('/builds/:buildId', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/builds/:buildId', requireRead, handle(async (req, res) => {
   res.json(successResponse(buildSummary(requireBuild(String(req.params.buildId), requester(req)).meta)))
 }))
 
-router.get('/builds/:buildId/frames/:index', requirePermission(VIEW), handle(async (req, res, signal) => {
+router.get('/builds/:buildId/frames/:index', requireRead, handle(async (req, res, signal) => {
   const png = await buildFramePreview(String(req.params.buildId), Number(req.params.index), numberQuery(req.query.size) ?? 256, requester(req), signal)
   res.setHeader('Content-Type', 'image/png')
   res.setHeader('Cache-Control', 'private, max-age=300')
   res.end(png)
 }))
 
-router.get('/builds/:buildId/sheet', requirePermission(VIEW), handle(async (req, res, signal) => {
+router.get('/builds/:buildId/sheet', requireRead, handle(async (req, res, signal) => {
   const rendered = await renderBuildSheet(String(req.params.buildId), renderFrom(req.query as Record<string, unknown>), requester(req), signal)
   res.setHeader('X-Sheet-Width', String(rendered.width))
   res.setHeader('X-Sheet-Height', String(rendered.height))
@@ -205,13 +192,13 @@ router.get('/builds/:buildId/sheet', requirePermission(VIEW), handle(async (req,
   }
 }))
 
-router.post('/builds/:buildId/save', requirePermission(EDIT), requirePermission(UPLOAD), handle(async (req, res) => {
+router.post('/builds/:buildId/save', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const saved = await saveBuild(String(req.params.buildId), renderFrom(body.render ?? {}), saveTarget(body.group ?? true) ?? undefined, requester(req))
   res.json(successResponse(saved))
 }))
 
-router.get('/builds/:buildId/frames.zip', requirePermission(VIEW), handle(async (req, res, signal) => {
+router.get('/builds/:buildId/frames.zip', requireRead, handle(async (req, res, signal) => {
   const zip = await buildFramesZip(String(req.params.buildId), {
     crop: parseCrop(req.query.crop),
     format: req.query.format === 'webp' ? 'webp' : 'png',
@@ -225,31 +212,31 @@ router.get('/builds/:buildId/frames.zip', requirePermission(VIEW), handle(async 
   }
 }))
 
-router.post('/normalize', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
+router.post('/normalize', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = startNormalizeJob({ sheets: Array.isArray(body.sheets) ? body.sheets : [], options: body.options ?? {}, save: saveTarget(body.save), requester: requester(req) })
   res.status(202).json(successResponse(job))
 }))
 
-router.post('/animation', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
+router.post('/animation', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = startAnimationJob({ sheetHash: String(body.sheetHash ?? ''), options: body.options ?? {}, save: saveTarget(body.save), requester: requester(req) })
   res.status(202).json(successResponse(job))
 }))
 
-router.post('/normalize-sources', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
+router.post('/normalize-sources', requireRead, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = startSourceNormalizeJob({ hashes: body.hashes, options: body.options ?? {}, save: saveTarget(body.save), requester: requester(req) })
   res.status(202).json(successResponse(job))
 }))
 
-router.get('/results/:workspaceId/download', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/results/:workspaceId/download', requireRead, handle(async (req, res) => {
   const download = workspaceDownload(String(req.params.workspaceId), requester(req), typeof req.query.file === 'string' ? req.query.file : undefined)
   const mimeType = download.fileName.endsWith('.zip') ? 'application/zip' : download.fileName.endsWith('.gif') ? 'image/gif' : download.fileName.endsWith('.mp4') ? 'video/mp4' : 'image/webp'
   await sendFile(res, download.file, download.fileName, mimeType)
 }))
 
-router.get('/settings/:hash', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/settings/:hash', requireRead, handle(async (req, res) => {
   res.json(successResponse(await readSpriteSettings(String(req.params.hash))))
 }))
 

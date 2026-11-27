@@ -185,11 +185,11 @@ export function importRefModBundle(file: File, conflict: RefModImportConflict) {
   return requestApiData<RefModImportResult>(`${BASE}/import?conflict=${conflict}`, { method: 'POST', body: form }, { timeoutMs: 600_000 })
 }
 
-/** One of an entry's own source copies (images.view). */
+/** One of an entry's own source copies (the read right). */
 export function refModEntryFileUrl(entryId: number, fileId: string) {
   return buildApiUrl(`${BASE}/${entryId}/files/${encodeURIComponent(fileId)}`)
 }
-/** A WebP thumbnail of an entry's image or video source (images.view). */
+/** A WebP thumbnail of an entry's image or video source (the read right). */
 export function refModEntryThumbnailUrl(entryId: number, fileId: string) {
   return buildApiUrl(`${BASE}/${entryId}/files/${encodeURIComponent(fileId)}/thumbnail`)
 }

@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import sharp from 'sharp'
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths'
-import { requireRequesterImagePermission } from '../middleware/imageAccess'
+import { requireRequesterRight } from '../middleware/featureAccess'
 import type { ModulePortDefinition } from '../types/moduleGraph'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { MEDIA_HASH_PATTERN, MEDIA_MAX_PIXELS, MEDIA_MIME_TYPES, sniffMediaExtension } from './codex-chat/chatMediaLinks'
@@ -116,7 +116,7 @@ export async function materializeLibraryImageInputs(
   engineType: string,
   exposedInputs: ModulePortDefinition[],
   inputs: Record<string, any>,
-  authorizeLibraryRead: () => void = () => requireRequesterImagePermission({ accountId: null, accountType: null }),
+  authorizeLibraryRead: () => void = () => requireRequesterRight({ accountId: null, accountType: null }, 'read'),
 ): Promise<Record<string, any>> {
   if (engineType === 'comfyui') return inputs
   const isCodex = engineType === 'codex' || (engineType === 'system' && exposedInputs.some((port) => port.key === 'references'))

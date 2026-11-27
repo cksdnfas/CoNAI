@@ -30,7 +30,7 @@ export type ArtStylePickerDialogProps = {
 
 /**
  * Pick one art style: a search across titles, descriptions, badges and keywords, the badge list as a filter, and the
- * style cards loading in batches as the list scrolls. Needs only `characters.view`; nothing here changes a style.
+ * style cards loading in batches as the list scrolls. Needs only the read right; nothing here changes a style.
  */
 export function ArtStylePickerDialog(props: ArtStylePickerDialogProps) {
   // Mounted only while open, so each opening starts with no leftover search, badges or selection.
@@ -41,7 +41,7 @@ function ArtStylePicker({ onOpenChange, onPick, title, confirmLabel }: ArtStyleP
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const canView = useFeaturePermissions().has('characters.view')
+  const canView = useFeaturePermissions().canRead
   const [searchText, setSearchText] = useState('')
   const query = useDebouncedValue(searchText.trim())
   const [badges, setBadges] = useState<string[]>([])

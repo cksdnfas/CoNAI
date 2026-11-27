@@ -16,7 +16,7 @@ export const artStyleProposalSchema = z.discriminatedUnion('action', [
       badges: terms(ART_STYLE_LIMITS.badge, ART_STYLE_LIMITS.badges), keywords: terms(ART_STYLE_LIMITS.keyword, ART_STYLE_LIMITS.keywords),
       positive: z.string().max(ART_STYLE_LIMITS.prompt), negative: z.string().max(ART_STYLE_LIMITS.prompt),
       images: z.array(z.union([z.object({ id: z.string() }).strict(), z.object({ composite_hash: z.string() }).strict()])).max(ART_STYLE_LIMITS.images)
-        .describe('The whole ordered list, first = cover: { id } keeps one of the style\'s images (get_art_style), { composite_hash } copies a library image in; left out = deleted. Needs images.view'),
+        .describe('The whole ordered list, first = cover: { id } keeps one of the style\'s images (get_art_style), { composite_hash } copies a library image in; left out = deleted. Needs content.read'),
     }).partial().strict().describe('Only given fields change; lists replace the stored ones'),
   }).strict(),
   z.object({ action: z.literal('delete_style'), style_id: id, revision: id.describe('From get_art_style') }).strict(),
