@@ -5,8 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
-import { DEFAULT_PROMPT_TEXTAREA_ROWS, TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows, type PromptCharacterLoadOptions } from './text-segment-spreadsheet-input'
-import { appendPromptText } from './prompt-text-segment-helpers'
+import { DEFAULT_PROMPT_TEXTAREA_ROWS, TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
 
 type PromptToggleFieldProps = {
   tool: PromptWildcardTool
@@ -29,13 +28,6 @@ type PromptToggleFieldProps = {
   negativeLock?: { value: string; hint: string }
   /** Prepended to the prompt boxes' accessible names when several editors share a screen ("Character 1"). */
   ariaLabelPrefix?: string
-  /** "캐릭터 불러오기" on the positive prompt's rows (appearance tags are positive tags). */
-  characterLoad?: PromptCharacterLoadOptions
-  /**
-   * "스타일 불러오기" on the positive prompt's rows: the style's negative prompt is appended to this field's negative
-   * (left out while `negativeLock` fixes it); images follow `reference`.
-   */
-  styleLoad?: { reference?: PromptCharacterLoadOptions['reference'] }
 }
 
 /** Return a lightweight prompt segment count using commas and line breaks. */
@@ -82,8 +74,6 @@ export function PromptToggleField({
   compact = false,
   negativeLock,
   ariaLabelPrefix,
-  characterLoad,
-  styleLoad,
 }: PromptToggleFieldProps) {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<'positive' | 'negative'>('positive')
@@ -126,8 +116,6 @@ export function PromptToggleField({
           placeholder={activeTab === 'negative' ? negativePlaceholder : positivePlaceholder}
           autocompletePromptType={activeTab}
           ariaLabel={promptFieldLabel}
-          characterLoad={activeTab === 'positive' ? characterLoad : undefined}
-          styleLoad={activeTab === 'positive' && styleLoad ? { reference: styleLoad.reference, negative: negativeLock ? null : { label: resolvedNegativeLabel, onLoad: (text) => onNegativeChange(appendPromptText(negativeValue, text)) } } : undefined}
           onChange={(nextRows) => (activeTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
         />
       )}

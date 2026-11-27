@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { Palette } from 'lucide-react'
 import { ImageChoiceGrid } from '@/components/common/image-choice-grid'
 import { EditorFooter } from '@/components/ui/editor-footer'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
@@ -47,8 +47,6 @@ type ArtStyleLoadButtonProps = {
   defaultNegativeTargetId?: string | null
   /** Where the images can go; they stay out unless the person turns them on. Empty: prompts only. */
   referenceTargets?: CharacterSettingLoadTarget[]
-  /** The form takes several images (the first into the chosen target, the rest as new entries). */
-  referenceMultiple?: boolean
   onLoad: (load: ArtStyleLoad) => void
 }
 
@@ -69,7 +67,6 @@ export function ArtStyleLoadButton({
   negativeTargets = [],
   defaultNegativeTargetId,
   referenceTargets = [],
-  referenceMultiple = false,
   onLoad,
 }: ArtStyleLoadButtonProps) {
   const { t } = useI18n()
@@ -94,7 +91,7 @@ export function ArtStyleLoadButton({
     const positive = style.positive.trim()
     const storedNegative = style.negative.trim()
     const negative = negativeTargetId !== null ? storedNegative : ''
-    const chosen = referenceTarget ? imageIds : []
+    const chosen = !referenceTarget ? [] : referenceTarget.multiple ? imageIds : imageIds.slice(0, 1)
     if (!positive && !negative && !chosen.length) {
       showSnackbar({ message: t({ ko: '이 스타일엔 넣을 프롬프트가 없어.', en: 'This style has no prompt to insert.' }), tone: 'info' })
       setStep(null)
@@ -134,7 +131,7 @@ export function ArtStyleLoadButton({
     if (!step) return
     const chosen = step.imageIds.includes(id)
     // Keep the style's order whatever order they were clicked in, so the first chosen image is predictable.
-    const imageIds = referenceMultiple
+    const imageIds = chosenReference?.multiple
       ? stepImages.map((image) => image.id).filter((candidate) => (candidate === id ? !chosen : step.imageIds.includes(candidate)))
       : chosen ? [] : [id]
     setStep({ ...step, imageIds })
@@ -186,9 +183,14 @@ export function ArtStyleLoadButton({
                 ) : targetSelect(t({ ko: '스타일 이미지를 넣을 칸', en: 'Set the style images into' }), chosenReference?.id ?? null, referenceOptions, (id) => setReference(referenceOptions.find((option) => option.id === id) ?? null), true)}
                 {chosenReference ? (
                   <>
-                    <Text as="span" variant="label" id={imagesCaptionId}>
-                      {referenceMultiple ? t({ ko: '넣을 이미지 (첫 장은 위 칸, 나머지는 새 참조)', en: 'Images (the first into the slot above, the rest as new references)' }) : t({ ko: '넣을 이미지 한 장', en: 'One image' })}
-                    </Text>
+                    <div className="flex items-center gap-1">
+                      <Text as="span" variant="label" id={imagesCaptionId}>{t({ ko: '참조 이미지 선택', en: 'Choose reference images' })}</Text>
+                      <FieldInfo>
+                        {chosenReference.multiple
+                          ? t({ ko: '넣을 이미지를 골라. 여러 장 고를 수 있어.', en: 'Choose the images; several can be chosen.' })
+                          : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
+                      </FieldInfo>
+                    </div>
                     <ImageChoiceGrid
                       labelledBy={imagesCaptionId}
                       disabled={loading}

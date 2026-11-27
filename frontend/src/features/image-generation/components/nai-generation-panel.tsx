@@ -425,7 +425,7 @@ export function NaiGenerationPanel({
   // Narrow screens stack the preset's visible sections in column order; the generate bar keeps its own sticky slot.
   const { preset: layoutPreset } = useGenerationLayoutSurface('nai')
   const renderEditorBlocks = (editorBlocks: NaiEditorBlockNodes) => {
-    const blocks = { filename: <GenerationFileNameField />, ...editorBlocks }
+    const blocks = { ...editorBlocks }
     return blockLayout
       ? <GenerationBlockLayout surface="nai" blocks={{ ...blocks, action: actionSection, result: blockLayout.result }} />
       : (
@@ -489,6 +489,7 @@ export function NaiGenerationPanel({
       actionSection={actionSection}
       showActionSection={!useInlineActionBar}
       renderBlocks={renderEditorBlocks}
+      fileNameField={layoutPreset.hidden.includes('filename') ? undefined : <GenerationFileNameField />}
     />
   )
 

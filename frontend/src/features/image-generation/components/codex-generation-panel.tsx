@@ -46,6 +46,8 @@ import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { GenerationFileNameField } from './generation-file-name-field'
+import { LibraryLoadRow } from './library-load-row'
+import { appendPromptText } from './prompt-text-segment-helpers'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -541,13 +543,34 @@ export function CodexGenerationPanel({
   )
 
   // "캐릭터 불러오기" and "스타일 불러오기" set their image here; in edit mode the slot is the source to edit, not a reference.
-  const codexImageLoad = codexForm.imageMode === 'reference' ? {
-    targets: [{ id: 'referenceImage', label: codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지', en: 'Reference image' }) }],
-    onLoad: (_target: unknown, image: SelectedImageDraft) => setCodexForm((current) => ({ ...current, referenceImage: image, maskImage: undefined })),
-  } : null
+  const codexImageTargets = codexForm.imageMode === 'reference'
+    ? [{ id: 'referenceImage', label: codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지', en: 'Reference image' }) }]
+    : []
+  const loadCodexImage = (image: SelectedImageDraft | undefined) => { if (image) setCodexForm((current) => ({ ...current, referenceImage: image, maskImage: undefined })) }
+  const codexPromptTargets = [{ id: 'prompt', label: t('image-generation.components.prompt.toggle.field.positive') }]
+  const { preset: layoutPreset } = useGenerationLayoutSurface('codex')
+  // The load buttons share the file name's line; with the file name hidden they top the prompt.
+  const fileNameShown = !layoutPreset.hidden.includes('filename')
+  const loadRow = (leading?: ReactNode) => (
+    <LibraryLoadRow
+      leading={leading}
+      textTargets={codexPromptTargets}
+      styleNegativeTargets={[{ id: 'negative', label: t('image-generation.components.prompt.toggle.field.negative') }]}
+      referenceTargets={codexImageTargets}
+      onCharacterLoad={({ appearance, references, referenceTarget }) => {
+        if (appearance) handleFieldChange('prompt', appendPromptText(codexForm.prompt, appearance))
+        if (referenceTarget) loadCodexImage(references[0])
+      }}
+      onStyleLoad={({ positive, negative, references, referenceTarget }) => {
+        if (positive) handleFieldChange('prompt', appendPromptText(codexForm.prompt, positive))
+        if (negative) handleFieldChange('negativePrompt', appendPromptText(codexForm.negativePrompt, negative))
+        if (referenceTarget) loadCodexImage(references[0])
+      }}
+    />
+  )
 
   const editorBlocks: Record<CodexEditorBlock, ReactNode> = {
-    filename: <GenerationFileNameField />,
+    filename: fileNameShown ? loadRow(<GenerationFileNameField />) : null,
     model: (
       <Tip content={t({ ko: '프롬프트를 해석하고 이미지를 만들 모델 고르기', en: 'Choose the model that reads the prompt and makes the image' })}>
         <div>
@@ -562,14 +585,13 @@ export function CodexGenerationPanel({
     ),
     prompt: (
       <div className="space-y-3">
+        {fileNameShown ? null : loadRow()}
         <NaiPromptSection
           tool="codex"
           prompt={codexForm.prompt}
           negativePrompt={codexForm.negativePrompt}
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
-          characterLoad={{ reference: codexImageLoad }}
-          styleLoad={{ reference: codexImageLoad }}
         />
         <div className="flex justify-end">
           <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />
@@ -712,7 +734,6 @@ export function CodexGenerationPanel({
   }
 
   // Narrow screens stack the preset's visible editor blocks in column order; the generate bar keeps its own slot.
-  const { preset: layoutPreset } = useGenerationLayoutSurface('codex')
   const stackedEditorBlocks = stackedLayoutBlocks(layoutPreset)
     .map((block) => <Fragment key={block}>{block in editorBlocks ? editorBlocks[block as CodexEditorBlock] : <StackedPluginBlocks surface="codex" block={block} />}</Fragment>)
 

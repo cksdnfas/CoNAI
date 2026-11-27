@@ -12,6 +12,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
@@ -41,8 +42,11 @@ import {
 import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
+import { LibraryItemImageSource, type LibraryItemImage } from './library-item-image-source'
 
-type ImageAttachmentSource = 'library' | 'upload' | 'system' | 'save'
+type ImageAttachmentSource = 'library' | 'upload' | 'system' | 'save' | 'character' | 'style'
+/** Where a picked image came from when it is a character's or an art style's image (an art style's is a style reference). */
+export type ImageAttachmentOrigin = 'character' | 'art-style'
 
 type ImageAttachmentPickerButtonProps = {
   label: string
@@ -54,7 +58,7 @@ type ImageAttachmentPickerButtonProps = {
   uploadOnly?: boolean
   selectedImage?: SelectedImageDraft | null
   onRemove?: () => void
-  onSelect: (image?: SelectedImageDraft) => void
+  onSelect: (image?: SelectedImageDraft, origin?: ImageAttachmentOrigin) => void
   /** Controlled open state; pair with `hideTrigger` to open the picker from another control. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -219,10 +223,15 @@ export function ImageAttachmentPickerButton({
   const saveSnapshot = useRef<{ session: number; id: string | null } | null>(null)
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
+  const { canViewImages } = useImagePermissions()
+  const canReadLibrary = useFeaturePermissions().canRead
+  // The character's or style's image being imported; set again by every import, so it never sticks to a later one.
+  const originRef = useRef<ImageAttachmentOrigin | undefined>(undefined)
+  const select = (image: SelectedImageDraft) => onSelect(image, originRef.current)
   const sourceItems = useMemo(() => {
     const values: ImageAttachmentSource[] = uploadOnly
       ? ['upload']
-      : hasLibrarySource ? ['library', ...IMAGE_ATTACHMENT_SOURCE_VALUES] : IMAGE_ATTACHMENT_SOURCE_VALUES
+      : [...(hasLibrarySource ? ['library' as const] : []), ...IMAGE_ATTACHMENT_SOURCE_VALUES, ...(canViewImages && canReadLibrary ? ['character' as const, 'style' as const] : [])]
     return values.map((value) => ({
       value,
       label: value === 'library'
@@ -231,11 +240,14 @@ export function ImageAttachmentPickerButton({
         ? t({ ko: '업로드', en: 'Upload' })
         : value === 'system'
           ? t({ ko: '시스템', en: 'System' })
-          : 'Save',
+          : value === 'character'
+            ? t({ ko: '캐릭터', en: 'Character' })
+            : value === 'style'
+              ? t({ ko: '스타일', en: 'Art style' })
+              : 'Save',
     }))
-  }, [hasLibrarySource, librarySourceLabel, t, uploadOnly])
+  }, [canReadLibrary, canViewImages, hasLibrarySource, librarySourceLabel, t, uploadOnly])
 
-  const { canViewImages } = useImagePermissions()
   const appSettingsQuery = useQuery({
     queryKey: ['image-viewer-settings'],
     enabled: canViewImages,
@@ -316,7 +328,7 @@ export function ImageAttachmentPickerButton({
         : input.source
       const draft = await buildRawSelectedImageDraft(sourceBlob, fileName)
       // Passed on unchanged, a library image keeps its id so callers can point at it instead of copying it.
-      onSelect(libraryHash ? { ...draft, compositeHash: libraryHash } : draft)
+      select(libraryHash ? { ...draft, compositeHash: libraryHash } : draft)
       setIsOpen(false)
       return
     }
@@ -329,7 +341,7 @@ export function ImageAttachmentPickerButton({
     }
 
     const output = await buildImageSaveOutput(input, effectiveImageSaveSettings)
-    onSelect(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(fileName, output.format)))
+    select(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(fileName, output.format)))
     setIsOpen(false)
   }
 
@@ -342,7 +354,7 @@ export function ImageAttachmentPickerButton({
     try {
       setIsImporting(true)
       const output = await buildImageSaveOutput(pendingImageSave.input, imageSaveOptions)
-      onSelect(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(pendingImageSave.fileName, output.format)))
+      select(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(pendingImageSave.fileName, output.format)))
       setPendingImageSave(null)
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지 저장 옵션을 적용하지 못했어.', en: 'Could not apply image save options.' }), tone: 'error' })
@@ -364,6 +376,7 @@ export function ImageAttachmentPickerButton({
 
     try {
       setIsImporting(true)
+      originRef.current = undefined
       await finalizeSelectedImage(file.name, {
         source: file,
         sourceMimeType: file.type,
@@ -396,6 +409,7 @@ export function ImageAttachmentPickerButton({
 
     try {
       setIsImporting(true)
+      originRef.current = undefined
 
       let blob: Blob | null = null
       let lastError: Error | null = null
@@ -422,6 +436,24 @@ export function ImageAttachmentPickerButton({
         source: blob,
         sourceMimeType: blob.type || image.mime_type || undefined,
       }, fromLibrary ? image.composite_hash ?? undefined : undefined)
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 가져오지 못했어.', en: 'Could not import the image.' }), tone: 'error' })
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  /** Import a character's or an art style's image: a character's is a library image and keeps its hash. */
+  const handleImportLibraryItemImage = async (image: LibraryItemImage, origin: ImageAttachmentOrigin) => {
+    try {
+      setIsImporting(true)
+      originRef.current = origin
+      const response = await fetch(image.url, { credentials: 'include' })
+      if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`)
+      const blob = await response.blob()
+      const extension = blob.type.split('/')[1]?.split(/[;+]/)[0]
+      const baseName = image.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'reference'
+      await finalizeSelectedImage(extension ? `${baseName}.${extension}` : baseName, { source: blob, sourceMimeType: blob.type || undefined }, image.libraryHash)
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 가져오지 못했어.', en: 'Could not import the image.' }), tone: 'error' })
     } finally {
@@ -575,6 +607,10 @@ export function ImageAttachmentPickerButton({
                 <span className="mr-auto min-w-0 truncate text-sm text-muted-foreground">{selectedLibraryImage ? getImageListDisplayName(selectedLibraryImage) : t({ ko: '이미지 한 장을 골라줘.', en: 'Choose one image.' })}</span>
               </EditorFooter>
             </>
+          ) : null}
+
+          {!uploadOnly && (source === 'character' || source === 'style') ? (
+            <LibraryItemImageSource key={source} kind={source} busy={isImporting} onPick={(image) => void handleImportLibraryItemImage(image, source === 'style' ? 'art-style' : 'character')} />
           ) : null}
 
           {!uploadOnly && source === 'save' ? (

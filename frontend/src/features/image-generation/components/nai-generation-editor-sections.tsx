@@ -39,6 +39,8 @@ import {
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { CharacterSettingLoadButton, type CharacterSettingLoadTarget } from './character-setting-load-button'
+import { LibraryLoadRow } from './library-load-row'
+import { appendPromptText } from './prompt-text-segment-helpers'
 import { naiCharacterReferenceIdentity, type NaiCharacterReferencePlacement } from './use-nai-form-controller'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { Section } from '@/components/ui/section'
@@ -50,7 +52,7 @@ import { PromptToggleField } from './prompt-toggle-field'
 import { ResolutionPicker, type DimensionBounds } from './resolution-picker'
 
 /** The NAI form sections as separately placeable blocks. */
-export type NaiEditorBlockNodes = Record<'prompt' | 'characters' | 'settings' | 'images' | 'references' | 'vibes', ReactNode>
+export type NaiEditorBlockNodes = Record<'filename' | 'prompt' | 'characters' | 'settings' | 'images' | 'references' | 'vibes', ReactNode>
 
 type NaiOptionChange = (patch: Partial<Pick<NAIFormDraft, 'qualityToggle' | 'ucPreset' | 'enhance'>>) => void
 
@@ -104,6 +106,7 @@ export function NaiGenerationEditorSections({
   actionSection,
   showActionSection,
   renderBlocks,
+  fileNameField,
 }: {
   naiForm: NAIFormDraft
   setNaiForm: Dispatch<SetStateAction<NAIFormDraft>>
@@ -158,6 +161,8 @@ export function NaiGenerationEditorSections({
   showActionSection: boolean
   /** Hand the sections to a layout (block layout presets) instead of stacking them in the default order. */
   renderBlocks?: (blocks: NaiEditorBlockNodes) => ReactNode
+  /** The layout's file name field: the load buttons share its line (the `filename` block); without it they top the prompt. */
+  fileNameField?: ReactNode
 }) {
   const { t } = useI18n()
   const hasCharacters = naiForm.characters.length > 0
@@ -173,18 +178,59 @@ export function NaiGenerationEditorSections({
       // The choice follows the row itself, not its position (rows can move while the dialog is open).
       return { id: String(index), label: reference.image?.fileName ? `${label} · ${reference.image.fileName}` : label, identity: naiCharacterReferenceIdentity(reference) }
     }),
-  ] : []
+  ].map((target) => ({ ...target, multiple: true })) : []
   const toReferencePlacement = (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => ({ replaces: target.identity ?? null, image })
   // A setting's further images (its gallery) each become a new reference row.
   const addCharacterReferenceRow = (image: SelectedImageDraft) => handleLoadCharacterReference({ replaces: null, image })
-  const characterReferenceLoad = supportsCharacterReference ? {
-    targets: characterReferenceTargets,
-    onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => handleLoadCharacterReference(toReferencePlacement(target, image)),
-    onLoadMore: addCharacterReferenceRow,
-  } : null
+  /** The first image into the chosen row, the rest as new rows; an art style's images are style references. */
+  const placeReferences = (target: CharacterSettingLoadTarget | null, [first, ...rest]: SelectedImageDraft[], type?: 'style') => {
+    if (!target || !first) return
+    handleLoadCharacterReference({ ...toReferencePlacement(target, first), type })
+    rest.forEach((image) => handleLoadCharacterReference({ replaces: null, image, type }))
+  }
+  // The same targets the assistant's character insertion offers: the prompt, a character's prompt or a new character.
+  const promptLabel = t('image-generation.components.prompt.toggle.field.positive')
+  const textTargets: CharacterSettingLoadTarget[] = [
+    { id: 'prompt', label: promptLabel },
+    ...(supportsCharacterPrompts ? [
+      ...naiForm.characters.map((_, index) => ({ id: `character:${index}`, label: `Character ${index + 1}` })),
+      { id: 'newCharacter', label: t({ ko: '새 캐릭터 프롬프트로 추가', en: 'Add as a new character prompt' }) },
+    ] : []),
+  ]
+
+  const loadRow = (
+    <LibraryLoadRow
+      leading={fileNameField}
+      textTargets={textTargets}
+      stylePositiveTargets={[{ id: 'prompt', label: promptLabel }]}
+      styleNegativeTargets={fixedSettings ? [] : [{ id: 'negative', label: t('image-generation.components.prompt.toggle.field.negative') }]}
+      referenceTargets={characterReferenceTargets}
+      onCharacterLoad={({ appearance, textTargetId, references, referenceTarget }) => {
+        if (textTargetId === 'newCharacter') {
+          const [first, ...rest] = references
+          handleAddCharacterPrompt(appearance, first && referenceTarget ? toReferencePlacement(referenceTarget, first) : undefined)
+          rest.forEach(addCharacterReferenceRow)
+          return
+        }
+        if (appearance && textTargetId === 'prompt') handleNaiFieldChange('prompt', appendPromptText(naiForm.prompt, appearance))
+        else if (appearance && textTargetId?.startsWith('character:')) {
+          const index = Number(textTargetId.slice('character:'.length))
+          const character = naiForm.characters[index]
+          if (character) handleCharacterPromptChange(index, 'prompt', appendPromptText(character.prompt, appearance))
+        }
+        placeReferences(referenceTarget, references)
+      }}
+      onStyleLoad={({ positive, negative, references, referenceTarget }) => {
+        if (positive) handleNaiFieldChange('prompt', appendPromptText(naiForm.prompt, positive))
+        if (negative) handleNaiFieldChange('negativePrompt', appendPromptText(naiForm.negativePrompt, negative))
+        placeReferences(referenceTarget, references, 'style')
+      }}
+    />
+  )
 
   const prompt = (
     <div className="min-w-0 space-y-3">
+      {fileNameField ? null : loadRow}
       <NaiPromptSection
         prompt={naiForm.prompt}
         negativePrompt={naiForm.negativePrompt}
@@ -194,8 +240,6 @@ export function NaiGenerationEditorSections({
           value: getNaiUcPresetText(naiForm.model, fixedSettings.ucPreset) ?? '',
           hint: getNaiFixedNegativeHint(t),
         } : undefined}
-        characterLoad={{ reference: characterReferenceLoad }}
-        styleLoad={{ reference: characterReferenceLoad }}
       />
       <NaiPromptPresetControls naiForm={naiForm} onChange={handleNaiOptionChange} />
     </div>
@@ -218,7 +262,6 @@ export function NaiGenerationEditorSections({
                 icon="add"
                 label={t({ ko: '캐릭터 불러와서 추가', en: 'Add a character from the library' })}
                 referenceTargets={characterReferenceTargets}
-                referenceMultiple
                 onLoad={({ appearance, references: [first, ...rest], referenceTarget }) => {
                   handleAddCharacterPrompt(appearance, first && referenceTarget ? toReferencePlacement(referenceTarget, first) : undefined)
                   rest.forEach(addCharacterReferenceRow)
@@ -320,7 +363,6 @@ export function NaiGenerationEditorSections({
                       value: '',
                       hint: t({ ko: '이 모델은 캐릭터 네거티브 프롬프트를 쓰지 않아.', en: 'This model does not use character negative prompts.' }),
                     } : undefined}
-                    characterLoad={{ reference: characterReferenceLoad }}
                   />
                 </div>
               ))}
@@ -486,7 +528,7 @@ export function NaiGenerationEditorSections({
   )
 
   if (renderBlocks) {
-    return renderBlocks({ prompt, characters, settings, images, references, vibes })
+    return renderBlocks({ filename: fileNameField ? loadRow : null, prompt, characters, settings, images, references, vibes })
   }
 
   return (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
-import { NAI_ENHANCE_DEFAULT_NOISE, NAI_ENHANCE_DEFAULT_STRENGTH, NAI_INFILL_DEFAULT_STRENGTH } from '@conai/shared'
+import { NAI_ENHANCE_DEFAULT_NOISE, NAI_ENHANCE_DEFAULT_STRENGTH, NAI_INFILL_DEFAULT_STRENGTH, type NaiCharacterReferenceType } from '@conai/shared'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
@@ -72,26 +72,28 @@ export function appendNaiCharacterPrompt(characters: NAICharacterPromptDraft[], 
  * adds a new reference row, a number replaces that row's image. NAI does not tie references to characters, so this
  * is never derived from a character's position; a row that vanished meanwhile becomes a new row, never another one.
  */
-export function placeNaiCharacterReference(references: NAICharacterReferenceDraft[], referenceIndex: number | null, image: SelectedImageDraft) {
+export function placeNaiCharacterReference(references: NAICharacterReferenceDraft[], referenceIndex: number | null, image: SelectedImageDraft, type?: NaiCharacterReferenceType) {
+  // `type`: what the image is for (an art style's image is a style reference); left out, a row keeps its own.
+  const patch = type ? { image, type } : { image }
   if (referenceIndex !== null && references[referenceIndex]) {
-    return references.map((reference, index) => (index === referenceIndex ? { ...reference, image } : reference))
+    return references.map((reference, index) => (index === referenceIndex ? { ...reference, ...patch } : reference))
   }
-  return [...references, { ...EMPTY_NAI_CHARACTER_REFERENCE, image }]
+  return [...references, { ...EMPTY_NAI_CHARACTER_REFERENCE, ...patch }]
 }
 
 /**
  * A loaded setting's reference image and the reference row it replaces, by identity (the row's image, or the row
  * itself when it has none); null adds a new row.
  */
-export type NaiCharacterReferencePlacement = { replaces: object | null; image: SelectedImageDraft }
+export type NaiCharacterReferencePlacement = { replaces: object | null; image: SelectedImageDraft; type?: NaiCharacterReferenceType }
 
 /** The row identity a reference-row choice remembers (see `NaiCharacterReferencePlacement`). */
 export const naiCharacterReferenceIdentity = (reference: NAICharacterReferenceDraft): object => reference.image ?? reference
 
 /** Place by identity inside the state update, so rows moved meanwhile never redirect it; a vanished row becomes a new row. */
-function placeNaiCharacterReferenceByIdentity(references: NAICharacterReferenceDraft[], { replaces, image }: NaiCharacterReferencePlacement) {
+function placeNaiCharacterReferenceByIdentity(references: NAICharacterReferenceDraft[], { replaces, image, type }: NaiCharacterReferencePlacement) {
   const index = replaces ? references.findIndex((reference) => naiCharacterReferenceIdentity(reference) === replaces) : -1
-  return placeNaiCharacterReference(references, index >= 0 ? index : null, image)
+  return placeNaiCharacterReference(references, index >= 0 ? index : null, image, type)
 }
 
 const writeNaiFormDraft = (owner: string, state: { form: NAIFormDraft; selectedCharacterIndex: number | null }) => {

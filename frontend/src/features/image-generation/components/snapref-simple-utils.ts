@@ -44,6 +44,13 @@ export function writeSnapRefSimpleSlots(value: Record<string, unknown>, slots: S
   return next
 }
 
+/** Add pictures after the used ones (into an empty picture 1 first), as many as there is room for; `added` counts them. */
+export function appendSnapRefSimplePictures(value: Record<string, unknown>, pictures: unknown[]) {
+  const used = readSnapRefSimpleSlots(value).filter((slot) => isSnapRefSimplePictureSet(slot.picture))
+  const added = pictures.slice(0, SNAPREF_SIMPLE_MAX_REFERENCES - used.length).map((picture) => ({ picture, strength: SNAPREF_SIMPLE_STRENGTH.default }))
+  return { value: writeSnapRefSimpleSlots(value, [...used, ...added]), added: added.length }
+}
+
 /** CoNAI-stored pictures of a SnapRef value, for cleanup when they leave the draft. */
 export function getSnapRefSimpleAssets(value: Record<string, unknown>): WorkflowInputAssetRef[] {
   return readSnapRefSimpleSlots(value).flatMap((slot) => isWorkflowInputAssetRef(slot.picture) ? [slot.picture] : [])

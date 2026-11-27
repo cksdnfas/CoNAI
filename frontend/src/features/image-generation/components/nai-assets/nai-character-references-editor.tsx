@@ -144,16 +144,19 @@ export function NaiCharacterReferencesEditor({
                 />
               ),
             } : undefined}
-            onSelect={(image) => {
+            onSelect={(image, origin) => {
               if (!image || !picker) {
                 return
               }
+              // An art style's image is a style reference; the new row is the last one.
+              const index = picker.mode === 'replace' ? picker.index : references.length
               if (picker.mode === 'replace') {
                 onImageChange(picker.index, image)
               } else {
                 onAddImage(image)
                 setIsOpen(true)
               }
+              if (origin === 'art-style') onFieldChange(index, { type: 'style' })
             }}
           />
         </>

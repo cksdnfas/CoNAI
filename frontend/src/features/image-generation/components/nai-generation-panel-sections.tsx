@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import type { ComponentProps, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowUp, BookmarkPlus, ExternalLink, LogIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -15,7 +15,6 @@ import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-
 import { GenerationToolbarStatus } from './generation-toolbar-status'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
-import type { PromptCharacterLoadOptions } from './text-segment-spreadsheet-input'
 
 interface NaiConnectionHeaderProps {
   connected: boolean
@@ -144,8 +143,6 @@ interface NaiPromptSectionProps {
   onNegativePromptChange: (value: string) => void
   /** The model fixes the negative prompt (V5 Full Medium): shown read-only. */
   negativeLock?: { value: string; hint: string }
-  characterLoad?: PromptCharacterLoadOptions
-  styleLoad?: ComponentProps<typeof PromptToggleField>['styleLoad']
 }
 
 /** Render the primary prompt section for NovelAI generation. */
@@ -156,8 +153,6 @@ export function NaiPromptSection({
   onPromptChange,
   onNegativePromptChange,
   negativeLock,
-  characterLoad,
-  styleLoad,
 }: NaiPromptSectionProps) {
   return (
     <PromptToggleField
@@ -167,8 +162,6 @@ export function NaiPromptSection({
       onPositiveChange={onPromptChange}
       onNegativeChange={onNegativePromptChange}
       negativeLock={negativeLock}
-      characterLoad={characterLoad}
-      styleLoad={styleLoad}
     />
   )
 }

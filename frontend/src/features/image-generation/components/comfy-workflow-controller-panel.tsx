@@ -18,8 +18,12 @@ import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } fr
 import { usePortalTargetById } from './generation-toolbar-status'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
-import { CharacterSettingLoadButton } from './character-setting-load-button'
-import { ArtStyleLoadButton } from './art-style-load-button'
+import { LibraryLoadRow } from './library-load-row'
+import { selectedImageToFile } from './image-attachment-picker'
+import { appendSnapRefSimplePictures } from './snapref-simple-utils'
+import { uploadWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
+import { useSnackbar } from '@/components/ui/snackbar-context'
+import { getErrorMessage } from '@/lib/error-message'
 import { appendPromptText } from './prompt-text-segment-helpers'
 import { formatWorkflowFieldLabel } from './workflow-field-disclosure-card'
 import { floatingDropdownMenuClassName, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -265,6 +269,7 @@ export function ComfyWorkflowControllerPanel({
   onRevealFieldIssues,
 }: ComfyWorkflowControllerPanelProps) {
   const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
   const routingSummary = useMemo(
     () => buildComfyWorkflowServerRoutingSummary(servers, serverTests),
     [serverTests, servers],
@@ -286,13 +291,30 @@ export function ComfyWorkflowControllerPanel({
       : selectedServer
         ? isComfyWorkflowServerRoutable(selectedServer, serverTests[selectedServer.id])
         : false
-  // "캐릭터 불러오기": tags go into a marked text field, the reference optionally into a marked image field.
+  // "캐릭터 불러오기": tags go into a marked text field, images into a marked image field (one) or a SnapRef node (several).
   const characterTextTargets = workflowFields.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
-  const characterImageTargets = workflowFields.filter((field) => field.type === 'image').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
+  const snapRefFieldIds = new Set(workflowFields.filter((field) => field.type === 'node' && field.node_editor === 'snapref_simple').map((field) => field.id))
+  const characterImageTargets = workflowFields.filter((field) => field.type === 'image' || snapRefFieldIds.has(field.id)).map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field), multiple: snapRefFieldIds.has(field.id) }))
   // "스타일 불러오기" uses the same fields; a field named like a negative prompt starts as the negative target and last as a positive one.
   const negativeLike = (target: { id: string; label: string }) => /negative|부정|네거티브/i.test(`${target.id} ${target.label}`)
   const stylePositiveTargets = [...characterTextTargets.filter((target) => !negativeLike(target)), ...characterTextTargets.filter(negativeLike)]
   const styleNegativeTargetId = characterTextTargets.find(negativeLike)?.id ?? null
+  /** Loaded images into their field: an image field takes the first; a SnapRef node gets them uploaded and appended. */
+  const loadImages = async (fieldId: string, images: SelectedImageDraft[]) => {
+    if (!images.length) return
+    if (!snapRefFieldIds.has(fieldId)) { await onImageChange(fieldId, images[0]); return }
+    const current = workflowDraft[fieldId]
+    const node = current && typeof current === 'object' && !Array.isArray(current) ? current as Record<string, unknown> : {}
+    // Only what fits is uploaded, so nothing is left stored for pictures the node cannot take.
+    const room = appendSnapRefSimplePictures(node, images).added
+    try {
+      const assets = await Promise.all(images.slice(0, room).map((image) => uploadWorkflowInputAsset(selectedImageToFile(image))))
+      onFieldChange(fieldId, appendSnapRefSimplePictures(node, assets).value as WorkflowFieldDraftValue)
+      if (room < images.length) showSnackbar({ message: t({ ko: 'SnapRef 자리가 모자라서 {count}장만 넣었어.', en: 'SnapRef had room for only {count}.' }, { count: room }), tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '사진 업로드에 실패했어.', en: 'Failed to upload the picture.' })), tone: 'error' })
+    }
+  }
   const missingRequiredFields = useMemo(
     () => workflowFields.filter((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
     [workflowDraft, workflowFields],
@@ -483,6 +505,40 @@ export function ComfyWorkflowControllerPanel({
     />
   )
 
+  // Narrow screens follow the preset's order of the name row and the fields; the generate bar keeps its own slot.
+  const { preset: layoutPreset } = useGenerationLayoutSurface('comfy')
+  // The load buttons share the file name's line; without a shown file name (hidden, public page) they top the fields.
+  const fileNameShown = Boolean(fileNameField) && !layoutPreset.hidden.includes('filename')
+  const loadRow = (leading?: ReactNode) => (
+    <LibraryLoadRow
+      leading={leading}
+      textTargets={characterTextTargets}
+      stylePositiveTargets={stylePositiveTargets}
+      styleNegativeTargets={characterTextTargets}
+      defaultStyleNegativeTargetId={styleNegativeTargetId}
+      referenceTargets={characterImageTargets}
+      onCharacterLoad={({ appearance, textTargetId, references, referenceTarget }) => {
+        if (appearance && textTargetId) {
+          const current = workflowDraft[textTargetId]
+          onFieldChange(textTargetId, appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', appearance))
+        }
+        if (referenceTarget) void loadImages(referenceTarget.id, references)
+      }}
+      onStyleLoad={({ positive, negative, positiveTargetId, negativeTargetId, references, referenceTarget }) => {
+        // Both prompts may go into the same field: append to what the first one wrote.
+        const written: Record<string, WorkflowFieldDraftValue> = {}
+        for (const [fieldId, text] of [[positiveTargetId, positive], [negativeTargetId, negative]] as const) {
+          if (!fieldId || !text) continue
+          const current = written[fieldId] ?? workflowDraft[fieldId]
+          written[fieldId] = appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', text)
+        }
+        for (const [fieldId, value] of Object.entries(written)) onFieldChange(fieldId, value)
+        if (referenceTarget) void loadImages(referenceTarget.id, references)
+      }}
+    />
+  )
+  const fileNameRow = fileNameShown ? loadRow(fileNameField) : null
+
   const fieldsContent = (
     <div className="space-y-6">
       {notice}
@@ -516,39 +572,7 @@ export function ComfyWorkflowControllerPanel({
       ) : null}
 
       <section className="space-y-3">
-        {characterTextTargets.length > 0 ? (
-          <div className="flex justify-end gap-1">
-            <CharacterSettingLoadButton
-              label={t({ ko: '캐릭터 불러오기', en: 'Load character' })}
-              textTargets={characterTextTargets}
-              referenceTargets={characterImageTargets}
-              onLoad={({ appearance, textTargetId, references: [reference], referenceTarget }) => {
-                if (appearance && textTargetId) {
-                  const current = workflowDraft[textTargetId]
-                  onFieldChange(textTargetId, appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', appearance))
-                }
-                if (reference && referenceTarget) void onImageChange(referenceTarget.id, reference)
-              }}
-            />
-            <ArtStyleLoadButton
-              positiveTargets={stylePositiveTargets}
-              negativeTargets={characterTextTargets}
-              defaultNegativeTargetId={styleNegativeTargetId}
-              referenceTargets={characterImageTargets}
-              onLoad={({ positive, negative, positiveTargetId, negativeTargetId, references: [reference], referenceTarget }) => {
-                // Both prompts may go into the same field: append to what the first one wrote.
-                const written: Record<string, WorkflowFieldDraftValue> = {}
-                for (const [fieldId, text] of [[positiveTargetId, positive], [negativeTargetId, negative]] as const) {
-                  if (!fieldId || !text) continue
-                  const current = written[fieldId] ?? workflowDraft[fieldId]
-                  written[fieldId] = appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', text)
-                }
-                for (const [fieldId, value] of Object.entries(written)) onFieldChange(fieldId, value)
-                if (reference && referenceTarget) void onImageChange(referenceTarget.id, reference)
-              }}
-            />
-          </div>
-        ) : null}
+        {fileNameShown ? null : loadRow()}
         {workflowFields.length > 0 ? (
           <GenerationControllerFieldStack>
             <WorkflowFieldGroupList
@@ -571,17 +595,15 @@ export function ComfyWorkflowControllerPanel({
     </div>
   )
 
-  // Narrow screens follow the preset's order of the name row and the fields; the generate bar keeps its own slot.
-  const { preset: layoutPreset } = useGenerationLayoutSurface('comfy')
   const stackedBlocks = stackedLayoutBlocks(layoutPreset)
   const workflowAfterFields = stackedBlocks.indexOf('workflow') > stackedBlocks.indexOf('fields')
   // The name row follows the preset too: above the workflow header when it comes first, else on top of the fields.
-  const fileNameAt = !fileNameField || !stackedBlocks.includes('filename') ? null
+  const fileNameAt = !fileNameRow || !stackedBlocks.includes('filename') ? null
     : !workflowAfterFields && stackedBlocks.indexOf('filename') < stackedBlocks.indexOf('workflow') ? 'header' : 'fields'
 
   if (blockLayout) {
     return (
-      <GenerationBlockLayout surface="comfy" blocks={{ filename: fileNameField, workflow: desktopHeaderContent, fields: fieldsContent, action: inlineActionBar, result: blockLayout.result }} />
+      <GenerationBlockLayout surface="comfy" blocks={{ filename: fileNameRow, workflow: desktopHeaderContent, fields: fieldsContent, action: inlineActionBar, result: blockLayout.result }} />
     )
   }
 
@@ -589,7 +611,7 @@ export function ComfyWorkflowControllerPanel({
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
       {workflowAfterFields ? null : (
           <div className="shrink-0 space-y-3">
-            {fileNameAt === 'header' ? fileNameField : null}
+            {fileNameAt === 'header' ? fileNameRow : null}
             {desktopHeaderContent}
           </div>
         )}
@@ -598,7 +620,7 @@ export function ComfyWorkflowControllerPanel({
         'space-y-6',
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
       )}>
-        {fileNameAt === 'fields' ? fileNameField : null}
+        {fileNameAt === 'fields' ? fileNameRow : null}
         {fieldsContent}
         {workflowAfterFields ? desktopHeaderContent : null}
         <StackedPluginBlocks surface="comfy" />

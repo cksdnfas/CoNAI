@@ -7,9 +7,6 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { cn } from '@/lib/utils'
 import { appendPromptRowText, getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 import { PromptPresetInlinePicker } from './prompt-preset-inline-picker'
-import { CharacterSettingLoadButton, type CharacterSettingLoadTarget } from './character-setting-load-button'
-import { ArtStyleLoadButton } from './art-style-load-button'
-import type { SelectedImageDraft } from '../image-generation-shared'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import type { PromptTypeFilter } from '@/types/prompt'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
@@ -17,28 +14,6 @@ import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 export { getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows, normalizeTextSegmentSpreadsheetText, TEXT_SEGMENT_SPREADSHEET_ROW_SEPARATOR, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 
 export const DEFAULT_PROMPT_TEXTAREA_ROWS = 5
-
-/**
- * Offer "캐릭터 불러오기" on each row: a character library setting's appearance tags go into that row like a preset;
- * with `reference`, its images can go to one of `targets` too (chosen when confirming); with `onLoadMore` the form
- * takes several, the first into the target and each further one as a new entry.
- */
-export type PromptCharacterLoadOptions = {
-  reference?: {
-    targets: CharacterSettingLoadTarget[]
-    onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => void
-    onLoadMore?: (image: SelectedImageDraft) => void
-  } | null
-}
-
-/**
- * Offer "스타일 불러오기" on each row: an art style's positive prompt goes into that row; with `negative` its negative
- * prompt is appended there (otherwise it is left out with a notice); images follow `reference` like a character's.
- */
-export type PromptStyleLoadOptions = {
-  negative?: { label: string; onLoad: (text: string) => void } | null
-  reference?: PromptCharacterLoadOptions['reference']
-}
 
 type TextSegmentSpreadsheetInputProps = {
   tool: PromptWildcardTool
@@ -51,8 +26,6 @@ type TextSegmentSpreadsheetInputProps = {
   errorMessageId?: string
   /** Accessible name of the rows; each row adds its number ("Positive prompt 1"). */
   ariaLabel?: string
-  characterLoad?: PromptCharacterLoadOptions
-  styleLoad?: PromptStyleLoadOptions
   onChange: (value: string[]) => void
 }
 
@@ -67,8 +40,6 @@ export function TextSegmentSpreadsheetInput({
   invalid = false,
   errorMessageId,
   ariaLabel,
-  characterLoad,
-  styleLoad,
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
@@ -143,34 +114,6 @@ export function TextSegmentSpreadsheetInput({
                 >
                   <BookmarkPlus />
                 </IconButton>
-                {characterLoad ? (
-                  <CharacterSettingLoadButton
-                    label={t({ ko: '{row}행에 캐릭터 불러오기', en: 'Load a character into row {row}' }, { row: index + 1 })}
-                    tooltipSide="left"
-                    referenceTargets={characterLoad.reference?.targets ?? []}
-                    referenceMultiple={Boolean(characterLoad.reference?.onLoadMore)}
-                    onLoad={({ appearance, references: [first, ...rest], referenceTarget }) => {
-                      if (appearance) handleRowChange(index, appendPromptRowText(rows[index] ?? '', appearance))
-                      if (first && referenceTarget) characterLoad.reference?.onLoad(referenceTarget, first)
-                      if (characterLoad.reference?.onLoadMore) rest.forEach(characterLoad.reference.onLoadMore)
-                    }}
-                  />
-                ) : null}
-                {styleLoad ? (
-                  <ArtStyleLoadButton
-                    label={t({ ko: '{row}행에 스타일 불러오기', en: 'Load an art style into row {row}' }, { row: index + 1 })}
-                    tooltipSide="left"
-                    negativeTargets={styleLoad.negative ? [{ id: 'negative', label: styleLoad.negative.label }] : []}
-                    referenceTargets={styleLoad.reference?.targets ?? []}
-                    referenceMultiple={Boolean(styleLoad.reference?.onLoadMore)}
-                    onLoad={({ positive, negative, references: [first, ...rest], referenceTarget }) => {
-                      if (positive) handleRowChange(index, appendPromptRowText(rows[index] ?? '', positive))
-                      if (negative) styleLoad.negative?.onLoad(negative)
-                      if (first && referenceTarget) styleLoad.reference?.onLoad(referenceTarget, first)
-                      if (styleLoad.reference?.onLoadMore) rest.forEach(styleLoad.reference.onLoadMore)
-                    }}
-                  />
-                ) : null}
                 <IconButton
                   size="icon-sm"
                   variant="destructive-ghost"

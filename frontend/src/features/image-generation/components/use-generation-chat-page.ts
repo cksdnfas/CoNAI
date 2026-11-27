@@ -173,7 +173,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
         next.prompt = artStyles.append(form.prompt, loaded.positive)
         if (!fixedSettings) next.negativePrompt = artStyles.append(form.negativePrompt, loaded.negative)
         if (loaded.references.length && !styleImages) throw new Error(t({ ko: '이 모델엔 캐릭터 레퍼런스를 넣을 수 없어.', en: 'This model takes no character references.' }))
-        loaded.references.forEach((image) => { next.characterReferences = placeNaiCharacterReference(next.characterReferences, null, image) })
+        loaded.references.forEach((image) => { next.characterReferences = placeNaiCharacterReference(next.characterReferences, null, image, 'style') })
       }
       else if (id === 'nai.characters') {
         const characters = args.characters as unknown as NAIFormDraft['characters']

@@ -28,6 +28,8 @@ export type CharacterSettingLoadTarget = {
    * so rows moving while the dialog is open or the image loads never redirect it to a neighbouring row.
    */
   identity?: object
+  /** The target takes several images (a reference list): more than one can be chosen; otherwise only one. */
+  multiple?: boolean
 }
 
 const isSameTarget = (left: CharacterSettingLoadTarget, right: CharacterSettingLoadTarget) => (
@@ -43,7 +45,7 @@ export type CharacterSettingLoad = {
   textTargetId: string | null
   /**
    * The setting's images the person chose (its reference image or gallery images), in order: the first goes into
-   * `referenceTarget`, the rest (only with `referenceMultiple`) become new entries. Empty: tags only.
+   * `referenceTarget`, the rest (only when it is `multiple`) follow as the caller places them. Empty: tags only.
    */
   references: SelectedImageDraft[]
   referenceTarget: CharacterSettingLoadTarget | null
@@ -60,8 +62,6 @@ type CharacterSettingLoadButtonProps = {
   textTargets?: CharacterSettingLoadTarget[]
   /** Where the reference image can go; one is a switch (on by default), several a choice. Empty: tags only. */
   referenceTargets?: CharacterSettingLoadTarget[]
-  /** The form takes several of the setting's images (the first into the chosen target, the rest as new entries). */
-  referenceMultiple?: boolean
   onLoad: (load: CharacterSettingLoad) => void
 }
 
@@ -82,7 +82,6 @@ export function CharacterSettingLoadButton({
   disabled = false,
   textTargets,
   referenceTargets = [],
-  referenceMultiple = false,
   onLoad,
 }: CharacterSettingLoadButtonProps) {
   const { t } = useI18n()
@@ -106,7 +105,7 @@ export function CharacterSettingLoadButton({
 
   const finish = async ({ setting, textTargetId, referenceTarget, outfitIndex, imageHashes }: ConfirmStep) => {
     const appearance = appearanceOf(setting, outfitIndex)
-    const hashes = referenceTarget ? imageHashes : []
+    const hashes = !referenceTarget ? [] : referenceTarget.multiple ? imageHashes : imageHashes.slice(0, 1)
     if (!appearance && !hashes.length) {
       showSnackbar({ message: t({ ko: '이 외형 설정엔 넣을 외형 태그가 없어.', en: 'This setting has no appearance tags to insert.' }), tone: 'info' })
       setStep(null)
@@ -146,7 +145,7 @@ export function CharacterSettingLoadButton({
     if (!step) return
     const chosen = step.imageHashes.includes(hash)
     // Keep the gallery's order whatever order they were clicked in, so the first chosen image is predictable.
-    const imageHashes = referenceMultiple
+    const imageHashes = chosenReference?.multiple
       ? stepImages.map((image) => image.hash).filter((candidate) => (candidate === hash ? !chosen : step.imageHashes.includes(candidate)))
       : chosen ? [] : [hash]
     setStep({ ...step, imageHashes })
@@ -201,8 +200,8 @@ export function CharacterSettingLoadButton({
                     <div className="flex items-center gap-1">
                       <Text as="span" variant="label" id={imagesCaptionId}>{t({ ko: '참조 이미지 선택', en: 'Choose reference images' })}</Text>
                       <FieldInfo>
-                        {referenceMultiple
-                          ? t({ ko: '넣을 이미지를 골라. 첫 장은 위 칸에, 나머지는 새 참조로 들어가.', en: 'Choose the images: the first goes into the slot above, the rest become new references.' })
+                        {chosenReference.multiple
+                          ? t({ ko: '넣을 이미지를 골라. 여러 장 고를 수 있어.', en: 'Choose the images; several can be chosen.' })
                           : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
                       </FieldInfo>
                     </div>
