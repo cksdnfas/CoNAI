@@ -235,6 +235,13 @@ function Modal({ open, title, description, status, actions, headerContent, leadi
     if (event.defaultPrevented) {
       return
     }
+    // A non-Radix overlay opened over this dialog (the image viewer) takes its own Escape.
+    const dialogs = document.querySelectorAll('[role="dialog"], [role="alertdialog"]')
+    const top = dialogs[dialogs.length - 1]
+    if (top && contentRef.current && !contentRef.current.contains(top)) {
+      hideEscapeFromRadixDismiss(event)
+      return
+    }
 
     pendingEscapeRef.current = event
     hideEscapeFromRadixDismiss(event)

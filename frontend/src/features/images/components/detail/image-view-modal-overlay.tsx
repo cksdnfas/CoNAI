@@ -54,7 +54,7 @@ export function ImageViewModalOverlay({
   }, [compositeHash, openSessionId])
 
   return createPortal(
-    <div className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-[90] bg-black" onMouseDown={onClose}>
+    <div className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-modal bg-black" onMouseDown={onClose}>
       <div
         ref={containerRef}
         role="dialog"

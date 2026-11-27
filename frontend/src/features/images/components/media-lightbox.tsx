@@ -426,8 +426,8 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
       aria-modal={!besideChat}
       aria-label={t({ ko: '이미지 보기', en: 'Image viewer' })}
       tabIndex={-1}
-      // Full-bleed, taking the same page side beside a docked chat as the detail modal (z-[90]).
-      className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-[88] flex flex-col bg-black text-white outline-none"
+      // Full-bleed, on the modal layer: it opens over the dialog it came from (later in body wins), beside a docked chat.
+      className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-modal flex flex-col bg-black text-white outline-none"
     >
       <div className="flex h-14 shrink-0 items-center gap-1.5 pl-4 pr-2 sm:pl-6">
         <span className="flex-1 text-sm tabular-nums text-white/70">{count > 1 ? `${index + 1} / ${count}` : null}</span>
