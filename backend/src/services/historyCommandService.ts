@@ -6,6 +6,7 @@ import type {
   GenerationStatus,
   ServiceType,
 } from '../types/generationHistory';
+import type { GenerationQueueJobListRecord } from '../types/generationQueue';
 import { buildHistoryFilterClause } from '../repositories/history/historyQueryFilter';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
@@ -247,6 +248,30 @@ export class HistoryCommandService {
       eventName: 'history.record.status',
       requestRetention: true,
     });
+  }
+
+  /**
+   * A queue job that failed before its executor wrote a history row (missing model, server down, no token) still
+   * gets one failed row, so the generation log shows every failure.
+   */
+  static recordFailedQueueJobWithoutHistory(job: GenerationQueueJobListRecord, errorMessage: string): number | null {
+    if (apiGenDb.prepare('SELECT 1 FROM api_generation_history WHERE queue_job_id = ? LIMIT 1').get(job.id)) {
+      return null;
+    }
+
+    const id = this.create({
+      service_type: job.service_type,
+      generation_status: 'pending',
+      workflow_id: job.workflow_id ?? undefined,
+      workflow_name: job.workflow_name ?? undefined,
+      assigned_group_id: job.requested_group_id ?? undefined,
+      queue_job_id: job.id,
+      requested_by_account_id: job.requested_by_account_id ?? undefined,
+      requested_by_account_type: job.requested_by_account_type ?? undefined,
+      server_id: job.assigned_server_id ?? undefined,
+    });
+    this.recordError(id, errorMessage);
+    return id;
   }
 
   static recordErrorByQueueJobIds(queueJobIds: number[], errorMessage: string): number {

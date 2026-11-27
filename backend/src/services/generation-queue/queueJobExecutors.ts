@@ -116,8 +116,9 @@ export function resolveQueueFailureStage(error: unknown) {
   return typeof carrier?.queueFailureStage === 'string' ? carrier.queueFailureStage : null
 }
 
-/** Stage of a failure the executor did not stamp, from how far the provider submit got. */
-export function resolveSubmitFailureStage(submitState: GenerationQueueProviderSubmitState | undefined) {
+/** Stage of a failure the executor did not stamp, from how far the provider submit got (Codex never submits upstream). */
+export function resolveSubmitFailureStage(submitState: GenerationQueueProviderSubmitState | undefined, serviceType?: string) {
+  if (submitState === 'none' && serviceType !== 'codex') return JSON.stringify({ phase: 'preparing' })
   if (submitState === 'in_flight') return JSON.stringify({ phase: 'submitting' })
   if (submitState === 'accepted') return JSON.stringify({ phase: 'generating' })
   return null

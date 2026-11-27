@@ -1021,10 +1021,22 @@ export class GenerationQueueService {
         // 실행기가 특정한 실패 코드(예: nai_submit_ambiguous)를 붙였으면 그대로 보존한다.
         failureCode: resolveQueueFailureCode(error) ?? 'execution_failed',
         failureMessage: resolveQueueFailureMessage(error) ?? resolveFailureMessage(error),
-        failureStage: resolveQueueFailureStage(error) ?? resolveSubmitFailureStage(latest.provider_submit_state),
+        failureStage: resolveQueueFailureStage(error) ?? resolveSubmitFailureStage(latest.provider_submit_state, latest.service_type),
       })
     } catch (transitionError) {
       console.warn(`⚠️ Failed to mark queue job ${jobId} as failed:`, transitionError)
+      return
+    }
+
+    // Audio-tab orders keep their record on the order, never in the image history.
+    if (latest.service_type === 'comfyui' && latest.workflow_id && WorkflowModel.findByIdIncludingDeleted(latest.workflow_id)?.kind === 'audio'
+      && (await import('./audio/audioOrders')).findAudioOrderJobByQueueJob(jobId)) {
+      return
+    }
+    try {
+      HistoryCommandService.recordFailedQueueJobWithoutHistory(latest, resolveQueueFailureMessage(error) ?? resolveFailureMessage(error))
+    } catch (historyError) {
+      console.warn(`⚠️ Failed to record history for failed queue job ${jobId}:`, historyError)
     }
   }
 }

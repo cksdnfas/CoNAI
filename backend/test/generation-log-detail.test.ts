@@ -21,7 +21,8 @@ test('generation log detail: failure stage and retry attempt reach the history l
   const error = new Error('node 12 (KSampler) OutOfMemoryError: CUDA out of memory')
   stampQueueFailureStage(error, { source: 'comfyui_ws', phase: 'sampling', node_id: '12', node_label: 'KSampler', value: 3, max: 30, percent: 10, updated_at: '' })
   assert.deepEqual(JSON.parse(resolveQueueFailureStage(error)!), { phase: 'sampling', node_id: '12', node_label: 'KSampler' })
-  assert.equal(resolveSubmitFailureStage('none'), null)
+  assert.deepEqual(JSON.parse(resolveSubmitFailureStage('none', 'comfyui')!), { phase: 'preparing' })
+  assert.equal(resolveSubmitFailureStage('none', 'codex'), null)
   assert.deepEqual(JSON.parse(resolveSubmitFailureStage('in_flight')!), { phase: 'submitting' })
 
   const jobId = GenerationQueueModel.create({ service_type: 'novelai', request_payload: { prompt: 'x' } })
@@ -39,4 +40,16 @@ test('generation log detail: failure stage and retry attempt reach the history l
   assert.deepEqual(JSON.parse(row.queue_failure_stage!), { phase: 'sampling', node_id: '12', node_label: 'KSampler' })
   assert.ok(row.queue_started_at)
   assert.ok(row.queue_completed_at)
+
+  // A job that failed before its executor wrote history still gets exactly one failed row.
+  const earlyJobId = GenerationQueueModel.create({ service_type: 'novelai', request_payload: { prompt: 'y' } })
+  GenerationQueueService.transitionJob(earlyJobId, 'failed', { failureMessage: 'no token' })
+  const early = GenerationQueueModel.findListRecordById(earlyJobId)!
+  const earlyHistoryId = HistoryCommandService.recordFailedQueueJobWithoutHistory(early, 'no token')
+  assert.ok(earlyHistoryId)
+  assert.equal(HistoryCommandService.recordFailedQueueJobWithoutHistory(early, 'no token'), null)
+  const earlyRow = HistoryQueryRepository.findAllWithMetadata({ limit: 10 }).find((record) => record.id === earlyHistoryId)!
+  assert.equal(earlyRow.generation_status, 'failed')
+  assert.equal(earlyRow.error_message, 'no token')
+  assert.equal(HistoryCommandService.recordFailedQueueJobWithoutHistory(GenerationQueueModel.findListRecordById(jobId)!, 'x'), null)
 })
