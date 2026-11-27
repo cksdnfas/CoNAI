@@ -30,6 +30,7 @@ export type QueueTransitionUpdateOptions = {
   assignedServerId?: number | null
   failureCode?: string | null
   failureMessage?: string | null
+  failureStage?: string | null
   providerJobId?: string | null
   providerSubmitState?: GenerationQueueProviderSubmitState
 }
@@ -60,6 +61,7 @@ export function buildQueueTransitionUpdates(
       updates.submit_attempt_count = 0
       updates.failure_code = null
       updates.failure_message = null
+      updates.failure_stage = null
       break
     case 'dispatching':
       updates.completed_at = null
@@ -79,12 +81,14 @@ export function buildQueueTransitionUpdates(
       updates.cancel_requested = current.cancel_requested > 0
       updates.failure_code = null
       updates.failure_message = null
+      updates.failure_stage = null
       break
     case 'failed':
       updates.completed_at = nowIso
       updates.cancel_requested = current.cancel_requested > 0
       updates.failure_code = options.failureCode ?? current.failure_code ?? null
       updates.failure_message = options.failureMessage ?? current.failure_message ?? null
+      updates.failure_stage = options.failureStage ?? current.failure_stage ?? null
       break
     case 'cancelled':
       updates.completed_at = nowIso

@@ -18,7 +18,7 @@ import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
-import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProviderSubmitState } from '../../types/generationQueue'
 import type { NAIMetadataInputParams } from '../../utils/nai/metadata'
 import {
   buildCodexMetadataPatch,
@@ -29,7 +29,7 @@ import {
 } from './queuePayloads'
 import { updateQueueRequestDebugMeta, writeQueueComfyDebugSnapshot } from './queueDebugMeta'
 import { classifySubmitFailure } from './queueSubmitFailureClassifier'
-import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from './queueProgressRegistry'
+import { clearGenerationQueueLiveProgress, getGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from './queueProgressRegistry'
 import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { requesterHasRight, requireRequesterRight } from '../../middleware/featureAccess'
@@ -77,6 +77,7 @@ export function isGenerationQueueCancellationError(error: unknown) {
 type QueueFailureCodeCarrier = {
   queueFailureCode?: string
   queueFailureMessage?: string
+  queueFailureStage?: string
 }
 
 /** 실행기가 결정한 실패 코드를 원본 에러에 그대로 실어 보낸다(스택/원인 보존). */
@@ -96,6 +97,30 @@ export function stampQueueFailureCode(error: unknown, failureCode: string, failu
 export function resolveQueueFailureCode(error: unknown) {
   const carrier = error && typeof error === 'object' ? error as QueueFailureCodeCarrier : null
   return typeof carrier?.queueFailureCode === 'string' ? carrier.queueFailureCode : null
+}
+
+/** Record where a failing job stopped, from its last ComfyUI progress sample (phase + node). */
+export function stampQueueFailureStage(error: unknown, progress: GenerationQueueLiveProgress | null) {
+  if (progress && error && typeof error === 'object') {
+    (error as QueueFailureCodeCarrier).queueFailureStage = JSON.stringify({
+      phase: progress.phase,
+      node_id: progress.node_id,
+      node_label: progress.node_label,
+    })
+  }
+}
+
+/** Read the executor-provided failure stage, if any. */
+export function resolveQueueFailureStage(error: unknown) {
+  const carrier = error && typeof error === 'object' ? error as QueueFailureCodeCarrier : null
+  return typeof carrier?.queueFailureStage === 'string' ? carrier.queueFailureStage : null
+}
+
+/** Stage of a failure the executor did not stamp, from how far the provider submit got. */
+export function resolveSubmitFailureStage(submitState: GenerationQueueProviderSubmitState | undefined) {
+  if (submitState === 'in_flight') return JSON.stringify({ phase: 'submitting' })
+  if (submitState === 'accepted') return JSON.stringify({ phase: 'generating' })
+  return null
 }
 
 /** Read the executor-provided failure message, if any. */
@@ -511,6 +536,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
     }
 
+    stampQueueFailureStage(error, getGenerationQueueLiveProgress(job.id))
     const failureMessage = resolveFailureMessage(error)
     await writeQueueComfyDebugSnapshot(job, {
       ...debugSnapshotBase,

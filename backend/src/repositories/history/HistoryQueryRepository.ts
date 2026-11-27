@@ -304,7 +304,12 @@ export class HistoryQueryRepository {
         assigned_server.name as assigned_server_name,
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
-        qj.provider_job_id
+        qj.provider_job_id,
+        qj.queued_at as queue_queued_at,
+        qj.started_at as queue_started_at,
+        qj.completed_at as queue_completed_at,
+        qj.attempt_number as queue_attempt_number,
+        qj.failure_stage as queue_failure_stage
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id

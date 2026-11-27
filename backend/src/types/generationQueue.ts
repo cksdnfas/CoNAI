@@ -33,6 +33,10 @@ export interface GenerationQueueJobRecord {
   provider_submit_started_at?: string | null
   provider_cancel_state?: string | null
   submit_attempt_count?: number
+  /** 1 for a first run; a retry job carries its source's number + 1. */
+  attempt_number?: number
+  /** JSON {phase, node_id?, node_label?}: where a failed job stopped. */
+  failure_stage?: string | null
   /** 029/PAYLOAD-2: 디버그 스냅샷 요청 여부. NULL 은 "029 이전 행" 이라 payload 폴백 대상이다. */
   debug_enabled?: number | null
   /** 029/PAYLOAD-2: 구 `request_payload._debug` 미러. 페이로드 재기록 없이 갱신된다. */
@@ -109,6 +113,7 @@ export interface GenerationQueueJobCreateData {
   provider_submit_started_at?: string | null
   provider_cancel_state?: string | null
   submit_attempt_count?: number
+  attempt_number?: number
   queued_at?: string | null
   started_at?: string | null
   completed_at?: string | null
@@ -137,6 +142,7 @@ export interface GenerationQueueJobUpdateData {
   provider_submit_started_at?: string | null
   provider_cancel_state?: string | null
   submit_attempt_count?: number
+  failure_stage?: string | null
   queued_at?: string | null
   started_at?: string | null
   completed_at?: string | null

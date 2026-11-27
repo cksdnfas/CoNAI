@@ -15,7 +15,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
-import { GenerationResultArea, type GenerationResultView } from './components/generation-result-area'
+import { GenerationResultArea } from './components/generation-result-area'
 import { ComfyWorkflowControllerPanel } from './components/comfy-workflow-controller-panel'
 import { useComfyWorkflowDraft } from './components/use-comfy-workflow-draft'
 import { useComfyFieldValidation } from './components/use-comfy-field-validation'
@@ -91,7 +91,6 @@ function PublicComfyWorkflowPageContent() {
   const authStatusQuery = useAuthStatusQuery()
   const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [resultView, setResultView] = useState<GenerationResultView>('stage')
   const [narrowView, setNarrowView] = useState<GenerationNarrowView>('edit')
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [authoringWorkflow, setAuthoringWorkflow] = useState<GenerationWorkflowDetail | null>(null)
@@ -295,8 +294,6 @@ function PublicComfyWorkflowPageContent() {
         publicWorkflowSlug={slug}
         splitPaneScroll={isWideLayout}
         compact={!isWideLayout}
-        view={resultView}
-        onViewChange={setResultView}
         recentStrip={resolveRecentStripPlacement(generationLayout.presetOf('comfy'))}
       />
     )

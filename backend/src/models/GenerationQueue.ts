@@ -140,6 +140,7 @@ const GENERATION_QUEUE_LIST_COLUMNS = `
   cancel_requested, cancel_requested_at, cancel_origin,
   provider_submit_state, provider_submit_started_at,
   provider_cancel_state, submit_attempt_count,
+  attempt_number, failure_stage,
   queued_at, started_at, completed_at,
   created_date, updated_date
 `
@@ -307,10 +308,10 @@ export class GenerationQueueModel {
         failure_code, failure_message,
         cancel_requested, cancel_requested_at, cancel_origin,
         provider_submit_state, provider_submit_started_at,
-        provider_cancel_state, submit_attempt_count,
+        provider_cancel_state, submit_attempt_count, attempt_number,
         debug_enabled, debug_meta,
         queued_at, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const prepared = new Map<unknown, { json: string; debug: ReturnType<typeof readCreateDebugSection>; refs: ReturnType<typeof collectQueueInputRefs> }>()
     const checkedInputs = new Set<string>()
@@ -347,6 +348,7 @@ export class GenerationQueueModel {
         data.provider_submit_started_at ?? null,
         data.provider_cancel_state ?? null,
         data.submit_attempt_count ?? 0,
+        data.attempt_number ?? 1,
         payload.debug.debugEnabled,
         payload.debug.debugMeta,
         queuedAt,

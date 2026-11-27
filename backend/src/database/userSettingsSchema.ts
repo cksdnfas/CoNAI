@@ -5,6 +5,7 @@ import { chatProfileOrderSql } from '../services/codex-chat/chatProfileOrder';
 import Database from 'better-sqlite3';
 import {
   applyGenerationQueueDebugColumns,
+  applyGenerationQueueFailureDetailColumns,
   applyGenerationQueueIdempotency,
   applyGenerationQueueInputRefs,
 } from './generationQueueSchema';
@@ -1579,6 +1580,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   // PAYLOAD-3: refcount for content-addressed queue image inputs.
   applyGenerationQueueInputRefs(db);
+
+  // Generation log: retry attempt number and the stage a failed job stopped at.
+  applyGenerationQueueFailureDetailColumns(db);
 
   // MCP queue submissions retain one durable job per API-key-scoped idempotency key.
   applyGenerationQueueIdempotency(db);

@@ -99,6 +99,14 @@ export interface GenerationHistoryRecord {
   queue_status?: GenerationQueueJobStatus | null
   queue_cancel_requested?: number | null
   provider_job_id?: string | null
+  /** Queue timing for the generation log (server timestamps). */
+  queue_queued_at?: string | null
+  queue_started_at?: string | null
+  queue_completed_at?: string | null
+  /** 1 for a first run; a retry carries its source's number + 1. */
+  queue_attempt_number?: number | null
+  /** JSON {phase, node_id?, node_label?}: where a failed job stopped. */
+  queue_failure_stage?: string | null
 
   // Core result-index / operations fields
   workflow_id?: number | null
@@ -119,6 +127,7 @@ export interface GenerationHistoryRecord {
   postprocess_status?: string | null
   actual_composite_hash?: string | null
   created_at?: string | null
+  completed_at?: string | null
 
   // Main-DB resolved display fields
   actual_width?: number | null

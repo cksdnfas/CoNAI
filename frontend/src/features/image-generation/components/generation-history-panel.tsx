@@ -16,9 +16,8 @@ import { getRuntimeGenerationHistorySettings } from '@/lib/api-settings'
 import type { GenerationServiceType } from '@/lib/api-image-generation-types'
 import { countStateFromQuery, formatCountDisplay } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
-import { getErrorMessage } from '../image-generation-shared'
+import { getErrorMessage, resolveHistoryDisplayStatus } from '../image-generation-shared'
 import {
-  GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX,
   collectRetryableHistoryRecords,
   getGenerationHistorySelectionId,
   getHistoryRecordStatusSummary,
@@ -26,9 +25,8 @@ import {
   mapHistoryRecordToImageRecord,
 } from './generation-history-panel-helpers'
 import { GenerationHistoryHeader } from './generation-history-header'
-import { GenerationHistoryRecoveryPanel } from './generation-history-recovery-panel'
 import { GenerationHistoryCardReuseActions, useGenerationHistoryReuse } from './generation-history-reuse-actions'
-import { useGenerationHistoryActions, useHistoryRecoveryAcknowledgement } from './use-generation-history-actions'
+import { useGenerationHistoryActions } from './use-generation-history-actions'
 import type { GenerationHistoryFeed } from './use-generation-history-feed'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -48,10 +46,12 @@ type GenerationHistoryPanelViewProps = GenerationHistoryPanelProps & {
   headerLeading?: ReactNode
   /** Hide "clear history" and "clean failed": they act on the whole service scope, not on the feed's filter. */
   hideScopeActions?: boolean
+  /** Viewer grid: show results only; failed runs and their reruns live in the log. */
+  resultsOnly?: boolean
 }
 
 /** History list body for a feed owned by the caller (the result area shares one feed with the stage). */
-export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading, hideScopeActions = false }: GenerationHistoryPanelViewProps) {
+export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading, hideScopeActions = false, resultsOnly = false }: GenerationHistoryPanelViewProps) {
   const { canOpenDetailPage } = useImagePermissions()
   const { t, formatNumber } = useI18n()
   const {
@@ -63,12 +63,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     maxColumnCount: maxHistoryColumnCount,
   } = useImageListColumnPreference('history')
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
-  const { authStatusQuery, historyQuery, historyQueryKey, historyRecords, refreshHistory, isAdmin, isPublicView, isHistoryLoading } = feed
-  const recoveryAckStorageKey = useMemo(
-    () => `${GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX}${historyQueryKey.join(':')}`,
-    [historyQueryKey],
-  )
-  const { acknowledgedRecoveryIds, acknowledgeRecoveryRecords } = useHistoryRecoveryAcknowledgement(recoveryAckStorageKey)
+  const { authStatusQuery, historyQuery, historyRecords, refreshHistory, isAdmin, isPublicView, isHistoryLoading } = feed
   const historySafetySettingsQuery = useQuery({
     queryKey: ['runtime-generation-history-settings'],
     queryFn: getRuntimeGenerationHistorySettings,
@@ -79,14 +74,10 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     inFlight: inFlightHistoryCount,
     cleanupFailed: cleanupFailedHistoryCount,
   } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
-  const retryableHistoryRecords = useMemo(() => {
-    return collectRetryableHistoryRecords(historyRecords)
-  }, [historyRecords])
-  const visibleRetryableHistoryRecords = useMemo(
-    () => retryableHistoryRecords.filter((record) => !acknowledgedRecoveryIds.has(record.id)).slice(0, 4),
-    [acknowledgedRecoveryIds, retryableHistoryRecords],
+  const historyImages = useMemo(
+    () => (resultsOnly ? historyRecords.filter((record) => resolveHistoryDisplayStatus(record) !== 'failed') : historyRecords).map(mapHistoryRecordToImageRecord),
+    [historyRecords, resultsOnly],
   )
-  const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyTotalCount = historyQuery.data?.pages[0]?.total
   const applyHistoryRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
   const fetchNextHistoryPage = historyQuery.fetchNextPage
@@ -203,14 +194,10 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     isDownloadingSelection,
     isCleaningFailed,
     isClearingHistory,
-    retryingQueueJobIds,
     isRetryingRunRecovery,
     handleDeleteSelected,
     handleCleanupFailed,
     handleClearHistory,
-    handleAcknowledgeRunRecovery,
-    handleRetryHistoryRecord,
-    handleRetryVisibleRecoveryRecords,
     handleRetrySelectedHistoryRecords,
     handleDownloadSelected,
   } = useGenerationHistoryActions({
@@ -223,10 +210,8 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     setSelectedHistoryIds,
     selectedHistoryRecords,
     selectedRetryableHistoryRecords,
-    visibleRetryableHistoryRecords,
     downloadableHistoryRecords,
     downloadableHistoryIds,
-    acknowledgeRecoveryRecords,
   })
 
   if (!feed.canViewResults) return <ImagePermissionNotice />
@@ -263,17 +248,6 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
       ) : null}
 
       {isHistoryLoading ? <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} /> : null}
-
-      {!isHistoryLoading && visibleRetryableHistoryRecords.length > 0 ? (
-        <GenerationHistoryRecoveryPanel
-          visibleRetryableHistoryRecords={visibleRetryableHistoryRecords}
-          retryingQueueJobIds={retryingQueueJobIds}
-          isRetryingRunRecovery={isRetryingRunRecovery}
-          handleRetryVisibleRecoveryRecords={handleRetryVisibleRecoveryRecords}
-          handleAcknowledgeRunRecovery={handleAcknowledgeRunRecovery}
-          handleRetryHistoryRecord={handleRetryHistoryRecord}
-        />
-      ) : null}
 
       <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
@@ -352,7 +326,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
         statusText={selectionStatusText}
         trailingActions={(
           <>
-            <IconButton
+            {resultsOnly ? null : <IconButton
               size="icon-sm"
               variant="secondary"
               onClick={() => void handleRetrySelectedHistoryRecords()}
@@ -365,7 +339,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
               data-no-select-drag="true"
             >
               <RotateCcw className={cn(isRetryingRunRecovery && 'animate-spin')} />
-            </IconButton>
+            </IconButton>}
             {!isPublicView && isAdmin ? (
               <IconButton
                 size="icon-sm"

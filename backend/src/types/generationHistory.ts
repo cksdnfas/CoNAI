@@ -67,6 +67,11 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   queue_status?: 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | null;
   queue_cancel_requested?: number | null;
   provider_job_id?: string | null;
+  queue_queued_at?: string | null;
+  queue_started_at?: string | null;
+  queue_completed_at?: string | null;
+  queue_attempt_number?: number | null;
+  queue_failure_stage?: string | null;
   /** Sounds a ComfyUI run saved, with or without a picture (audio store candidates of its queue job). */
   audio_results?: GenerationAudioResult[];
 }

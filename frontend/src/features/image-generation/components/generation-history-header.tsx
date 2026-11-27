@@ -14,6 +14,8 @@ type GenerationHistoryHeaderProps = {
   onBack?: () => void
   /** Replaces the heading and scope line; the scope actions stay on the right. */
   leading?: ReactNode
+  /** Extra controls before the scope actions (e.g. the log filter). */
+  trailing?: ReactNode
   historyLabel: string
   /** Provider key; shows its mark (with the label as tooltip) instead of the label text. */
   historyProvider?: string
@@ -39,6 +41,7 @@ type GenerationHistoryHeaderProps = {
 export function GenerationHistoryHeader({
   onBack,
   leading,
+  trailing,
   historyLabel,
   historyProvider,
   isPublicView,
@@ -103,6 +106,7 @@ export function GenerationHistoryHeader({
       )}
 
       <div className="flex shrink-0 flex-wrap items-center gap-1">
+        {trailing}
         {hideScopeActions ? null : <ActionMenuButton label={t({ ko: '더 보기', en: 'More' })} entries={[
           { key: 'clear', icon: ListX, label: isClearingHistory ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' }) : isPublicView ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' }) : t({ ko: '히스토리 비우기', en: 'Clear history' }), disabled: isClearingHistory || historyRecordCount === 0, onSelect: () => void handleClearHistory() },
           { key: 'clean-failed', icon: Trash2, label: isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items'), disabled: isCleaningFailed || cleanupFailedHistoryCount === 0, onSelect: () => void handleCleanupFailed() },

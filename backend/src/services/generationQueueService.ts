@@ -13,6 +13,8 @@ import {
   isGenerationQueueCancellationError,
   resolveQueueFailureCode,
   resolveQueueFailureMessage,
+  resolveQueueFailureStage,
+  resolveSubmitFailureStage,
 } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
 import { requireMcpQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY } from './generation-queue/queueMcpImageGrant'
@@ -334,6 +336,7 @@ export class GenerationQueueService {
       assignedServerId?: number | null
       failureCode?: string | null
       failureMessage?: string | null
+      failureStage?: string | null
       nowIso?: string
       allowRecovery?: boolean
       expectedCurrentStatuses?: GenerationQueueJobStatus[]
@@ -521,6 +524,7 @@ export class GenerationQueueService {
       requested_server_tag: existing.requested_server_tag ?? null,
       request_payload: retryPayload,
       request_summary: retrySummary,
+      attempt_number: (existing.attempt_number ?? 1) + 1,
     }, {
       roleLimitWorkflow: graphOrigin ? null : options?.roleLimitWorkflow,
       refmodEntryLink,
@@ -1017,6 +1021,7 @@ export class GenerationQueueService {
         // 실행기가 특정한 실패 코드(예: nai_submit_ambiguous)를 붙였으면 그대로 보존한다.
         failureCode: resolveQueueFailureCode(error) ?? 'execution_failed',
         failureMessage: resolveQueueFailureMessage(error) ?? resolveFailureMessage(error),
+        failureStage: resolveQueueFailureStage(error) ?? resolveSubmitFailureStage(latest.provider_submit_state),
       })
     } catch (transitionError) {
       console.warn(`⚠️ Failed to mark queue job ${jobId} as failed:`, transitionError)

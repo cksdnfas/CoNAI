@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -14,10 +14,7 @@ import {
   clearPublicGenerationWorkflowHistory,
 } from '@/lib/api-public-workflows'
 import type { GenerationHistoryRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
-import {
-  getErrorMessage,
-  getRetryableHistoryQueueJobId,
-} from '../image-generation-shared'
+import { getErrorMessage } from '../image-generation-shared'
 import {
   getUniqueRetryableHistoryQueueJobIds,
   retryGenerationHistoryRecords,
@@ -26,35 +23,7 @@ import {
 import {
   collectRetryableHistoryRecords,
   getGenerationHistorySelectionId,
-  readAcknowledgedRecoveryIds,
-  writeAcknowledgedRecoveryIds,
 } from './generation-history-panel-helpers'
-
-/** Per-scope acknowledgement of run-recovery rows, persisted in localStorage. */
-export function useHistoryRecoveryAcknowledgement(recoveryAckStorageKey: string) {
-  const [acknowledgedRecoveryIds, setAcknowledgedRecoveryIds] = useState<Set<number>>(() => readAcknowledgedRecoveryIds(recoveryAckStorageKey))
-
-  useEffect(() => {
-    setAcknowledgedRecoveryIds(readAcknowledgedRecoveryIds(recoveryAckStorageKey))
-  }, [recoveryAckStorageKey])
-
-  const acknowledgeRecoveryRecords = useCallback((records: GenerationHistoryRecord[]) => {
-    if (records.length === 0) {
-      return
-    }
-
-    setAcknowledgedRecoveryIds((current) => {
-      const next = new Set(current)
-      for (const record of records) {
-        next.add(record.id)
-      }
-      writeAcknowledgedRecoveryIds(recoveryAckStorageKey, next)
-      return next
-    })
-  }, [recoveryAckStorageKey])
-
-  return { acknowledgedRecoveryIds, acknowledgeRecoveryRecords }
-}
 
 type UseGenerationHistoryActionsOptions = {
   serviceType: GenerationServiceType
@@ -66,10 +35,8 @@ type UseGenerationHistoryActionsOptions = {
   setSelectedHistoryIds: Dispatch<SetStateAction<string[]>>
   selectedHistoryRecords: GenerationHistoryRecord[]
   selectedRetryableHistoryRecords: GenerationHistoryRecord[]
-  visibleRetryableHistoryRecords: GenerationHistoryRecord[]
   downloadableHistoryRecords: GenerationHistoryRecord[]
   downloadableHistoryIds: number[]
-  acknowledgeRecoveryRecords: (records: GenerationHistoryRecord[]) => void
 }
 
 /** Delete / cleanup / clear / rerun / download actions for the generation history panel. */
@@ -83,10 +50,8 @@ export function useGenerationHistoryActions({
   setSelectedHistoryIds,
   selectedHistoryRecords,
   selectedRetryableHistoryRecords,
-  visibleRetryableHistoryRecords,
   downloadableHistoryRecords,
   downloadableHistoryIds,
-  acknowledgeRecoveryRecords,
 }: UseGenerationHistoryActionsOptions) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -265,10 +230,6 @@ export function useGenerationHistoryActions({
     }
   }, [confirm, formatNumber, isAdmin, isClearingHistory, isPublicView, publicWorkflowSlug, refreshHistory, serviceType, setSelectedHistoryIds, showSnackbar, t, workflowId])
 
-  const handleAcknowledgeRunRecovery = useCallback(() => {
-    acknowledgeRecoveryRecords(visibleRetryableHistoryRecords)
-  }, [acknowledgeRecoveryRecords, visibleRetryableHistoryRecords])
-
   const handleRetryHistoryRecords = useCallback(async (
     records: readonly GenerationHistoryRecord[],
     options: { successMessage: string; failureMessage: string },
@@ -285,7 +246,7 @@ export function useGenerationHistoryActions({
 
     try {
       setRetryingQueueJobIds(new Set(queueJobIds))
-      const retryResult = await retryGenerationHistoryRecords({
+      await retryGenerationHistoryRecords({
         records: retryableRecords,
         queryClient,
         refreshHistory,
@@ -297,17 +258,10 @@ export function useGenerationHistoryActions({
           { succeeded: formatNumber(successCount), failed: formatNumber(failureCount) },
         ),
       })
-      if (retryResult.successfulItems.length > 0) {
-        const succeededQueueJobIds = new Set(retryResult.successfulItems)
-        acknowledgeRecoveryRecords(retryableRecords.filter((record) => {
-          const queueJobId = getRetryableHistoryQueueJobId(record)
-          return queueJobId !== null && succeededQueueJobIds.has(queueJobId)
-        }))
-      }
     } finally {
       setRetryingQueueJobIds(new Set())
     }
-  }, [acknowledgeRecoveryRecords, formatNumber, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t])
+  }, [formatNumber, isRetryingRunRecovery, queryClient, refreshHistory, showSnackbar, t])
 
   const handleRetryHistoryRecord = useCallback(async (record: GenerationHistoryRecord) => {
     await handleRetryHistoryRecords([record], {
@@ -315,16 +269,6 @@ export function useGenerationHistoryActions({
       failureMessage: t({ ko: '큐 재실행 등록에 실패했어.', en: 'Failed to add the retry job.' }),
     })
   }, [handleRetryHistoryRecords, t])
-
-  const handleRetryVisibleRecoveryRecords = useCallback(async () => {
-    await handleRetryHistoryRecords(visibleRetryableHistoryRecords, {
-      successMessage: t(
-        { ko: '재실행 작업 {count}개를 큐에 등록했어.', en: 'Added {count} retry jobs to the queue.' },
-        { count: formatNumber(visibleRetryableHistoryRecords.length) },
-      ),
-      failureMessage: t({ ko: '일괄 재실행 등록에 실패했어.', en: 'Failed to add retry jobs.' }),
-    })
-  }, [formatNumber, handleRetryHistoryRecords, t, visibleRetryableHistoryRecords])
 
   const handleRetrySelectedHistoryRecords = useCallback(async () => {
     await handleRetryHistoryRecords(selectedRetryableHistoryRecords, {
@@ -365,9 +309,7 @@ export function useGenerationHistoryActions({
     handleDeleteSelected,
     handleCleanupFailed,
     handleClearHistory,
-    handleAcknowledgeRunRecovery,
     handleRetryHistoryRecord,
-    handleRetryVisibleRecoveryRecords,
     handleRetrySelectedHistoryRecords,
     handleDownloadSelected,
   }

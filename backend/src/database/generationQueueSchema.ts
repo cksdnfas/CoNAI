@@ -123,6 +123,25 @@ export function applyGenerationQueueDebugColumns(db: Database): boolean {
  * a cancelled-but-unpruned job can still be retried, and its inputs are still
  * there when it is.
  */
+/**
+ * generation_queue_jobs.attempt_number + failure_stage, read by the generation log.
+ *   attempt_number INTEGER - 1 for a first run; a retry job carries its source's number + 1
+ *   failure_stage  TEXT    - JSON {phase, node_id?, node_label?} of where a failed job stopped
+ */
+export function applyGenerationQueueFailureDetailColumns(db: Database): void {
+  if (!hasQueueTable(db)) {
+    return;
+  }
+
+  if (!hasQueueColumn(db, 'attempt_number')) {
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1');
+  }
+
+  if (!hasQueueColumn(db, 'failure_stage')) {
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN failure_stage TEXT');
+  }
+}
+
 export function applyGenerationQueueInputRefs(db: Database): boolean {
   if (!hasQueueTable(db)) {
     return false;

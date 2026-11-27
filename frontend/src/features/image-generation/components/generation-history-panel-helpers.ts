@@ -1,12 +1,10 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query'
-import type { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import {
   canRetryHistoryQueueJob,
   getRetryableHistoryQueueJobId,
-  getHistoryRunRecoveryState,
   isHistoryPostprocessPending,
   resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
@@ -22,7 +20,6 @@ export const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000
  */
 export const GENERATION_HISTORY_STREAM_WATCHDOG_REFRESH_MS = 15_000
 export const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
-export const GENERATION_HISTORY_RECOVERY_ACK_STORAGE_PREFIX = 'conai:image-generation:history-recovery-ack:'
 
 export function hasActiveGenerationHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => {
@@ -96,40 +93,6 @@ export function hasStableHistoryPageBoundary(
   const previousLastId = previousFirstPage.records[previousFirstPage.records.length - 1]?.id ?? null
   const nextLastId = nextFirstPage.records[nextFirstPage.records.length - 1]?.id ?? null
   return previousLastId === nextLastId
-}
-
-export function readAcknowledgedRecoveryIds(storageKey: string) {
-  if (typeof window === 'undefined') {
-    return new Set<number>()
-  }
-
-  try {
-    const raw = window.sessionStorage.getItem(storageKey)
-    if (!raw) {
-      return new Set<number>()
-    }
-
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) {
-      return new Set<number>()
-    }
-
-    return new Set(parsed.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))
-  } catch {
-    return new Set<number>()
-  }
-}
-
-export function writeAcknowledgedRecoveryIds(storageKey: string, ids: ReadonlySet<number>) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify([...ids]))
-  } catch {
-    // Session-only hint; failure should not block history recovery actions.
-  }
 }
 
 export type HistoryRecordStatusSummary = {
@@ -234,35 +197,4 @@ export function getRetryableHistoryQueueJobIds(records: readonly GenerationHisto
   return records
     .map(getRetryableHistoryQueueJobId)
     .filter((queueJobId): queueJobId is number => queueJobId !== null)
-}
-
-export function getHistoryRecoveryLabel(record: GenerationHistoryRecord, t: ReturnType<typeof useI18n>['t']) {
-  switch (getHistoryRunRecoveryState(record)) {
-    case 'retryable-cancelled':
-      return t({ ko: '취소됨 · 재실행 가능', en: 'Canceled · rerun ready' })
-    case 'retryable-failed':
-      return t({ ko: '실패 · 재시도 가능', en: 'Failed · retry ready' })
-    case 'completed':
-      return t({ ko: '완료 · 결과 확인', en: 'Complete · inspect result' })
-    case 'active':
-      return t({ ko: '진행 중', en: 'In progress' })
-    default:
-      return t({ ko: '실패 · 수동 확인', en: 'Failed · check manually' })
-  }
-}
-
-export function getHistoryRecoveryDetail(record: GenerationHistoryRecord, t: ReturnType<typeof useI18n>['t']) {
-  const trimmedError = record.error_message?.trim()
-  switch (getHistoryRunRecoveryState(record)) {
-    case 'retryable-cancelled':
-      return trimmedError || t({ ko: '같은 입력으로 재실행 대기 중', en: 'Ready to rerun with the same inputs' })
-    case 'retryable-failed':
-      return trimmedError || t({ ko: '같은 입력으로 재시도 대기 중', en: 'Ready to retry with the same inputs' })
-    case 'completed':
-      return t({ ko: '결과 확인 가능', en: 'Result ready to inspect' })
-    case 'active':
-      return t({ ko: '큐 또는 후처리 진행 중', en: 'Queue or post-processing in progress' })
-    default:
-      return trimmedError || t({ ko: '재실행 가능한 큐 기록 없음', en: 'No retryable linked queue record' })
-  }
 }

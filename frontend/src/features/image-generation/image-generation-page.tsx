@@ -8,7 +8,6 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { formatCountDisplay, countStateFromQuery } from '@/lib/count-display'
-import type { GenerationResultView } from './components/generation-result-area'
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
 import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
@@ -87,7 +86,6 @@ function ImageGenerationPageContent() {
   const chatPage = useChatPage()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [resultView, setResultView] = useState<GenerationResultView>('stage')
   const [narrowView, setNarrowView] = useState<GenerationNarrowView>('edit')
   const isWideLayout = useDesktopPageLayout()
   const rawTab = searchParams.get('tab')
@@ -219,7 +217,6 @@ function ImageGenerationPageContent() {
       nextSearchParams.delete(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
     }
     setNarrowView('edit')
-    setResultView('stage')
     setSearchParams(nextSearchParams)
   }
 
@@ -270,8 +267,6 @@ function ImageGenerationPageContent() {
       workflowId={historyWorkflowId}
       splitPaneScroll={useWideSplitPaneScroll}
       compact={!isWideLayout}
-      view={resultView}
-      onViewChange={setResultView}
       recentStrip={layoutSurface ? resolveRecentStripPlacement(generationLayout.presetOf(layoutSurface)) : undefined}
     />
   ) : isComfyResultModePending ? <PanelFallback /> : null

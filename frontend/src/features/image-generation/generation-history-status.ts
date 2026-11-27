@@ -65,8 +65,6 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
   return record.actual_composite_hash || hasHistoryNonImageResult(record) ? 'completed' : 'processing'
 }
 
-export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed' | 'retryable-cancelled' | 'failed-no-retry'
-
 /** Queue replay is only exposed when the backend has a failed/cancelled queue job id to clone. */
 export function getRetryableHistoryQueueJobId(record: GenerationHistoryRecord) {
   if (record.workflow_deleted === true || record.workflow_deleted === 1) {
@@ -81,22 +79,4 @@ export function getRetryableHistoryQueueJobId(record: GenerationHistoryRecord) {
 
 export function canRetryHistoryQueueJob(record: GenerationHistoryRecord) {
   return getRetryableHistoryQueueJobId(record) !== null
-}
-
-/** Classify the next operator action for a history row without inventing unsupported replay paths. */
-export function getHistoryRunRecoveryState(record: GenerationHistoryRecord): HistoryRunRecoveryState {
-  if (canRetryHistoryQueueJob(record)) {
-    return record.queue_status === 'cancelled' ? 'retryable-cancelled' : 'retryable-failed'
-  }
-
-  const displayStatus = resolveHistoryDisplayStatus(record)
-  if (displayStatus === 'completed') {
-    return 'completed'
-  }
-
-  if (displayStatus === 'pending' || displayStatus === 'processing') {
-    return 'active'
-  }
-
-  return 'failed-no-retry'
 }
