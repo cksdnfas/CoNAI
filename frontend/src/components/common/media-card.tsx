@@ -47,7 +47,8 @@ export function MediaCard({ variant = 'flat', media, mediaClassName, overlay, le
           flat && 'rounded-sm bg-fill transition group-hover/media-card:opacity-90',
           flat && selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
           // Focus is an outline outside the selection ring, so a focused selected card shows both.
-          flat && 'group-focus-visible/media-card:outline-2 group-focus-visible/media-card:outline-offset-4 group-focus-visible/media-card:outline-ring',
+          flat && 'group-focus-visible/media-card:outline-2 group-focus-visible/media-card:outline-ring',
+          flat && (selected ? 'group-focus-visible/media-card:outline-offset-4' : 'group-focus-visible/media-card:outline-offset-2'),
           mediaClassName,
         )}
       >

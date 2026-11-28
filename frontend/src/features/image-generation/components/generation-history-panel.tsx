@@ -217,7 +217,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
   if (!feed.canViewResults) return <ImagePermissionNotice />
 
   return (
-    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 ring-room-clip' : 'space-y-4')}>
       <GenerationHistoryHeader
         onBack={onBack}
         leading={headerLeading}
@@ -249,7 +249,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
 
       {isHistoryLoading ? <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} /> : null}
 
-      <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
+      <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col ring-room-clip')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
           <EmptyState title={t('image-generation.components.generation.history.panel.no.generation.results.to.display.yet')} />
         ) : null}

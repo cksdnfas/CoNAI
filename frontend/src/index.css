@@ -1139,6 +1139,12 @@
     transition: opacity 140ms ease, box-shadow 140ms ease;
   }
 
+  /* Focus uses the frame over the picture: a ring on the tile itself is cut off at the list's edge. */
+  .image-list-selectable:focus > .image-list-selection-frame {
+    opacity: 1;
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+
   .image-list-selectable.is-selection-preview .image-list-selection-frame {
     opacity: 1;
     box-shadow:
@@ -1179,6 +1185,24 @@
       0 0 20px color-mix(in srgb, var(--primary) 20%, transparent);
     animation: image-list-selection-pulse 1.7s ease-in-out infinite;
   }
+}
+
+/*
+ * Focus and selection rings sit up to 4px outside their element, so a box that clips or scrolls flush against its
+ * content cuts them. Both utilities give that room without moving anything: `ring-room-clip` for a layout wrapper that
+ * only has to clip, `ring-room-scroll` for the top and left edges of a scroll column.
+ */
+@utility ring-room-clip {
+  overflow: clip;
+  /* A literal length: Chromium drops a calc() here and falls back to 0. */
+  overflow-clip-margin: 4px;
+}
+
+@utility ring-room-scroll {
+  margin-top: calc(var(--spacing) * -1);
+  margin-left: calc(var(--spacing) * -1);
+  padding-top: var(--spacing);
+  padding-left: var(--spacing);
 }
 
 /*
@@ -1266,6 +1290,13 @@ html:lang(ko) {
 
 [data-slot="modal-scroll"]:has(> [data-slot="modal-footer"], > form > [data-slot="modal-footer"]) {
   padding-bottom: 0;
+  scroll-padding-bottom: calc(var(--spacing) * 20);
+}
+
+/* The footer's `margin-top: auto` leaves no space once the body fills the dialog: its last block keeps one itself. */
+[data-slot="modal-scroll"] > :has(+ [data-slot="modal-footer"]),
+[data-slot="modal-scroll"] > form > :has(+ [data-slot="modal-footer"]) {
+  margin-bottom: calc(var(--spacing) * 3);
 }
 
 [data-slot="modal-scroll"] > [data-slot="modal-footer"],

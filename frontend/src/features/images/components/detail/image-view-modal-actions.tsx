@@ -118,7 +118,7 @@ export function ImageViewModalActions({
   ]
 
   return (
-    <div className="image-detail-modal-toolbar-actions flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 scroll-x" onMouseDown={(event) => event.stopPropagation()}>
+    <div className="image-detail-modal-toolbar-actions -m-1 flex w-[calc(100%+0.5rem)] min-w-0 flex-nowrap items-center justify-between gap-2 scroll-x p-1" onMouseDown={(event) => event.stopPropagation()}>
       <div className="flex shrink-0 items-center gap-2">
         {navigationButtons}
       </div>

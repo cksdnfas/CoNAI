@@ -94,7 +94,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
   return (
     <div className="border-t border-line first:border-t-0">
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-sm md:grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] py-2.5 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-sm md:grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] py-2.5 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/40">
         <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
         <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseServerDate(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">

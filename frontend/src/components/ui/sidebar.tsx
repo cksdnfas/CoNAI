@@ -131,9 +131,9 @@ function SidebarItem({
   )
   const rowClassName = cn(
     'flex min-h-9 w-full min-w-0 items-center gap-2.5 rounded-sm px-2.5 text-left text-sm text-muted-foreground transition-colors outline-none',
-    'hover:bg-fill hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50',
+    'hover:bg-fill hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50',
     'data-[active=true]:bg-fill data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]',
-    'data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-primary/60',
+    'data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-inset data-[drop-target=true]:ring-primary/60',
     className,
   )
   const rowStyle = depth > 0 ? { paddingLeft: `calc(0.625rem + ${depth} * 1rem)`, ...style } : style

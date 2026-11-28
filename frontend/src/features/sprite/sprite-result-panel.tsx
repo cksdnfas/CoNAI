@@ -177,7 +177,7 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
           {FRAME_ZOOMS.map((value) => <option key={value} value={value}>{value}%</option>)}
         </Select>
       </div>
-      <div className="scroll-x flex gap-1 pb-1">
+      <div className="scroll-x -mx-1 -mt-1 flex gap-1 p-1">
         {urls.map((url, frame) => (
           <MediaCard
             key={url}

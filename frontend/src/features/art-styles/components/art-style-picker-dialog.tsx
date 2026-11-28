@@ -81,7 +81,7 @@ function ArtStylePicker({ onOpenChange, onPick, title, confirmLabel }: ArtStyleP
       ) : (
         <ModalBody>
           <div className="grid min-h-0 gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
-            <div className="min-w-0 md:max-h-[60vh] md:overflow-y-auto">
+            <div className="min-w-0 md:-m-1 md:max-h-[60vh] md:overflow-y-auto md:p-1">
               <ArtStyleBadgeSidebar
                 badges={badgeList}
                 selected={badges}

@@ -255,7 +255,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
   }
 
   return (
-    <section className={cn('min-w-0', splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
+    <section className={cn('min-w-0', splitPaneScroll && 'flex min-h-0 flex-1 flex-col ring-room-clip')}>
       <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
         <div className="flex min-w-0 items-center gap-2">
           {onBack ? (

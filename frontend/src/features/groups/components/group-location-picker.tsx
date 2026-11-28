@@ -106,7 +106,7 @@ export function GroupLocationPicker({
       {showTree ? (
         <div className={cn('space-y-1.5 rounded-lg border border-line bg-surface-low p-2', collapsible && 'mb-3')}>
           <SearchField value={filterText} onChange={setFilterText} placeholder={t({ ko: '그룹 검색', en: 'Search groups' })} />
-          <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+          <div className="ring-room-scroll max-h-56 space-y-1 overflow-y-auto pr-1 pb-1">
             {allowRoot && !filterText.trim() ? (
               <Button
                 type="button"

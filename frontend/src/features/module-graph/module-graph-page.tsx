@@ -819,7 +819,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
   )
 
   const rightColumn = selectedGraphId !== null ? (
-    <div className={cn(isWideLayout ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
+    <div className={cn(isWideLayout ? 'flex min-h-0 flex-1 flex-col gap-3 ring-room-clip' : 'space-y-3')}>
       <TextTabs
         value={resultsTab}
         onChange={setResultsTab}
@@ -850,11 +850,11 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
           hideScopeActions
         />
       ) : (
-        <div className={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}>{runHistory}</div>
+        <div className={cn(isWideLayout && 'ring-room-scroll min-h-0 flex-1 overflow-y-auto pr-1 pb-1')}>{runHistory}</div>
       )}
     </div>
   ) : (
-    <div className={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}>
+    <div className={cn(isWideLayout && 'ring-room-scroll min-h-0 flex-1 overflow-y-auto pr-1 pb-1')}>
       {browseContentQuery.isError ? (
         <ErrorState title={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : t('module-graph.module.graph.page.failed.to.load.output.management.content')} />
       ) : browseContentQuery.data ? (

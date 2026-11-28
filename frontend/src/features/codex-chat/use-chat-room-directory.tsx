@@ -174,7 +174,9 @@ export function ChatRoomPageMore({ page }: { page: Pick<ReturnType<typeof useCha
   const { t } = useI18n()
   if (page.isPending) return <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{t({ ko: '방 불러오는 중…', en: 'Loading rooms…' })}</p>
   if (!page.hasNextPage && !page.isError) return null
-  return <Button variant="ghost" size="sm" className="my-1 w-full" disabled={page.isFetchingNextPage} onClick={() => void (page.isError ? page.refetch() : page.fetchNextPage())}>
-    {page.isError ? t({ ko: '방을 불러오지 못했어. 다시 시도', en: 'Could not load rooms. Retry' }) : page.isFetchingNextPage ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '방 더 보기', en: 'Load more rooms' })}
-  </Button>
+  return <div className="p-1">
+    <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetchingNextPage} onClick={() => void (page.isError ? page.refetch() : page.fetchNextPage())}>
+      {page.isError ? t({ ko: '방을 불러오지 못했어. 다시 시도', en: 'Could not load rooms. Retry' }) : page.isFetchingNextPage ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '방 더 보기', en: 'Load more rooms' })}
+    </Button>
+  </div>
 }

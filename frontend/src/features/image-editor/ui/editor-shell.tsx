@@ -562,7 +562,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
         </div>
         {engine ? (
           // A narrow window scrolls the tool options sideways instead of letting them run under the undo / redo keys.
-          <div className="scroll-x theme-nav-scroll flex min-w-0 items-center gap-3 max-md:hidden">
+          <div className="scroll-x theme-nav-scroll -m-1 flex min-w-0 items-center gap-3 p-1 max-md:hidden">
             <span className="h-6 w-px shrink-0 bg-line" />
             <ToolOptions engine={engine} snapshot={snapshot} onCopy={onCopy} />
           </div>
@@ -675,7 +675,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
       {engine ? (
         <div className="shrink-0 border-t border-line bg-background md:hidden">
           <div className="scroll-x flex h-13 items-center gap-1 pr-1 pl-4">
-            <div className="scroll-x theme-nav-scroll flex min-w-0 flex-1 items-center">
+            <div className="scroll-x theme-nav-scroll -m-1 flex min-w-0 flex-1 items-center p-1">
               <ToolOptions engine={engine} snapshot={snapshot} onCopy={onCopy} />
             </div>
             <DropdownMenu>

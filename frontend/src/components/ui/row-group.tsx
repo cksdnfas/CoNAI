@@ -28,7 +28,7 @@ function RowGroup({ heading, headingAs: Heading = 'h3', count, headingClassName,
         <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15">
           {heading ? (
             <Heading className={cn('flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground', headingClassName)}>
-              <span className="truncate">{heading}</span>
+              <span className="-m-1 truncate p-1">{heading}</span>
               {count !== undefined ? <span className="shrink-0 font-medium text-muted-foreground tabular-nums">{count}</span> : null}
             </Heading>
           ) : <span />}

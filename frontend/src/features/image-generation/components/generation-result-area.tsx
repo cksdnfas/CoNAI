@@ -243,7 +243,7 @@ export function GenerationResultArea({
   }
 
   return (
-    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 ring-room-clip' : 'space-y-3')}>
       {!canViewResults ? (
         <>
           <div className="flex shrink-0 items-center gap-2">

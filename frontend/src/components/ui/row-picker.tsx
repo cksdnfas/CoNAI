@@ -94,7 +94,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
           aria-haspopup="listbox"
           className={variant === 'settings'
             ? cn(selectVariants({ variant: 'settings' }), 'flex items-center gap-2 text-left')
-            : 'flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'}
+            : 'flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'}
         >
           {picked && variant === 'settings' ? <span className="min-w-0 flex-1 truncate">{picked.title}</span>
             : picked ? <PickerRow item={picked} compact /> : <span className="flex-1 text-sm text-muted-foreground">{placeholder}</span>}

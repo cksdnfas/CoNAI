@@ -75,7 +75,7 @@ export function NaiSavedAssetBrowser({
       {isLoading ? (
         <Text variant="muted">{t('image-generation.components.nai.saved.image.browser.section.loading')}</Text>
       ) : items.length > 0 ? (
-        <div className="max-h-[60vh] overflow-y-auto pr-1">
+        <div className="ring-room-scroll max-h-[60vh] overflow-y-auto pr-1 pb-1">
           <div className="columns-2 gap-[calc(0.75rem*var(--theme-image-gap-scale,1))] sm:columns-3 lg:columns-5">
             {items.map((item) => (
               <NaiSavedAssetTile

@@ -140,7 +140,7 @@ function AppShellLayout() {
             </Tip>
 
             {/* From md: the pinned pages, then the grouped menus. Phones use the bottom tabs instead. */}
-            <nav className="scroll-x theme-nav-scroll hidden min-w-0 flex-1 md:block" aria-label={t('appShell.mainPageNavigation')}>
+            <nav className="scroll-x theme-nav-scroll -m-1 hidden min-w-0 flex-1 p-1 md:block" aria-label={t('appShell.mainPageNavigation')}>
               <div className="flex w-max items-center gap-0.5">
                 {pinned.map(({ key, to, label, icon: Icon }) => {
                   // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.

@@ -79,7 +79,7 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
         : tab === 'file' ? <AttachFilesTab selected={selected} setSelected={setSelected} />
         : <AttachPostsTab selected={selected} setSelected={setSelected} postStyle={postStyle} onPostStyleChange={setPostStyle} />}
       <ModalFooter className="flex-nowrap">
-        <div className={cn('flex min-w-0 flex-1 items-center gap-2.5 scroll-x py-1 pr-1', !selected.length && 'hidden')}>
+        <div className={cn('-ml-1 flex min-w-0 flex-1 items-center gap-2.5 scroll-x p-1', !selected.length && 'hidden')}>
           {selected.map((item, index) => <TrayThumb key={item.key} item={item} position={index + 1} onRemove={() => setSelected((current) => current.filter((entry) => entry.key !== item.key))} />)}
         </div>
         <span className={cn('shrink-0 text-sm tabular-nums text-muted-foreground', !selected.length && 'mr-auto')}>{t({ ko: '{count}개', en: '{count} picked' }, { count: selected.length })}</span>

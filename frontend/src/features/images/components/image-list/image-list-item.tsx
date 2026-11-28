@@ -214,7 +214,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       className={cn(
-        'theme-list-shadow image-list-selectable group relative isolate block w-full select-none rounded-(--theme-image-tile-radius) bg-surface-low text-left transition-transform duration-300 [-webkit-touch-callout:none] focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
+        'theme-list-shadow image-list-selectable group relative isolate block w-full select-none rounded-(--theme-image-tile-radius) bg-surface-low text-left transition-transform duration-300 [-webkit-touch-callout:none] focus:outline-none hover:z-10 focus-within:z-10',
         'data-[drag-armed=true]:scale-[0.97] data-[drag-armed=true]:cursor-grabbing',
         selected && 'is-selected',
         selectionMode || !interactive ? 'cursor-default' : 'cursor-pointer',

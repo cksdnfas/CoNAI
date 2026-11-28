@@ -167,8 +167,8 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6">
         {body.map((block) => FILL_BLOCKS.has(block)
-          ? <div key={block} className="flex min-h-0 flex-1 flex-col overflow-hidden">{blocks[block]}</div>
-          : <div key={block} className="max-h-[45%] shrink-0 overflow-y-auto pr-2">{blocks[block]}</div>)}
+          ? <div key={block} className="flex min-h-0 flex-1 flex-col ring-room-clip">{blocks[block]}</div>
+          : <div key={block} className="ring-room-scroll max-h-[45%] shrink-0 overflow-y-auto pr-2 pb-1">{blocks[block]}</div>)}
         {dock}
       </div>
     )
@@ -186,7 +186,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
           onChange={setPickedTab}
           className="shrink-0"
         />
-        <div className={cn('min-h-0 flex-1', FILL_BLOCKS.has(active) ? 'flex flex-col' : 'overflow-y-auto pr-2 pb-1')}>{blocks[active]}</div>
+        <div className={cn('min-h-0 flex-1', FILL_BLOCKS.has(active) ? 'flex flex-col' : 'ring-room-scroll overflow-y-auto pr-2 pb-1')}>{blocks[active]}</div>
         {dock}
       </div>
     )
@@ -194,7 +194,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2 pb-1">
+      <div className="ring-room-scroll flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-2 pb-1">
         {body.map((block) => <Fragment key={block}>{blocks[block]}</Fragment>)}
       </div>
       {dock}

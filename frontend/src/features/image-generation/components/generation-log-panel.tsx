@@ -158,7 +158,7 @@ export function GenerationLogPanel({ feed, serviceType, workflowId, publicWorkfl
   if (!feed.canViewResults) return <ImagePermissionNotice />
 
   return (
-    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 ring-room-clip' : 'space-y-3')}>
       <GenerationHistoryHeader
         onBack={onBack}
         leading={headerLeading}
@@ -204,7 +204,7 @@ export function GenerationLogPanel({ feed, serviceType, workflowId, publicWorkfl
         <EmptyState title={filter === 'failed' ? t({ ko: '실패한 생성이 없어', en: 'No failed runs' }) : t({ ko: '생성 기록이 없어', en: 'No runs yet' })} />
       ) : null}
 
-      <div className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-3')}>
+      <div className={cn(splitPaneScroll && 'ring-room-scroll min-h-0 flex-1 overflow-y-auto pr-3 pb-1')}>
         {visibleRows.map(({ record, status, image, created, dayHeading }) => {
           const isProblem = status === 'failed' || status === 'cancelled'
           const isOpen = isProblem && openId === record.id

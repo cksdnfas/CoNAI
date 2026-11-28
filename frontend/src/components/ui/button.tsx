@@ -52,7 +52,7 @@ const buttonVariants = cva(
           "data-[active=true]:bg-fill data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]",
           "aria-[current=page]:bg-fill aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_2px_0_0_var(--primary)]",
           "aria-[current=true]:bg-fill aria-[current=true]:font-medium aria-[current=true]:text-foreground aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
-          "data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-primary/60",
+          "focus-visible:ring-inset data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-primary/60",
         ),
         /** Select-style trigger (a button that opens a picker or tree): the field surface and outline of Select / Input. Pair with size="field". */
         field: "theme-input-surface justify-between border text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground",

@@ -557,7 +557,7 @@ export function NaiGenerationPanel({
 
         <div className={cn(
           'space-y-6',
-          splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
+          splitPaneScroll && 'ring-room-scroll min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
         )}>
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionSection, compactActionBarPortalTarget) : null}
           {editorSections}

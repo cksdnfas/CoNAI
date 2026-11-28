@@ -348,7 +348,7 @@ function ImageGenerationPageContent() {
       <div
         className={cn(
           isWideLayout
-            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col overflow-hidden'
+            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col ring-room-clip'
             : 'space-y-4 pb-28',
         )}
       >
@@ -369,7 +369,7 @@ function ImageGenerationPageContent() {
       className={cn(
         'space-y-4',
         useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout ? 'pb-0' : 'pb-6',
-        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col space-y-0 overflow-hidden',
+        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col space-y-0 ring-room-clip',
       )}
     >
       <div className={cn(useFixedHeightLayout && 'shrink-0 pb-2')}>
@@ -399,13 +399,13 @@ function ImageGenerationPageContent() {
               useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
             )}
           >
-            <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col overflow-hidden')}>
+            <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col ring-room-clip')}>
               <Suspense fallback={<PanelFallback />}>
                 {controllerPanel}
               </Suspense>
             </div>
             {shouldShowResultPanel ? (
-              <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col overflow-hidden')}>
+              <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col ring-room-clip')}>
                 <Suspense fallback={<PanelFallback />}>
                   {resultPanel}
                 </Suspense>

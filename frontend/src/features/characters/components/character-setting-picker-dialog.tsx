@@ -78,7 +78,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
       ) : (
         <ModalBody>
           <div className="grid min-h-0 gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
-            <div className="min-w-0 md:max-h-[60vh] md:overflow-y-auto">
+            <div className="min-w-0 md:-m-1 md:max-h-[60vh] md:overflow-y-auto md:p-1">
               <CharacterFolderSidebar folders={folders} selectedId={query ? null : openFolderId} loading={foldersQuery.isPending} error={foldersQuery.isError ? foldersQuery.error : null} onSelect={openFolder} inDialog />
             </div>
             <div className="min-w-0 space-y-3">

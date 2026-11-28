@@ -15,7 +15,7 @@ export function DataTable({ head, minWidthClassName, className, children }: {
   children: ReactNode
 }) {
   return (
-    <div className={cn('relative scroll-x', className)}>
+    <div className={cn('relative -m-1 scroll-x p-1', className)}>
       <table className={cn('w-full text-left text-sm', minWidthClassName)}>
         <thead>
           <tr className={cn(textVariants({ variant: 'overline' }), 'border-b border-line')}>{head}</tr>

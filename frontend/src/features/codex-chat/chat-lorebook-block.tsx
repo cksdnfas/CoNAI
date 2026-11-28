@@ -387,7 +387,7 @@ function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions, 
   return (
     <div className="flex min-h-9 items-center gap-1 border-t border-line first:border-t-0">
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40">
         <Chevron className="size-3 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 truncate font-semibold">{name}</span>
         {record ? <Tip content={record}><PenLine className="size-3 shrink-0 text-primary-text" aria-label={record} /></Tip> : null}
@@ -419,7 +419,7 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
   const preview = shown ? (shown.length > 240 ? `${shown.slice(0, 240)}…` : shown) : null
   return onOpen
     // eslint-disable-next-line no-restricted-syntax -- a full-width entry row; Button would pad and centre it
-    ? <Tip content={preview} side="left"><button type="button" onClick={onOpen} className={cn(className, 'w-full hover:bg-fill outline-none focus-visible:ring-2 focus-visible:ring-ring/40')}>{body}</button></Tip>
+    ? <Tip content={preview} side="left"><button type="button" onClick={onOpen} className={cn(className, 'w-full hover:bg-fill outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40')}>{body}</button></Tip>
     : <Tip content={preview} side="left"><div className={className}>{body}</div></Tip>
 }
 

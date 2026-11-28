@@ -156,7 +156,7 @@ export function WorkflowRunnerPanel({
         </DropdownMenu>
       </div>
 
-      <div className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1')}>
+      <div className={cn(splitPaneScroll && 'ring-room-scroll min-h-0 flex-1 overflow-y-auto pr-2 pb-1')}>
         {inputDefinitions.length > 0 ? (
           <WorkflowInputFields
             inputDefinitions={inputDefinitions}
